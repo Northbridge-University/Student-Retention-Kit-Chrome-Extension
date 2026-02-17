@@ -981,9 +981,10 @@ function getFieldValue(obj, field, fallback) {
  * @param {Array} tabColors - Array of {sheetIndex, rgb} for sheet tab colors
  * @param {Object} colorScale - {low, mid, high} ARGB strings for grade color scale
  * @param {Array} rowHighlights - Array of {sheetIndex, rows: number[], startCol, endCol, fillColor}
+ * @param {Array} cellValueFmts - Array of {sheetIndex, colIndex, rowCount, value, fillColor} for cell-value conditional formatting
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = []) {
-    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0) {
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = []) {
+    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
         return;
@@ -991,19 +992,29 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
 
     const zip = await JSZip.loadAsync(wbBuffer);
 
-    // --- Inject fill styles into styles.xml for row highlights ---
+    // --- Inject fill styles into styles.xml for row highlights and cell-value formatting ---
     // Maps fillColor ARGB → the xfId (s="N") to use in sheet cells
     const fillStyleMap = {};
-    if (rowHighlights.length > 0) {
-        const uniqueColors = [...new Set(rowHighlights.map(h => h.fillColor))];
+    const allFillColors = [
+        ...rowHighlights.map(h => h.fillColor),
+        ...cellValueFmts.map(c => c.fillColor)
+    ];
+    const uniqueColors = [...new Set(allFillColors)];
+    if (uniqueColors.length > 0) {
         await injectFillStyles(zip, uniqueColors, fillStyleMap);
+    }
+
+    // --- Inject dxf entries into styles.xml for cell-value conditional formatting ---
+    if (cellValueFmts.length > 0) {
+        await injectDxfStyles(zip, cellValueFmts);
     }
 
     // Collect all sheet indices that need modification
     const sheetsToModify = new Set([
         ...condFmtSheets.map(s => s.sheetIndex),
         ...tabColors.map(s => s.sheetIndex),
-        ...rowHighlights.map(s => s.sheetIndex)
+        ...rowHighlights.map(s => s.sheetIndex),
+        ...cellValueFmts.map(s => s.sheetIndex)
     ]);
 
     for (const sheetIndex of sheetsToModify) {
@@ -1076,6 +1087,31 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
             }
         }
 
+        // --- Cell-Value Conditional Formatting (e.g. Missing Assignments = 0 → green) ---
+        const cellValFmtsForSheet = cellValueFmts.filter(c => c.sheetIndex === sheetIndex);
+        for (const cvf of cellValFmtsForSheet) {
+            const colLetter = columnIndexToLetter(cvf.colIndex);
+            const sqref = `${colLetter}2:${colLetter}${cvf.rowCount + 1}`;
+            const dxfIndex = cvf._dxfIndex;
+
+            const cvfXml =
+                `<conditionalFormatting sqref="${sqref}">` +
+                    `<cfRule type="cellIs" dxfId="${dxfIndex}" priority="2" operator="equal">` +
+                        `<formula>${cvf.value}</formula>` +
+                    `</cfRule>` +
+                `</conditionalFormatting>`;
+
+            if (xml.includes('</conditionalFormatting>')) {
+                // Append after last conditionalFormatting block
+                xml = xml.replace(/<\/conditionalFormatting>(?![\s\S]*<\/conditionalFormatting>)/,
+                    '</conditionalFormatting>' + cvfXml);
+            } else if (xml.includes('</mergeCells>')) {
+                xml = xml.replace('</mergeCells>', '</mergeCells>' + cvfXml);
+            } else if (xml.includes('</sheetData>')) {
+                xml = xml.replace('</sheetData>', '</sheetData>' + cvfXml);
+            }
+        }
+
         zip.file(sheetPath, xml);
     }
 
@@ -1134,6 +1170,47 @@ async function injectFillStyles(zip, colors, fillStyleMap) {
         `<cellXfs count="${xfCount}">`
     );
     stylesXml = stylesXml.replace('</cellXfs>', newXfsXml + '</cellXfs>');
+
+    zip.file(stylesPath, stylesXml);
+}
+
+/**
+ * Injects differential formatting (dxf) entries into xl/styles.xml for
+ * cell-value conditional formatting rules. Sets _dxfIndex on each entry.
+ *
+ * @param {JSZip} zip - The JSZip instance
+ * @param {Array} cellValueFmts - Array of {fillColor, ...}; _dxfIndex is set on each
+ */
+async function injectDxfStyles(zip, cellValueFmts) {
+    const stylesPath = 'xl/styles.xml';
+    let stylesXml = await zip.file(stylesPath)?.async('string');
+    if (!stylesXml) return;
+
+    // Find or create <dxfs> section
+    const dxfCountMatch = stylesXml.match(/<dxfs count="(\d+)">/);
+    let dxfCount = dxfCountMatch ? parseInt(dxfCountMatch[1]) : 0;
+
+    // Deduplicate by fillColor so we only add one dxf per unique color
+    const colorToDxfIndex = {};
+    let newDxfsXml = '';
+
+    for (const cvf of cellValueFmts) {
+        if (!(cvf.fillColor in colorToDxfIndex)) {
+            colorToDxfIndex[cvf.fillColor] = dxfCount;
+            newDxfsXml += `<dxf><fill><patternFill><bgColor rgb="${cvf.fillColor}"/></patternFill></fill></dxf>`;
+            dxfCount++;
+        }
+        cvf._dxfIndex = colorToDxfIndex[cvf.fillColor];
+    }
+
+    if (dxfCountMatch) {
+        stylesXml = stylesXml.replace(/<dxfs count="\d+">/, `<dxfs count="${dxfCount}">`);
+        stylesXml = stylesXml.replace('</dxfs>', newDxfsXml + '</dxfs>');
+    } else {
+        // No <dxfs> exists — insert before </styleSheet>
+        const dxfsBlock = `<dxfs count="${dxfCount}">${newDxfsXml}</dxfs>`;
+        stylesXml = stylesXml.replace('</styleSheet>', dxfsBlock + '</styleSheet>');
+    }
 
     zip.file(stylesPath, stylesXml);
 }
@@ -1501,6 +1578,7 @@ export async function exportMasterListCSV() {
 
         const ldaSheetNames = [];
         const rowHighlights = []; // Track rows to highlight across sheets
+        const cellValueFmts = []; // Track cell-value conditional formatting across sheets
 
         // Build LDA column definitions: insert Assigned before name, Outreach after missingCount
         const ldaColumns = [];
@@ -1520,6 +1598,9 @@ export async function exportMasterListCSV() {
 
         // Adjust grade column index for LDA sheets (shifted by custom columns)
         const ldaGradeColIndex = ldaColumns.findIndex(col => col.conditionalFormatting === 'grade');
+
+        // Find Missing Assignments column index in LDA columns for cell-value formatting
+        const ldaMissingColIndex = ldaColumns.findIndex(col => col.field === 'missingCount');
 
         // Build and append each LDA sheet
         ldaGroups.forEach((group, groupIndex) => {
@@ -1613,13 +1694,24 @@ export async function exportMasterListCSV() {
                 condFmtSheets.push({ sheetIndex, colIndex: ldaGradeColIndex, rowCount: group.students.length });
             }
 
-            // Record row highlights for this sheet (outreach → end of row)
+            // Conditional formatting for Missing Assignments = 0 → light green
+            if (ldaMissingColIndex !== -1 && group.students.length > 0) {
+                cellValueFmts.push({
+                    sheetIndex,
+                    colIndex: ldaMissingColIndex,
+                    rowCount: group.students.length,
+                    value: 0,
+                    fillColor: 'FFE2EFDA' // same light green #e2efda
+                });
+            }
+
+            // Record row highlights for this sheet (Assigned through Outreach — the left side)
             if (highlightRows.length > 0 && outreachColIndex !== -1) {
                 rowHighlights.push({
                     sheetIndex,
                     rows: highlightRows,
-                    startCol: outreachColIndex,
-                    endCol: totalLdaCols - 1,
+                    startCol: 0,
+                    endCol: outreachColIndex,
                     fillColor: 'FFE2EFDA' // light green #e2efda
                 });
             }
@@ -1647,7 +1739,7 @@ export async function exportMasterListCSV() {
 
         // Write workbook to buffer, then inject conditional formatting, tab colors, and row highlights via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);
