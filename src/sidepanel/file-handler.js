@@ -976,8 +976,9 @@ function getFieldValue(obj, field, fallback) {
  * @param {string} filename - Output filename
  * @param {Array} condFmtSheets - Array of {sheetIndex, colIndex, rowCount}
  * @param {Array} tabColors - Array of {sheetIndex, rgb} for sheet tab colors
+ * @param {Object} colorScale - {low, mid, high} ARGB strings for grade color scale
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = []) {
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}) {
     if (condFmtSheets.length === 0 && tabColors.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
@@ -1028,6 +1029,10 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
             const colLetter = columnIndexToLetter(condFmt.colIndex);
             const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
 
+            const csLow = colorScale.low || 'FFF8696B';
+            const csMid = colorScale.mid || 'FFFFEB84';
+            const csHigh = colorScale.high || 'FF63BE7B';
+
             const cfXml =
                 `<conditionalFormatting sqref="${sqref}">` +
                     `<cfRule type="colorScale" priority="1">` +
@@ -1035,9 +1040,9 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
                             `<cfvo type="num" val="0"/>` +
                             `<cfvo type="num" val="65"/>` +
                             `<cfvo type="num" val="100"/>` +
-                            `<color rgb="FFF8696B"/>` +
-                            `<color rgb="FFFFEB84"/>` +
-                            `<color rgb="FF63BE7B"/>` +
+                            `<color rgb="${csLow}"/>` +
+                            `<color rgb="${csMid}"/>` +
+                            `<color rgb="${csHigh}"/>` +
                         `</colorScale>` +
                     `</cfRule>` +
                 `</conditionalFormatting>`;
@@ -1126,7 +1131,11 @@ export async function exportMasterListCSV() {
     try {
         const result = await chrome.storage.local.get([
             STORAGE_KEYS.MASTER_ENTRIES,
-            STORAGE_KEYS.REFERENCE_DATE
+            STORAGE_KEYS.REFERENCE_DATE,
+            STORAGE_KEYS.EXPORT_TAB_COLOR,
+            STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW,
+            STORAGE_KEYS.EXPORT_COLOR_SCALE_MID,
+            STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH
         ]);
         const students = result[STORAGE_KEYS.MASTER_ENTRIES] || [];
         const referenceDateStr = result[STORAGE_KEYS.REFERENCE_DATE];
@@ -1390,14 +1399,22 @@ export async function exportMasterListCSV() {
         const timestamp = new Date().toISOString().split('T')[0];
         const filename = `student_report_${timestamp}.xlsx`;
 
-        // Sheet tab colors
+        // Sheet tab colors (convert #RRGGBB to FFRRGGBB for XLSX)
+        const exportTabColor = result[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#FFC000';
         const tabColors = [
-            { sheetIndex: 0, rgb: 'FFFFC000' }  // Master List — light orange
+            { sheetIndex: 0, rgb: 'FF' + exportTabColor.replace('#', '') }
         ];
+
+        // Color scale settings (convert #RRGGBB to FFRRGGBB for XLSX)
+        const colorScale = {
+            low: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] || '#F8696B').replace('#', ''),
+            mid: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_MID] || '#FFEB84').replace('#', ''),
+            high: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B').replace('#', '')
+        };
 
         // Write workbook to buffer, then inject conditional formatting and tab colors via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);

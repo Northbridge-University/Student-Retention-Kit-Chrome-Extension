@@ -84,7 +84,11 @@ export async function openConnectionsModal(connectionType) {
         STORAGE_KEYS.HIGHLIGHT_EDIT_COLUMN,
         STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT,
         STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET,
-        STORAGE_KEYS.HIGHLIGHT_ROW_COLOR
+        STORAGE_KEYS.HIGHLIGHT_ROW_COLOR,
+        STORAGE_KEYS.EXPORT_TAB_COLOR,
+        STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW,
+        STORAGE_KEYS.EXPORT_COLOR_SCALE_MID,
+        STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH
     ]);
 
     // Load auto-update setting
@@ -168,6 +172,22 @@ export async function openConnectionsModal(connectionType) {
         const color = result[STORAGE_KEYS.HIGHLIGHT_ROW_COLOR] || '#92d050';
         elements.highlightRowColorInput.value = color;
         elements.highlightRowColorTextInput.value = color;
+    }
+
+    // Load export color settings
+    if (elements.exportTabColorInput && elements.exportTabColorTextInput) {
+        const tabColor = result[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#FFC000';
+        elements.exportTabColorInput.value = tabColor;
+        elements.exportTabColorTextInput.value = tabColor;
+    }
+    if (elements.exportColorScaleLowInput) {
+        elements.exportColorScaleLowInput.value = result[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] || '#F8696B';
+    }
+    if (elements.exportColorScaleMidInput) {
+        elements.exportColorScaleMidInput.value = result[STORAGE_KEYS.EXPORT_COLOR_SCALE_MID] || '#FFEB84';
+    }
+    if (elements.exportColorScaleHighInput) {
+        elements.exportColorScaleHighInput.value = result[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B';
     }
 
     // Load cache stats
@@ -288,6 +308,20 @@ export async function saveConnectionsSettings() {
     }
     if (elements.highlightRowColorTextInput) {
         settingsToSave[STORAGE_KEYS.HIGHLIGHT_ROW_COLOR] = elements.highlightRowColorTextInput.value || '#92d050';
+    }
+
+    // Save export color settings
+    if (elements.exportTabColorTextInput) {
+        settingsToSave[STORAGE_KEYS.EXPORT_TAB_COLOR] = elements.exportTabColorTextInput.value || '#FFC000';
+    }
+    if (elements.exportColorScaleLowInput) {
+        settingsToSave[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] = elements.exportColorScaleLowInput.value || '#F8696B';
+    }
+    if (elements.exportColorScaleMidInput) {
+        settingsToSave[STORAGE_KEYS.EXPORT_COLOR_SCALE_MID] = elements.exportColorScaleMidInput.value || '#FFEB84';
+    }
+    if (elements.exportColorScaleHighInput) {
+        settingsToSave[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] = elements.exportColorScaleHighInput.value || '#63BE7B';
     }
 
     // Save all settings

@@ -622,6 +622,19 @@ function setupEventListeners() {
         });
     }
 
+    // Export Tab Color Sync
+    if (elements.exportTabColorInput && elements.exportTabColorTextInput) {
+        elements.exportTabColorInput.addEventListener('input', (e) => {
+            elements.exportTabColorTextInput.value = e.target.value;
+        });
+        elements.exportTabColorTextInput.addEventListener('input', (e) => {
+            const color = e.target.value;
+            if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                elements.exportTabColorInput.value = color;
+            }
+        });
+    }
+
     // Scan Filter Modal
     if (elements.scanFilterBtn) {
         elements.scanFilterBtn.addEventListener('click', openScanFilterModal);

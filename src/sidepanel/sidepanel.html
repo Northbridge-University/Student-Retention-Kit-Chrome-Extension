@@ -614,6 +614,44 @@
                     </div>
                     </div>
                 </div>
+
+                <!-- Export Colors -->
+                <div style="margin-top:12px;">
+                    <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin-bottom:10px;">Export Colors</div>
+
+                    <!-- Tab Color -->
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size:0.85em; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">
+                            Master List Tab Color
+                        </label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="color" id="exportTabColorInput" value="#FFC000" style="width:60px; height:40px; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem; cursor:pointer;">
+                            <input type="text" id="exportTabColorTextInput" placeholder="#FFC000" style="flex:1; padding:8px; font-size:0.9em; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem;">
+                        </div>
+                    </div>
+
+                    <!-- Grade Color Scale -->
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size:0.85em; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">
+                            Grade Color Scale
+                        </label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <div style="text-align:center;">
+                                <input type="color" id="exportColorScaleLowInput" value="#F8696B" style="width:50px; height:36px; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem; cursor:pointer;">
+                                <div style="font-size:0.7em; color:var(--text-secondary); margin-top:2px;">Low</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <input type="color" id="exportColorScaleMidInput" value="#FFEB84" style="width:50px; height:36px; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem; cursor:pointer;">
+                                <div style="font-size:0.7em; color:var(--text-secondary); margin-top:2px;">Mid</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <input type="color" id="exportColorScaleHighInput" value="#63BE7B" style="width:50px; height:36px; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem; cursor:pointer;">
+                                <div style="font-size:0.7em; color:var(--text-secondary); margin-top:2px;">High</div>
+                            </div>
+                        </div>
+                        <div style="font-size:0.75em; color:var(--text-secondary); margin-top:4px;">Color scale applied to grade columns (0 &rarr; 65 &rarr; 100)</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Power Automate Configuration -->

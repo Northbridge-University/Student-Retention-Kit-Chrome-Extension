@@ -243,6 +243,11 @@ export function cacheDomElements() {
     elements.highlightTargetSheetInput = document.getElementById('highlightTargetSheetInput');
     elements.highlightRowColorInput = document.getElementById('highlightRowColorInput');
     elements.highlightRowColorTextInput = document.getElementById('highlightRowColorTextInput');
+    elements.exportTabColorInput = document.getElementById('exportTabColorInput');
+    elements.exportTabColorTextInput = document.getElementById('exportTabColorTextInput');
+    elements.exportColorScaleLowInput = document.getElementById('exportColorScaleLowInput');
+    elements.exportColorScaleMidInput = document.getElementById('exportColorScaleMidInput');
+    elements.exportColorScaleHighInput = document.getElementById('exportColorScaleHighInput');
     elements.powerAutomateUrlInput = document.getElementById('powerAutomateUrlInput');
     elements.toggleUrlVisibility = document.getElementById('toggleUrlVisibility');
     elements.powerAutomateStatusText = document.getElementById('powerAutomateStatusText');
