@@ -1484,7 +1484,7 @@ export async function exportMasterListCSV() {
                 let value = getFieldValue(student, col.field, col.fallback);
 
                 if (col.field === 'missingCount') {
-                    value = value || 0;
+                    value = (value !== null && value !== undefined && value !== '') ? value : '-';
                 } else if (col.field === 'daysOut') {
                     value = parseInt(value || 0);
                 } else if (col.field === 'lda') {
@@ -1711,7 +1711,9 @@ export async function exportMasterListCSV() {
 
             group.students.forEach((student, studentIndex) => {
                 const rowMetadata = {};
-                const missingCount = parseInt(getFieldValue(student, 'missingCount') || 0);
+                const missingRaw = getFieldValue(student, 'missingCount');
+                const hasMissingData = missingRaw !== null && missingRaw !== undefined && missingRaw !== '';
+                const missingCount = hasMissingData ? parseInt(missingRaw) : null;
                 const nextDueRaw = getFieldValue(student, 'nextAssignment.DueDate');
 
                 const row = ldaColumns.map((col, colIndex) => {
@@ -1731,7 +1733,7 @@ export async function exportMasterListCSV() {
                     let value = getFieldValue(student, col.field, col.fallback);
 
                     if (col.field === 'missingCount') {
-                        value = value || 0;
+                        value = (value !== null && value !== undefined && value !== '') ? value : '-';
                     } else if (col.field === 'daysOut') {
                         value = parseInt(value || 0);
                     } else if (col.field === 'lda') {
