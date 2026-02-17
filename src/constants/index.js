@@ -127,6 +127,12 @@ export const STORAGE_KEYS = {
     HIGHLIGHT_TARGET_SHEET: 'settings.excelAddIn.highlight.targetSheet',
     HIGHLIGHT_TARGET_TAB_ID: 'highlightTargetTabId', // Selected Excel tab ID for highlight pings
 
+    // Excel export color settings (settings.excelAddIn.export.*)
+    EXPORT_TAB_COLOR: 'settings.excelAddIn.export.tabColor',
+    EXPORT_COLOR_SCALE_LOW: 'settings.excelAddIn.export.colorScaleLow',
+    EXPORT_COLOR_SCALE_MID: 'settings.excelAddIn.export.colorScaleMid',
+    EXPORT_COLOR_SCALE_HIGH: 'settings.excelAddIn.export.colorScaleHigh',
+
     // Power Automate settings (settings.powerAutomate.*)
     POWER_AUTOMATE_URL: 'settings.powerAutomate.url',
     POWER_AUTOMATE_ENABLED: 'settings.powerAutomate.enabled',
@@ -206,6 +212,12 @@ export const DEFAULT_SETTINGS = {
     [STORAGE_KEYS.HIGHLIGHT_EDIT_COLUMN]: 'Outreach',
     [STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT]: 'Submitted {assignment}',
     [STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET]: 'LDA MM-DD-YYYY',
+
+    // Excel export color settings
+    [STORAGE_KEYS.EXPORT_TAB_COLOR]: '#FFC000',
+    [STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW]: '#F8696B',
+    [STORAGE_KEYS.EXPORT_COLOR_SCALE_MID]: '#FFEB84',
+    [STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH]: '#63BE7B',
 
     // Power Automate settings
     [STORAGE_KEYS.POWER_AUTOMATE_URL]: '',

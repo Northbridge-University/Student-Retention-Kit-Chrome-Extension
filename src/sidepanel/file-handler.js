@@ -967,17 +967,19 @@ function getFieldValue(obj, field, fallback) {
 }
 
 /**
- * Writes an XLSX buffer to a file with Excel conditional formatting injected.
- * Uses JSZip to post-process the XLSX (which is a ZIP archive) and inject
- * Green-Yellow-Red color scale conditional formatting into sheet XML.
+ * Writes an XLSX buffer to a file with Excel features injected via JSZip.
+ * Post-processes the XLSX ZIP to add:
+ *   - Conditional formatting (Green-Yellow-Red color scale on grade columns)
+ *   - Tab colors for sheet tabs
  *
  * @param {ArrayBuffer} wbBuffer - The XLSX workbook as an ArrayBuffer
  * @param {string} filename - Output filename
  * @param {Array} condFmtSheets - Array of {sheetIndex, colIndex, rowCount}
+ * @param {Array} tabColors - Array of {sheetIndex, rgb} for sheet tab colors
+ * @param {Object} colorScale - {low, mid, high} ARGB strings for grade color scale
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets) {
-    if (condFmtSheets.length === 0) {
-        // No conditional formatting needed — download directly
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}) {
+    if (condFmtSheets.length === 0 && tabColors.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
         return;
@@ -985,39 +987,77 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
 
     const zip = await JSZip.loadAsync(wbBuffer);
 
-    for (const { sheetIndex, colIndex, rowCount } of condFmtSheets) {
+    // Collect all sheet indices that need modification
+    const sheetsToModify = new Set([
+        ...condFmtSheets.map(s => s.sheetIndex),
+        ...tabColors.map(s => s.sheetIndex)
+    ]);
+
+    for (const sheetIndex of sheetsToModify) {
         const sheetPath = `xl/worksheets/sheet${sheetIndex + 1}.xml`;
-        const xml = await zip.file(sheetPath)?.async('string');
+        let xml = await zip.file(sheetPath)?.async('string');
         if (!xml) continue;
 
-        // Build the cell range for the grade column (e.g. "D2:D523")
-        const colLetter = columnIndexToLetter(colIndex);
-        const sqref = `${colLetter}2:${colLetter}${rowCount + 1}`;
+        // --- Tab Color ---
+        // <sheetPr> must appear before <dimension>/<sheetViews> per OOXML schema
+        const tabColor = tabColors.find(t => t.sheetIndex === sheetIndex);
+        if (tabColor) {
+            const tabColorTag = `<tabColor rgb="${tabColor.rgb}"/>`;
 
-        // Excel's built-in Green-Yellow-Red color scale
-        const cfXml =
-            `<conditionalFormatting sqref="${sqref}">` +
-                `<cfRule type="colorScale" priority="1">` +
-                    `<colorScale>` +
-                        `<cfvo type="num" val="0"/>` +
-                        `<cfvo type="num" val="65"/>` +
-                        `<cfvo type="num" val="100"/>` +
-                        `<color rgb="FFF8696B"/>` +
-                        `<color rgb="FFFFEB84"/>` +
-                        `<color rgb="FF63BE7B"/>` +
-                    `</colorScale>` +
-                `</cfRule>` +
-            `</conditionalFormatting>`;
-
-        // Insert before </sheetData>'s next sibling or before </worksheet>
-        let modifiedXml;
-        if (xml.includes('</sheetData>')) {
-            modifiedXml = xml.replace('</sheetData>', '</sheetData>' + cfXml);
-        } else {
-            modifiedXml = xml.replace('</worksheet>', cfXml + '</worksheet>');
+            if (/<sheetPr[^>]*\/>/.test(xml)) {
+                // Self-closing <sheetPr/> — expand to contain tabColor
+                xml = xml.replace(/<sheetPr([^>]*)\/>/,
+                    `<sheetPr$1>${tabColorTag}</sheetPr>`);
+            } else if (/<sheetPr[^>]*>/.test(xml)) {
+                // Opening <sheetPr> with children — insert tabColor as first child
+                xml = xml.replace(/<sheetPr([^>]*)>/,
+                    `<sheetPr$1>${tabColorTag}`);
+            } else {
+                // No <sheetPr> exists — insert before first structural element
+                const anchor = ['<dimension', '<sheetViews', '<sheetFormatPr', '<sheetData']
+                    .find(tag => xml.includes(tag));
+                if (anchor) {
+                    xml = xml.replace(anchor, `<sheetPr>${tabColorTag}</sheetPr>${anchor}`);
+                }
+            }
         }
 
-        zip.file(sheetPath, modifiedXml);
+        // --- Conditional Formatting ---
+        // Must appear after <mergeCells> but before <hyperlinks>/<pageMargins>
+        const condFmt = condFmtSheets.find(c => c.sheetIndex === sheetIndex);
+        if (condFmt) {
+            const colLetter = columnIndexToLetter(condFmt.colIndex);
+            const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
+
+            const csLow = colorScale.low || 'FFF8696B';
+            const csMid = colorScale.mid || 'FFFFEB84';
+            const csHigh = colorScale.high || 'FF63BE7B';
+
+            const cfXml =
+                `<conditionalFormatting sqref="${sqref}">` +
+                    `<cfRule type="colorScale" priority="1">` +
+                        `<colorScale>` +
+                            `<cfvo type="num" val="0"/>` +
+                            `<cfvo type="num" val="65"/>` +
+                            `<cfvo type="num" val="100"/>` +
+                            `<color rgb="${csLow}"/>` +
+                            `<color rgb="${csMid}"/>` +
+                            `<color rgb="${csHigh}"/>` +
+                        `</colorScale>` +
+                    `</cfRule>` +
+                `</conditionalFormatting>`;
+
+            // Insert right after </sheetData> (or after </mergeCells> if present)
+            // SheetJS generates <ignoredErrors> after </sheetData>, and
+            // conditionalFormatting must appear before it per OOXML schema.
+            if (xml.includes('</mergeCells>')) {
+                xml = xml.replace('</mergeCells>', '</mergeCells>' + cfXml);
+            } else if (xml.includes('</sheetData>')) {
+                xml = xml.replace('</sheetData>', '</sheetData>' + cfXml);
+            }
+        }
+
+        zip.file(sheetPath, xml);
     }
 
     const modifiedBuffer = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1091,7 +1131,11 @@ export async function exportMasterListCSV() {
     try {
         const result = await chrome.storage.local.get([
             STORAGE_KEYS.MASTER_ENTRIES,
-            STORAGE_KEYS.REFERENCE_DATE
+            STORAGE_KEYS.REFERENCE_DATE,
+            STORAGE_KEYS.EXPORT_TAB_COLOR,
+            STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW,
+            STORAGE_KEYS.EXPORT_COLOR_SCALE_MID,
+            STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH
         ]);
         const students = result[STORAGE_KEYS.MASTER_ENTRIES] || [];
         const referenceDateStr = result[STORAGE_KEYS.REFERENCE_DATE];
@@ -1355,9 +1399,22 @@ export async function exportMasterListCSV() {
         const timestamp = new Date().toISOString().split('T')[0];
         const filename = `student_report_${timestamp}.xlsx`;
 
-        // Write workbook to buffer, then inject Excel conditional formatting via JSZip
+        // Sheet tab colors (convert #RRGGBB to FFRRGGBB for XLSX)
+        const exportTabColor = result[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#FFC000';
+        const tabColors = [
+            { sheetIndex: 0, rgb: 'FF' + exportTabColor.replace('#', '') }
+        ];
+
+        // Color scale settings (convert #RRGGBB to FFRRGGBB for XLSX)
+        const colorScale = {
+            low: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] || '#F8696B').replace('#', ''),
+            mid: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_MID] || '#FFEB84').replace('#', ''),
+            high: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B').replace('#', '')
+        };
+
+        // Write workbook to buffer, then inject conditional formatting and tab colors via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);

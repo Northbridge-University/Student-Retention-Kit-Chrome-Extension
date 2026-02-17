@@ -120,6 +120,7 @@ import {
 } from './modals/canvas-auth-modal.js';
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
 
 import {
     shouldShowLatestUpdatesModal,
@@ -540,6 +541,14 @@ function setupEventListeners() {
         });
     }
 
+    // More Settings Modal (from right-click context menu on settings tab)
+    if (elements.closeMoreSettingsBtn) {
+        elements.closeMoreSettingsBtn.addEventListener('click', closeMoreSettingsModal);
+    }
+    if (elements.saveMoreSettingsBtn) {
+        elements.saveMoreSettingsBtn.addEventListener('click', saveMoreSettings);
+    }
+
     // Canvas Modal Settings
     if (elements.embedHelperToggleModal) {
         elements.embedHelperToggleModal.addEventListener('click', toggleEmbedHelperModal);
@@ -618,6 +627,19 @@ function setupEventListeners() {
             const color = e.target.value;
             if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
                 elements.highlightRowColorInput.value = color;
+            }
+        });
+    }
+
+    // Export Tab Color Sync
+    if (elements.exportTabColorInput && elements.exportTabColorTextInput) {
+        elements.exportTabColorInput.addEventListener('input', (e) => {
+            elements.exportTabColorTextInput.value = e.target.value;
+        });
+        elements.exportTabColorTextInput.addEventListener('input', (e) => {
+            const color = e.target.value;
+            if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                elements.exportTabColorInput.value = color;
             }
         });
     }
@@ -1070,6 +1092,25 @@ function setupEventListeners() {
         });
     }
 
+    // Right-click context menu on the Settings tab
+    const settingsTabContent = document.getElementById('settings');
+    if (settingsTabContent && elements.settingsContextMenu) {
+        settingsTabContent.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            positionContextMenu(elements.settingsContextMenu, e.pageX, e.pageY);
+        });
+    }
+
+    // "More Settings" context menu item opens the modal
+    if (elements.moreSettingsMenuItem) {
+        elements.moreSettingsMenuItem.addEventListener('click', () => {
+            if (elements.settingsContextMenu) {
+                elements.settingsContextMenu.style.display = 'none';
+            }
+            openMoreSettingsModal();
+        });
+    }
+
     // Hide context menu when clicking elsewhere
     document.addEventListener('click', () => {
         if (elements.updateMasterContextMenu) {
@@ -1077,6 +1118,9 @@ function setupEventListeners() {
         }
         if (elements.checkerContextMenu) {
             elements.checkerContextMenu.style.display = 'none';
+        }
+        if (elements.settingsContextMenu) {
+            elements.settingsContextMenu.style.display = 'none';
         }
     });
 
