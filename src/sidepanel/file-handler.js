@@ -1058,24 +1058,30 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
             xml = applyRowHighlights(xml, highlight, fillStyleMap);
         }
 
-        // --- Conditional Formatting (color scale for grade columns) ---
+        // --- Conditional Formatting (color scale for grade/gpa columns) ---
         // Must appear after <mergeCells> but before <hyperlinks>/<pageMargins>
+        // Scale presets by type
+        const COLOR_SCALE_PRESETS = {
+            grade: { minVal: 0, midVal: 65, maxVal: 100, low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' },
+            gpa:   { minVal: 0, midVal: 2,  maxVal: 4,   low: 'FFFFC7CE', mid: 'FF9BC2E6', high: 'FFC6EFCE' }
+        };
         const condFmtsForSheet = condFmtSheets.filter(c => c.sheetIndex === sheetIndex);
         for (const condFmt of condFmtsForSheet) {
             const colLetter = columnIndexToLetter(condFmt.colIndex);
             const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
 
-            const csLow = colorScale.low || 'FFF8696B';
-            const csMid = colorScale.mid || 'FFFFEB84';
-            const csHigh = colorScale.high || 'FF63BE7B';
+            const preset = COLOR_SCALE_PRESETS[condFmt.type] || COLOR_SCALE_PRESETS.grade;
+            const csLow = colorScale.low || preset.low;
+            const csMid = colorScale.mid || preset.mid;
+            const csHigh = colorScale.high || preset.high;
 
             const cfXml =
                 `<conditionalFormatting sqref="${sqref}">` +
                     `<cfRule type="colorScale" priority="1">` +
                         `<colorScale>` +
-                            `<cfvo type="num" val="0"/>` +
-                            `<cfvo type="num" val="65"/>` +
-                            `<cfvo type="num" val="100"/>` +
+                            `<cfvo type="num" val="${preset.minVal}"/>` +
+                            `<cfvo type="num" val="${preset.midVal}"/>` +
+                            `<cfvo type="num" val="${preset.maxVal}"/>` +
                             `<color rgb="${csLow}"/>` +
                             `<color rgb="${csMid}"/>` +
                             `<color rgb="${csHigh}"/>` +
@@ -1601,24 +1607,25 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Find all Grade column indices for conditional formatting
-        const gradeColIndices = activeColumns
-            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
-            .filter(i => i !== -1);
-        const missingGradeColIndices = EXPORT_MISSING_ASSIGNMENTS_COLUMNS
-            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
-            .filter(i => i !== -1);
+        // Find all color-scale column indices for conditional formatting (grade + gpa)
+        const colorScaleTypes = ['grade', 'gpa'];
+        const findColorScaleCols = (columns) => columns
+            .map((col, i) => colorScaleTypes.includes(col.conditionalFormatting) ? { index: i, type: col.conditionalFormatting } : null)
+            .filter(Boolean);
 
-        // Build list of {sheetIndex, colIndex, rowCount} for conditional formatting injection
+        const masterListScaleCols = findColorScaleCols(activeColumns);
+        const missingScaleCols = findColorScaleCols(EXPORT_MISSING_ASSIGNMENTS_COLUMNS);
+
+        // Build list of {sheetIndex, colIndex, rowCount, type} for conditional formatting injection
         const condFmtSheets = [];
-        for (const colIndex of gradeColIndices) {
+        for (const { index, type } of masterListScaleCols) {
             if (students.length > 0) {
-                condFmtSheets.push({ sheetIndex: 0, colIndex, rowCount: students.length });
+                condFmtSheets.push({ sheetIndex: 0, colIndex: index, rowCount: students.length, type });
             }
         }
-        for (const colIndex of missingGradeColIndices) {
+        for (const { index, type } of missingScaleCols) {
             if (missingAssignmentsData.length > 1) {
-                condFmtSheets.push({ sheetIndex: 1, colIndex, rowCount: missingAssignmentsData.length - 1 });
+                condFmtSheets.push({ sheetIndex: 1, colIndex: index, rowCount: missingAssignmentsData.length - 1, type });
             }
         }
 
@@ -1703,10 +1710,8 @@ export async function exportMasterListCSV() {
         const outreachColIndex = ldaColumns.findIndex(col => col.field === 'outreach');
         const totalLdaCols = ldaColumns.length;
 
-        // Find all grade column indices for LDA sheets (shifted by custom columns)
-        const ldaGradeColIndices = ldaColumns
-            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
-            .filter(i => i !== -1);
+        // Find all color-scale column indices for LDA sheets (grade + gpa)
+        const ldaScaleCols = findColorScaleCols(ldaColumns);
 
         // Find Missing Assignments column index in LDA columns for cell-value formatting
         const ldaMissingColIndex = ldaColumns.findIndex(col => col.field === 'missingCount');
@@ -1800,10 +1805,10 @@ export async function exportMasterListCSV() {
                 }
             });
 
-            // Conditional formatting for grade columns
-            for (const colIndex of ldaGradeColIndices) {
+            // Conditional formatting for grade/gpa columns
+            for (const { index, type } of ldaScaleCols) {
                 if (group.students.length > 0) {
-                    condFmtSheets.push({ sheetIndex, colIndex, rowCount: group.students.length });
+                    condFmtSheets.push({ sheetIndex, colIndex: index, rowCount: group.students.length, type });
                 }
             }
 
