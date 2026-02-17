@@ -982,15 +982,21 @@ function getFieldValue(obj, field, fallback) {
  * @param {Object} colorScale - {low, mid, high} ARGB strings for grade color scale
  * @param {Array} rowHighlights - Array of {sheetIndex, rows: number[], startCol, endCol, fillColor}
  * @param {Array} cellValueFmts - Array of {sheetIndex, colIndex, rowCount, value, fillColor} for cell-value conditional formatting
+ * @param {Array} tableMetadata - Array of {sheetIndex, displayName, columns, dataRowCount} for Excel tables
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = []) {
-    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0) {
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = [], tableMetadata = []) {
+    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0 && tableMetadata.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
         return;
     }
 
     const zip = await JSZip.loadAsync(wbBuffer);
+
+    // --- Inject Excel tables (ListObject / structured tables) ---
+    if (tableMetadata.length > 0) {
+        await injectExcelTables(zip, tableMetadata);
+    }
 
     // --- Inject fill styles into styles.xml for row highlights and cell-value formatting ---
     // Maps fillColor ARGB → the xfId (s="N") to use in sheet cells
@@ -1052,10 +1058,10 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
             xml = applyRowHighlights(xml, highlight, fillStyleMap);
         }
 
-        // --- Conditional Formatting ---
+        // --- Conditional Formatting (color scale for grade columns) ---
         // Must appear after <mergeCells> but before <hyperlinks>/<pageMargins>
-        const condFmt = condFmtSheets.find(c => c.sheetIndex === sheetIndex);
-        if (condFmt) {
+        const condFmtsForSheet = condFmtSheets.filter(c => c.sheetIndex === sheetIndex);
+        for (const condFmt of condFmtsForSheet) {
             const colLetter = columnIndexToLetter(condFmt.colIndex);
             const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
 
@@ -1294,6 +1300,88 @@ function applyRowHighlights(xml, highlight, fillStyleMap) {
 }
 
 /**
+ * Injects Excel table definitions (ListObject / structured tables) into the workbook.
+ * Creates xl/tables/tableN.xml files, updates [Content_Types].xml,
+ * adds relationships, and references tables from each sheet.
+ *
+ * @param {JSZip} zip - The XLSX workbook as a JSZip instance
+ * @param {Array} tableMetadata - Array of {sheetIndex, displayName, columns: [{header}], dataRowCount}
+ */
+async function injectExcelTables(zip, tableMetadata) {
+    if (!tableMetadata || tableMetadata.length === 0) return;
+
+    // 1. Update [Content_Types].xml
+    let contentTypesXml = await zip.file('[Content_Types].xml')?.async('string');
+    if (contentTypesXml) {
+        for (let i = 1; i <= tableMetadata.length; i++) {
+            const override = `<Override PartName="/xl/tables/table${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>`;
+            contentTypesXml = contentTypesXml.replace('</Types>', override + '</Types>');
+        }
+        zip.file('[Content_Types].xml', contentTypesXml);
+    }
+
+    // 2. Create each table file and wire up relationships + sheet references
+    for (let i = 0; i < tableMetadata.length; i++) {
+        const meta = tableMetadata[i];
+        const tableId = i + 1;
+
+        // --- Create xl/tables/tableN.xml ---
+        const safeName = meta.displayName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const lastCol = columnIndexToLetter(meta.columns.length - 1);
+        const lastRow = meta.dataRowCount + 1; // +1 for header
+        const ref = `A1:${lastCol}${lastRow}`;
+
+        const colsXml = meta.columns.map((col, idx) => {
+            const name = String(col.header)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            return `<tableColumn id="${idx + 1}" name="${name}"/>`;
+        }).join('');
+
+        const tableXml =
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"` +
+            ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"` +
+            ` id="${tableId}" name="${safeName}" displayName="${safeName}" ref="${ref}" totalsRowShown="0">` +
+                `<autoFilter ref="${ref}"/>` +
+                `<tableColumns count="${meta.columns.length}">${colsXml}</tableColumns>` +
+                `<tableStyleInfo name="TableStyleMedium16" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>` +
+            `</table>`;
+
+        zip.file(`xl/tables/table${tableId}.xml`, tableXml);
+
+        // --- Add relationship in xl/worksheets/_rels/sheetN.xml.rels ---
+        const relsPath = `xl/worksheets/_rels/sheet${meta.sheetIndex + 1}.xml.rels`;
+        let relsXml = await zip.file(relsPath)?.async('string') || '';
+
+        if (!relsXml) {
+            relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+                `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+        }
+
+        // Find highest existing rId
+        const rIdNums = (relsXml.match(/Id="rId(\d+)"/g) || [])
+            .map(m => parseInt(m.match(/\d+/)[0]));
+        const nextRId = rIdNums.length > 0 ? Math.max(...rIdNums) + 1 : 1;
+        const rId = `rId${nextRId}`;
+
+        const rel = `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table${tableId}.xml"/>`;
+        relsXml = relsXml.replace('</Relationships>', rel + '</Relationships>');
+        zip.file(relsPath, relsXml);
+
+        // --- Add <tableParts> reference in sheet XML ---
+        const sheetPath = `xl/worksheets/sheet${meta.sheetIndex + 1}.xml`;
+        let sheetXml = await zip.file(sheetPath)?.async('string');
+        if (sheetXml) {
+            const tableParts = `<tableParts count="1"><tablePart r:id="${rId}"/></tableParts>`;
+            // Insert right before </worksheet> to avoid conflicts with conditional formatting
+            sheetXml = sheetXml.replace('</worksheet>', tableParts + '</worksheet>');
+            zip.file(sheetPath, sheetXml);
+        }
+    }
+}
+
+/**
  * Converts a 0-based column index to an Excel column letter (0='A', 25='Z', 26='AA').
  */
 function columnIndexToLetter(index) {
@@ -1396,7 +1484,7 @@ export async function exportMasterListCSV() {
                 let value = getFieldValue(student, col.field, col.fallback);
 
                 if (col.field === 'missingCount') {
-                    value = value || 0;
+                    value = (value !== null && value !== undefined && value !== '') ? value : '-';
                 } else if (col.field === 'daysOut') {
                     value = parseInt(value || 0);
                 } else if (col.field === 'lda') {
@@ -1513,17 +1601,25 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Find Grade column indices for conditional formatting
-        const gradeColIndex = activeColumns.findIndex(col => col.conditionalFormatting === 'grade');
-        const missingGradeColIndex = EXPORT_MISSING_ASSIGNMENTS_COLUMNS.findIndex(col => col.conditionalFormatting === 'grade');
+        // Find all Grade column indices for conditional formatting
+        const gradeColIndices = activeColumns
+            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
+            .filter(i => i !== -1);
+        const missingGradeColIndices = EXPORT_MISSING_ASSIGNMENTS_COLUMNS
+            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
+            .filter(i => i !== -1);
 
         // Build list of {sheetIndex, colIndex, rowCount} for conditional formatting injection
         const condFmtSheets = [];
-        if (gradeColIndex !== -1 && students.length > 0) {
-            condFmtSheets.push({ sheetIndex: 0, colIndex: gradeColIndex, rowCount: students.length });
+        for (const colIndex of gradeColIndices) {
+            if (students.length > 0) {
+                condFmtSheets.push({ sheetIndex: 0, colIndex, rowCount: students.length });
+            }
         }
-        if (missingGradeColIndex !== -1 && missingAssignmentsData.length > 1) {
-            condFmtSheets.push({ sheetIndex: 1, colIndex: missingGradeColIndex, rowCount: missingAssignmentsData.length - 1 });
+        for (const colIndex of missingGradeColIndices) {
+            if (missingAssignmentsData.length > 1) {
+                condFmtSheets.push({ sheetIndex: 1, colIndex, rowCount: missingAssignmentsData.length - 1 });
+            }
         }
 
         // Set column widths for Master List (custom or auto-fit)
@@ -1607,8 +1703,10 @@ export async function exportMasterListCSV() {
         const outreachColIndex = ldaColumns.findIndex(col => col.field === 'outreach');
         const totalLdaCols = ldaColumns.length;
 
-        // Adjust grade column index for LDA sheets (shifted by custom columns)
-        const ldaGradeColIndex = ldaColumns.findIndex(col => col.conditionalFormatting === 'grade');
+        // Find all grade column indices for LDA sheets (shifted by custom columns)
+        const ldaGradeColIndices = ldaColumns
+            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
+            .filter(i => i !== -1);
 
         // Find Missing Assignments column index in LDA columns for cell-value formatting
         const ldaMissingColIndex = ldaColumns.findIndex(col => col.field === 'missingCount');
@@ -1623,7 +1721,9 @@ export async function exportMasterListCSV() {
 
             group.students.forEach((student, studentIndex) => {
                 const rowMetadata = {};
-                const missingCount = parseInt(getFieldValue(student, 'missingCount') || 0);
+                const missingRaw = getFieldValue(student, 'missingCount');
+                const hasMissingData = missingRaw !== null && missingRaw !== undefined && missingRaw !== '';
+                const missingCount = hasMissingData ? parseInt(missingRaw) : null;
                 const nextDueRaw = getFieldValue(student, 'nextAssignment.DueDate');
 
                 const row = ldaColumns.map((col, colIndex) => {
@@ -1643,7 +1743,7 @@ export async function exportMasterListCSV() {
                     let value = getFieldValue(student, col.field, col.fallback);
 
                     if (col.field === 'missingCount') {
-                        value = value || 0;
+                        value = (value !== null && value !== undefined && value !== '') ? value : '-';
                     } else if (col.field === 'daysOut') {
                         value = parseInt(value || 0);
                     } else if (col.field === 'lda') {
@@ -1700,9 +1800,11 @@ export async function exportMasterListCSV() {
                 }
             });
 
-            // Conditional formatting for grade column
-            if (ldaGradeColIndex !== -1 && group.students.length > 0) {
-                condFmtSheets.push({ sheetIndex, colIndex: ldaGradeColIndex, rowCount: group.students.length });
+            // Conditional formatting for grade columns
+            for (const colIndex of ldaGradeColIndices) {
+                if (group.students.length > 0) {
+                    condFmtSheets.push({ sheetIndex, colIndex, rowCount: group.students.length });
+                }
             }
 
             // Conditional formatting for Missing Assignments = 0 → light green
@@ -1748,9 +1850,24 @@ export async function exportMasterListCSV() {
             high: 'FF' + (colorSettings[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B').replace('#', '')
         };
 
-        // Write workbook to buffer, then inject conditional formatting, tab colors, and row highlights via JSZip
+        // Build table metadata for all sheets
+        const tableMetadata = [
+            { sheetIndex: 0, displayName: 'MasterList', columns: activeColumns, dataRowCount: students.length },
+            { sheetIndex: 1, displayName: 'MissingAssignments', columns: EXPORT_MISSING_ASSIGNMENTS_COLUMNS, dataRowCount: missingAssignmentsData.length - 1 }
+        ];
+        ldaGroups.forEach((group, groupIndex) => {
+            const sheetName = hasMultipleCampuses ? group.name : ldaDateSuffix;
+            tableMetadata.push({
+                sheetIndex: 2 + groupIndex,
+                displayName: sheetName.replace(/[^a-zA-Z0-9_]/g, '_'),
+                columns: ldaColumns,
+                dataRowCount: group.students.length
+            });
+        });
+
+        // Write workbook to buffer, then inject conditional formatting, tab colors, row highlights, and tables via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts, tableMetadata);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);
