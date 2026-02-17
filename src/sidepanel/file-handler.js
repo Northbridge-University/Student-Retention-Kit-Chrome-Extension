@@ -1042,11 +1042,13 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
                     `</cfRule>` +
                 `</conditionalFormatting>`;
 
-            // Insert at the correct OOXML element order position
-            const insertBefore = ['<hyperlinks', '<printOptions', '<pageMargins', '<pageSetup', '</worksheet>']
-                .find(tag => xml.includes(tag));
-            if (insertBefore) {
-                xml = xml.replace(insertBefore, cfXml + insertBefore);
+            // Insert right after </sheetData> (or after </mergeCells> if present)
+            // SheetJS generates <ignoredErrors> after </sheetData>, and
+            // conditionalFormatting must appear before it per OOXML schema.
+            if (xml.includes('</mergeCells>')) {
+                xml = xml.replace('</mergeCells>', '</mergeCells>' + cfXml);
+            } else if (xml.includes('</sheetData>')) {
+                xml = xml.replace('</sheetData>', '</sheetData>' + cfXml);
             }
         }
 
