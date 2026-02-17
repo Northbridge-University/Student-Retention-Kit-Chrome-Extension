@@ -862,7 +862,7 @@ export async function processStep2(students, renderCallback) {
 }
 
 async function _processStep2(students, renderCallback) {
-    return withStepUI('step2', async ({ timeSpan }) => {
+    const updatedStudents = await withStepUI('step2', async ({ timeSpan }) => {
         // Pre-check: ensure user is logged into Canvas before making any API calls
         await ensureCanvasLogin(getCanvasDomain());
 
@@ -951,9 +951,11 @@ async function _processStep2(students, renderCallback) {
 
         console.log(`[Step 2] Complete - ${students.length} students processed`);
 
-        if (renderCallback) await renderCallback(updatedStudents);
         return updatedStudents;
     });
+
+    if (renderCallback) await renderCallback(updatedStudents);
+    return updatedStudents;
 }
 
 
