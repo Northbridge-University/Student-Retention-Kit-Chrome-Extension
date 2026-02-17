@@ -1053,8 +1053,9 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
         }
 
         // --- Row Highlights (fill) ---
-        const highlight = rowHighlights.find(h => h.sheetIndex === sheetIndex);
-        if (highlight) {
+        // Apply in order so later highlights override earlier ones (lowest priority first)
+        const highlightsForSheet = rowHighlights.filter(h => h.sheetIndex === sheetIndex);
+        for (const highlight of highlightsForSheet) {
             xml = applyRowHighlights(xml, highlight, fillStyleMap);
         }
 
@@ -1484,7 +1485,12 @@ export async function exportMasterListCSV() {
         const masterListData = [masterListHeaders];
         const masterListHyperlinkMetadata = []; // Store hyperlink info for each row
 
-        students.forEach(student => {
+        // Determine the 1-month-ago cutoff for new student highlighting
+        const newStudentCutoff = new Date(referenceDate);
+        newStudentCutoff.setMonth(newStudentCutoff.getMonth() - 1);
+        const newStudentRows = []; // 0-based data row indices for new students
+
+        students.forEach((student, studentIndex) => {
             const rowMetadata = {}; // Store hyperlink info for this row
             const row = activeColumns.map((col, colIndex) => {
                 let value = getFieldValue(student, col.field, col.fallback);
@@ -1512,6 +1518,15 @@ export async function exportMasterListCSV() {
             });
             masterListData.push(row);
             masterListHyperlinkMetadata.push(rowMetadata);
+
+            // Check if student is new (ExpStartDate within 1 month of report date)
+            const expStart = getFieldValue(student, 'expStartDate');
+            if (expStart) {
+                const expDate = parseDate(expStart);
+                if (expDate && expDate >= newStudentCutoff && expDate <= referenceDate) {
+                    newStudentRows.push(studentIndex);
+                }
+            }
         });
 
         // --- SHEET 2: MISSING ASSIGNMENTS ---
@@ -1692,6 +1707,18 @@ export async function exportMasterListCSV() {
 
         const ldaSheetNames = [];
         const rowHighlights = []; // Track rows to highlight across sheets
+
+        // New student highlight: light blue fill for entire row on Master List (lowest priority — applied first)
+        if (newStudentRows.length > 0) {
+            rowHighlights.push({
+                sheetIndex: 0,
+                rows: newStudentRows,
+                startCol: 0,
+                endCol: activeColumns.length - 1,
+                fillColor: 'FF9BC2E6' // light blue
+            });
+        }
+
         const cellValueFmts = []; // Track cell-value conditional formatting across sheets
 
         // Build LDA column definitions: insert Assigned before name, Outreach after missingCount
