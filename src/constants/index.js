@@ -391,7 +391,7 @@ export const MASTER_LIST_COLUMNS = [
     { header: 'Course Start', field: 'courseStartDate', width: 12, hidden: true },
     { header: 'Course End', field: 'courseEndDate', width: 12, hidden: true },
     { header: 'Letter Grade', field: 'letterGrade', width: 8 },
-    { header: 'Last Course Grade', field: 'lastCourseGrade', width: 10 },
+    { header: 'Last Course Grade', field: 'lastCourseGrade', conditionalFormatting: 'grade', width: 10 },
     { header: 'Last Course Letter Grade', field: 'lastCourseLetterGrade', width: 10 },
     { header: 'Enroll GPA', field: 'enrollGpa', width: 8 },
     { header: 'Enrollment Status', field: 'currEnrollStatus', width: 15 },

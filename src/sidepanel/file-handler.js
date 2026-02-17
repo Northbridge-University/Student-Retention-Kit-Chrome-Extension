@@ -1058,10 +1058,10 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
             xml = applyRowHighlights(xml, highlight, fillStyleMap);
         }
 
-        // --- Conditional Formatting ---
+        // --- Conditional Formatting (color scale for grade columns) ---
         // Must appear after <mergeCells> but before <hyperlinks>/<pageMargins>
-        const condFmt = condFmtSheets.find(c => c.sheetIndex === sheetIndex);
-        if (condFmt) {
+        const condFmtsForSheet = condFmtSheets.filter(c => c.sheetIndex === sheetIndex);
+        for (const condFmt of condFmtsForSheet) {
             const colLetter = columnIndexToLetter(condFmt.colIndex);
             const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
 
@@ -1601,17 +1601,25 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Find Grade column indices for conditional formatting
-        const gradeColIndex = activeColumns.findIndex(col => col.conditionalFormatting === 'grade');
-        const missingGradeColIndex = EXPORT_MISSING_ASSIGNMENTS_COLUMNS.findIndex(col => col.conditionalFormatting === 'grade');
+        // Find all Grade column indices for conditional formatting
+        const gradeColIndices = activeColumns
+            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
+            .filter(i => i !== -1);
+        const missingGradeColIndices = EXPORT_MISSING_ASSIGNMENTS_COLUMNS
+            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
+            .filter(i => i !== -1);
 
         // Build list of {sheetIndex, colIndex, rowCount} for conditional formatting injection
         const condFmtSheets = [];
-        if (gradeColIndex !== -1 && students.length > 0) {
-            condFmtSheets.push({ sheetIndex: 0, colIndex: gradeColIndex, rowCount: students.length });
+        for (const colIndex of gradeColIndices) {
+            if (students.length > 0) {
+                condFmtSheets.push({ sheetIndex: 0, colIndex, rowCount: students.length });
+            }
         }
-        if (missingGradeColIndex !== -1 && missingAssignmentsData.length > 1) {
-            condFmtSheets.push({ sheetIndex: 1, colIndex: missingGradeColIndex, rowCount: missingAssignmentsData.length - 1 });
+        for (const colIndex of missingGradeColIndices) {
+            if (missingAssignmentsData.length > 1) {
+                condFmtSheets.push({ sheetIndex: 1, colIndex, rowCount: missingAssignmentsData.length - 1 });
+            }
         }
 
         // Set column widths for Master List (custom or auto-fit)
@@ -1695,8 +1703,10 @@ export async function exportMasterListCSV() {
         const outreachColIndex = ldaColumns.findIndex(col => col.field === 'outreach');
         const totalLdaCols = ldaColumns.length;
 
-        // Adjust grade column index for LDA sheets (shifted by custom columns)
-        const ldaGradeColIndex = ldaColumns.findIndex(col => col.conditionalFormatting === 'grade');
+        // Find all grade column indices for LDA sheets (shifted by custom columns)
+        const ldaGradeColIndices = ldaColumns
+            .map((col, i) => col.conditionalFormatting === 'grade' ? i : -1)
+            .filter(i => i !== -1);
 
         // Find Missing Assignments column index in LDA columns for cell-value formatting
         const ldaMissingColIndex = ldaColumns.findIndex(col => col.field === 'missingCount');
@@ -1790,9 +1800,11 @@ export async function exportMasterListCSV() {
                 }
             });
 
-            // Conditional formatting for grade column
-            if (ldaGradeColIndex !== -1 && group.students.length > 0) {
-                condFmtSheets.push({ sheetIndex, colIndex: ldaGradeColIndex, rowCount: group.students.length });
+            // Conditional formatting for grade columns
+            for (const colIndex of ldaGradeColIndices) {
+                if (group.students.length > 0) {
+                    condFmtSheets.push({ sheetIndex, colIndex, rowCount: group.students.length });
+                }
             }
 
             // Conditional formatting for Missing Assignments = 0 → light green
