@@ -98,6 +98,11 @@ export function cacheDomElements() {
     elements.updateMasterContextMenu = document.getElementById('updateMasterContextMenu');
     elements.sendListToExcelMenuItem = document.getElementById('sendListToExcelMenuItem');
     elements.checkGradeBookMenuItem = document.getElementById('checkGradeBookMenuItem');
+    elements.settingsContextMenu = document.getElementById('settingsContextMenu');
+    elements.moreSettingsMenuItem = document.getElementById('moreSettingsMenuItem');
+    elements.moreSettingsModal = document.getElementById('moreSettingsModal');
+    elements.closeMoreSettingsBtn = document.getElementById('closeMoreSettingsBtn');
+    elements.saveMoreSettingsBtn = document.getElementById('saveMoreSettingsBtn');
     elements.checkerContextMenu = document.getElementById('checkerContextMenu');
     elements.resendHighlightPingMenuItem = document.getElementById('resendHighlightPingMenuItem');
     elements.checkerContextMenuText = document.getElementById('checkerContextMenuText');
