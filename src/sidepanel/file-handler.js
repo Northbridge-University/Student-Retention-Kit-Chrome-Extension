@@ -1101,12 +1101,11 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
                     `</cfRule>` +
                 `</conditionalFormatting>`;
 
-            if (xml.includes('</conditionalFormatting>')) {
-                // Append after last conditionalFormatting block
-                xml = xml.replace(/<\/conditionalFormatting>(?![\s\S]*<\/conditionalFormatting>)/,
-                    '</conditionalFormatting>' + cvfXml);
-            } else if (xml.includes('</mergeCells>')) {
-                xml = xml.replace('</mergeCells>', '</mergeCells>' + cvfXml);
+            // Insert after last </conditionalFormatting>, or after </sheetData>
+            const lastCfIdx = xml.lastIndexOf('</conditionalFormatting>');
+            if (lastCfIdx !== -1) {
+                const insertPos = lastCfIdx + '</conditionalFormatting>'.length;
+                xml = xml.slice(0, insertPos) + cvfXml + xml.slice(insertPos);
             } else if (xml.includes('</sheetData>')) {
                 xml = xml.replace('</sheetData>', '</sheetData>' + cvfXml);
             }
@@ -1186,9 +1185,16 @@ async function injectDxfStyles(zip, cellValueFmts) {
     let stylesXml = await zip.file(stylesPath)?.async('string');
     if (!stylesXml) return;
 
-    // Find or create <dxfs> section
-    const dxfCountMatch = stylesXml.match(/<dxfs count="(\d+)">/);
-    let dxfCount = dxfCountMatch ? parseInt(dxfCountMatch[1]) : 0;
+    // Find or create <dxfs> section (handle both self-closing and open/close forms)
+    const dxfOpenMatch = stylesXml.match(/<dxfs count="(\d+)">/);
+    const dxfSelfCloseMatch = stylesXml.match(/<dxfs count="(\d+)"\/>/);
+    let dxfCount = 0;
+
+    if (dxfOpenMatch) {
+        dxfCount = parseInt(dxfOpenMatch[1]);
+    } else if (dxfSelfCloseMatch) {
+        dxfCount = parseInt(dxfSelfCloseMatch[1]);
+    }
 
     // Deduplicate by fillColor so we only add one dxf per unique color
     const colorToDxfIndex = {};
@@ -1203,9 +1209,14 @@ async function injectDxfStyles(zip, cellValueFmts) {
         cvf._dxfIndex = colorToDxfIndex[cvf.fillColor];
     }
 
-    if (dxfCountMatch) {
+    if (dxfOpenMatch) {
+        // Opening tag form: <dxfs count="N">...</dxfs>
         stylesXml = stylesXml.replace(/<dxfs count="\d+">/, `<dxfs count="${dxfCount}">`);
         stylesXml = stylesXml.replace('</dxfs>', newDxfsXml + '</dxfs>');
+    } else if (dxfSelfCloseMatch) {
+        // Self-closing form: <dxfs count="0"/> — replace with open/close containing new entries
+        stylesXml = stylesXml.replace(/<dxfs count="\d+"\/>/,
+            `<dxfs count="${dxfCount}">${newDxfsXml}</dxfs>`);
     } else {
         // No <dxfs> exists — insert before </styleSheet>
         const dxfsBlock = `<dxfs count="${dxfCount}">${newDxfsXml}</dxfs>`;
