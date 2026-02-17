@@ -20,7 +20,7 @@ export async function openMoreSettingsModal() {
 
     // Load export tab color
     if (elements.exportTabColorInput && elements.exportTabColorTextInput) {
-        const tabColor = result[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#FFC000';
+        const tabColor = result[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#fcd5b4';
         elements.exportTabColorInput.value = tabColor;
         elements.exportTabColorTextInput.value = tabColor;
     }
@@ -53,7 +53,7 @@ export async function saveMoreSettings() {
     const settingsToSave = {};
 
     if (elements.exportTabColorTextInput) {
-        settingsToSave[STORAGE_KEYS.EXPORT_TAB_COLOR] = elements.exportTabColorTextInput.value || '#FFC000';
+        settingsToSave[STORAGE_KEYS.EXPORT_TAB_COLOR] = elements.exportTabColorTextInput.value || '#fcd5b4';
     }
     if (elements.exportColorScaleLowInput) {
         settingsToSave[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] = elements.exportColorScaleLowInput.value || '#F8696B';

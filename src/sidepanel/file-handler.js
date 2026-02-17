@@ -15,6 +15,7 @@ import {
     trimCommonPrefix,
     numericToLetterGrade
 } from '../constants/field-utils.js';
+import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { elements } from './ui-manager.js';
 import { formatDuration, updateTotalTime } from './canvas-api.js';
@@ -1131,7 +1132,9 @@ export async function exportMasterListCSV() {
     try {
         const result = await chrome.storage.local.get([
             STORAGE_KEYS.MASTER_ENTRIES,
-            STORAGE_KEYS.REFERENCE_DATE,
+            STORAGE_KEYS.REFERENCE_DATE
+        ]);
+        const colorSettings = await storageGet([
             STORAGE_KEYS.EXPORT_TAB_COLOR,
             STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW,
             STORAGE_KEYS.EXPORT_COLOR_SCALE_MID,
@@ -1400,16 +1403,16 @@ export async function exportMasterListCSV() {
         const filename = `student_report_${timestamp}.xlsx`;
 
         // Sheet tab colors (convert #RRGGBB to FFRRGGBB for XLSX)
-        const exportTabColor = result[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#FFC000';
+        const exportTabColor = colorSettings[STORAGE_KEYS.EXPORT_TAB_COLOR] || '#fcd5b4';
         const tabColors = [
             { sheetIndex: 0, rgb: 'FF' + exportTabColor.replace('#', '') }
         ];
 
         // Color scale settings (convert #RRGGBB to FFRRGGBB for XLSX)
         const colorScale = {
-            low: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] || '#F8696B').replace('#', ''),
-            mid: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_MID] || '#FFEB84').replace('#', ''),
-            high: 'FF' + (result[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B').replace('#', '')
+            low: 'FF' + (colorSettings[STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW] || '#F8696B').replace('#', ''),
+            mid: 'FF' + (colorSettings[STORAGE_KEYS.EXPORT_COLOR_SCALE_MID] || '#FFEB84').replace('#', ''),
+            high: 'FF' + (colorSettings[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B').replace('#', '')
         };
 
         // Write workbook to buffer, then inject conditional formatting and tab colors via JSZip
