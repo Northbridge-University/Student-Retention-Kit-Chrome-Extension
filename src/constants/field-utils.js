@@ -252,6 +252,73 @@ export function calculateDaysSinceLastAttendance(ldaValue, referenceDate) {
 }
 
 /**
+ * Formats a date into a friendly relative phrase for outreach messages.
+ * - Same day: "today"
+ * - Next day: "tomorrow"
+ * - Within the current week (same Sun-Sat): "this Wednesday"
+ * - Within the next week: "next Monday"
+ * - Further out: "February 14th"
+ *
+ * @param {Date} date - The target date
+ * @param {Date} [referenceDate] - The "today" baseline (defaults to new Date())
+ * @returns {string} A friendly date phrase (lowercase)
+ */
+export function formatFriendlyDate(date, referenceDate) {
+    if (!date) return '';
+    const today = referenceDate ? new Date(referenceDate) : new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(date);
+    target.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((target - today) / (24 * 60 * 60 * 1000));
+
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'tomorrow';
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDay = dayNames[target.getDay()];
+
+    // Days remaining in the current week (0=Sun based week)
+    // "this <day>" = same Sun–Sat week as today
+    const todayDow = today.getDay(); // 0=Sun
+    const daysUntilEndOfWeek = 6 - todayDow; // days left until Saturday
+
+    if (diffDays > 0 && diffDays <= daysUntilEndOfWeek) {
+        return `this ${targetDay}`;
+    }
+
+    // "next <day>" = the immediately following Sun–Sat week
+    if (diffDays > 0 && diffDays <= daysUntilEndOfWeek + 7) {
+        return `next ${targetDay}`;
+    }
+
+    // Absolute date: "February 14th"
+    const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const day = target.getDate();
+    const suffix = getOrdinalSuffix(day);
+    return `${monthNames[target.getMonth()]} ${day}${suffix}`;
+}
+
+/**
+ * Returns the ordinal suffix for a number (st, nd, rd, th).
+ * @param {number} n
+ * @returns {string}
+ */
+function getOrdinalSuffix(n) {
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return 'th';
+    switch (n % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+    }
+}
+
+/**
  * Converts a numeric grade to a letter grade.
  * A: 90-100, B: 80-89, C: 70-79, D: 60-69, F: below 60
  *
