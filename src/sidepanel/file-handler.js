@@ -1060,14 +1060,22 @@ export async function exportMasterListCSV() {
             return;
         }
 
+        // Only include columns where at least one student has data
+        const activeColumns = MASTER_LIST_COLUMNS.filter(col => {
+            return students.some(student => {
+                const value = getFieldValue(student, col.field, col.fallback);
+                return value !== null && value !== undefined && value !== '';
+            });
+        });
+
         // --- SHEET 1: MASTER LIST ---
-        const masterListHeaders = MASTER_LIST_COLUMNS.map(col => col.header);
+        const masterListHeaders = activeColumns.map(col => col.header);
         const masterListData = [masterListHeaders];
         const masterListHyperlinkMetadata = []; // Store hyperlink info for each row
 
         students.forEach(student => {
             const rowMetadata = {}; // Store hyperlink info for this row
-            const row = MASTER_LIST_COLUMNS.map((col, colIndex) => {
+            const row = activeColumns.map((col, colIndex) => {
                 let value = getFieldValue(student, col.field, col.fallback);
 
                 if (col.field === 'missingCount') {
@@ -1189,7 +1197,7 @@ export async function exportMasterListCSV() {
         });
 
         // Find Grade column index for conditional formatting in Master List
-        const gradeColIndex = MASTER_LIST_COLUMNS.findIndex(col => col.conditionalFormatting === 'grade');
+        const gradeColIndex = activeColumns.findIndex(col => col.conditionalFormatting === 'grade');
 
         // Apply conditional formatting to Grade column in Master List (GREEN >= 70, YELLOW 60-69, RED < 60)
         if (gradeColIndex !== -1 && students.length > 0) {
@@ -1205,7 +1213,7 @@ export async function exportMasterListCSV() {
         }
 
         // Set column widths for Master List (custom or auto-fit)
-        ws1['!cols'] = calculateColumnWidths(MASTER_LIST_COLUMNS, masterListData);
+        ws1['!cols'] = calculateColumnWidths(activeColumns, masterListData);
 
         // Set column widths for Missing Assignments (custom or auto-fit)
         ws2['!cols'] = calculateColumnWidths(EXPORT_MISSING_ASSIGNMENTS_COLUMNS, missingAssignmentsData);
@@ -1224,14 +1232,14 @@ export async function exportMasterListCSV() {
             return daysOutB - daysOutA; // Descending order
         });
 
-        // Create LDA sheet data using the same structure as Master List
-        const ldaHeaders = MASTER_LIST_COLUMNS.map(col => col.header);
+        // Create LDA sheet data using the same active columns as Master List
+        const ldaHeaders = activeColumns.map(col => col.header);
         const ldaData = [ldaHeaders];
         const ldaHyperlinkMetadata = []; // Store hyperlink info for each row
 
         filteredStudents.forEach(student => {
             const rowMetadata = {}; // Store hyperlink info for this row
-            const row = MASTER_LIST_COLUMNS.map((col, colIndex) => {
+            const row = activeColumns.map((col, colIndex) => {
                 let value = getFieldValue(student, col.field, col.fallback);
 
                 if (col.field === 'missingCount') {
@@ -1285,10 +1293,10 @@ export async function exportMasterListCSV() {
         }
 
         // Set column widths for LDA sheet (custom or auto-fit)
-        ws3['!cols'] = calculateColumnWidths(MASTER_LIST_COLUMNS, ldaData);
+        ws3['!cols'] = calculateColumnWidths(activeColumns, ldaData);
 
         // Hide columns not in LDA_VISIBLE_COLUMNS whitelist (applied after width calculation)
-        MASTER_LIST_COLUMNS.forEach((col, i) => {
+        activeColumns.forEach((col, i) => {
             if (!LDA_VISIBLE_COLUMNS.includes(col.field)) {
                 if (!ws3['!cols'][i]) ws3['!cols'][i] = {};
                 ws3['!cols'][i].hidden = true;
