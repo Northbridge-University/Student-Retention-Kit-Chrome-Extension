@@ -421,11 +421,13 @@ export const EXPORT_MISSING_ASSIGNMENTS_COLUMNS = [
  * Columns are identified by their field name from MASTER_LIST_COLUMNS
  */
 export const LDA_VISIBLE_COLUMNS = [
+    'assigned',
     'name',
     'StudentNumber',
     'url',
     'grade',
     'missingCount',
+    'outreach',
     'lda',
     'daysOut',
     'shift',

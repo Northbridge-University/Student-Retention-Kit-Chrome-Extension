@@ -12,6 +12,7 @@ import {
     calculateDaysSinceLastAttendance,
     parseDate,
     formatDateToMMDDYY,
+    formatFriendlyDate,
     trimCommonPrefix,
     numericToLetterGrade
 } from '../constants/field-utils.js';
@@ -972,15 +973,17 @@ function getFieldValue(obj, field, fallback) {
  * Post-processes the XLSX ZIP to add:
  *   - Conditional formatting (Green-Yellow-Red color scale on grade columns)
  *   - Tab colors for sheet tabs
+ *   - Row fill highlights (e.g. light green for outreach rows)
  *
  * @param {ArrayBuffer} wbBuffer - The XLSX workbook as an ArrayBuffer
  * @param {string} filename - Output filename
  * @param {Array} condFmtSheets - Array of {sheetIndex, colIndex, rowCount}
  * @param {Array} tabColors - Array of {sheetIndex, rgb} for sheet tab colors
  * @param {Object} colorScale - {low, mid, high} ARGB strings for grade color scale
+ * @param {Array} rowHighlights - Array of {sheetIndex, rows: number[], startCol, endCol, fillColor}
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}) {
-    if (condFmtSheets.length === 0 && tabColors.length === 0) {
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = []) {
+    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
         return;
@@ -988,10 +991,19 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
 
     const zip = await JSZip.loadAsync(wbBuffer);
 
+    // --- Inject fill styles into styles.xml for row highlights ---
+    // Maps fillColor ARGB → the xfId (s="N") to use in sheet cells
+    const fillStyleMap = {};
+    if (rowHighlights.length > 0) {
+        const uniqueColors = [...new Set(rowHighlights.map(h => h.fillColor))];
+        await injectFillStyles(zip, uniqueColors, fillStyleMap);
+    }
+
     // Collect all sheet indices that need modification
     const sheetsToModify = new Set([
         ...condFmtSheets.map(s => s.sheetIndex),
-        ...tabColors.map(s => s.sheetIndex)
+        ...tabColors.map(s => s.sheetIndex),
+        ...rowHighlights.map(s => s.sheetIndex)
     ]);
 
     for (const sheetIndex of sheetsToModify) {
@@ -1021,6 +1033,12 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
                     xml = xml.replace(anchor, `<sheetPr>${tabColorTag}</sheetPr>${anchor}`);
                 }
             }
+        }
+
+        // --- Row Highlights (fill) ---
+        const highlight = rowHighlights.find(h => h.sheetIndex === sheetIndex);
+        if (highlight) {
+            xml = applyRowHighlights(xml, highlight, fillStyleMap);
         }
 
         // --- Conditional Formatting ---
@@ -1063,6 +1081,128 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
 
     const modifiedBuffer = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     downloadBlob(modifiedBuffer, filename);
+}
+
+/**
+ * Injects custom fill definitions into xl/styles.xml and creates new cellXfs entries
+ * that reference those fills. Populates fillStyleMap with fillColor → xfId.
+ *
+ * @param {JSZip} zip - The JSZip instance
+ * @param {string[]} colors - Array of ARGB color strings (e.g. 'FFE2EFDA')
+ * @param {Object} fillStyleMap - Output map: color → s attribute value (xfId string)
+ */
+async function injectFillStyles(zip, colors, fillStyleMap) {
+    const stylesPath = 'xl/styles.xml';
+    let stylesXml = await zip.file(stylesPath)?.async('string');
+    if (!stylesXml) return;
+
+    // --- Add fills ---
+    // Find current fill count and insert new fills before </fills>
+    const fillCountMatch = stylesXml.match(/<fills count="(\d+)">/);
+    if (!fillCountMatch) return;
+    let fillCount = parseInt(fillCountMatch[1]);
+
+    const newFillIndices = [];
+    let newFillsXml = '';
+    for (const color of colors) {
+        newFillsXml += `<fill><patternFill patternType="solid"><fgColor rgb="${color}"/><bgColor indexed="64"/></patternFill></fill>`;
+        newFillIndices.push(fillCount);
+        fillCount++;
+    }
+
+    stylesXml = stylesXml.replace(
+        /<fills count="\d+">/,
+        `<fills count="${fillCount}">`
+    );
+    stylesXml = stylesXml.replace('</fills>', newFillsXml + '</fills>');
+
+    // --- Add cellXfs (cell format) entries referencing the new fills ---
+    const xfCountMatch = stylesXml.match(/<cellXfs count="(\d+)">/);
+    if (!xfCountMatch) return;
+    let xfCount = parseInt(xfCountMatch[1]);
+
+    let newXfsXml = '';
+    for (let i = 0; i < colors.length; i++) {
+        const fillIdx = newFillIndices[i];
+        fillStyleMap[colors[i]] = String(xfCount);
+        newXfsXml += `<xf numFmtId="0" fontId="0" fillId="${fillIdx}" borderId="0" xfId="0" applyFill="1"/>`;
+        xfCount++;
+    }
+
+    stylesXml = stylesXml.replace(
+        /<cellXfs count="\d+">/,
+        `<cellXfs count="${xfCount}">`
+    );
+    stylesXml = stylesXml.replace('</cellXfs>', newXfsXml + '</cellXfs>');
+
+    zip.file(stylesPath, stylesXml);
+}
+
+/**
+ * Applies fill highlighting to specific rows/columns in a sheet XML string.
+ * For each highlighted row, sets the s="N" attribute on cells from startCol to endCol.
+ * Creates empty cells with the fill if they don't exist in the XML.
+ *
+ * @param {string} xml - The sheet XML
+ * @param {Object} highlight - {rows: number[], startCol, endCol, fillColor}
+ * @param {Object} fillStyleMap - fillColor → s attribute value
+ * @returns {string} Modified XML
+ */
+function applyRowHighlights(xml, highlight, fillStyleMap) {
+    const sValue = fillStyleMap[highlight.fillColor];
+    if (!sValue) return xml;
+
+    // Build a Set of 1-based row numbers to highlight (rows are 0-based data indices, +2 for header+1-based)
+    const rowSet = new Set(highlight.rows.map(r => r + 2));
+
+    // Process each <row> element
+    xml = xml.replace(/<row r="(\d+)"([^>]*)>([\s\S]*?)<\/row>/g, (match, rowNumStr, rowAttrs, rowContent) => {
+        const rowNum = parseInt(rowNumStr);
+        if (!rowSet.has(rowNum)) return match;
+
+        // Parse existing cells in this row into a map by column index
+        const cellMap = new Map();
+        const cellRegex = /<c r="([A-Z]+)(\d+)"([^>]*?)(\/>|>([\s\S]*?)<\/c>)/g;
+        let cellMatch;
+        while ((cellMatch = cellRegex.exec(rowContent)) !== null) {
+            const colLetters = cellMatch[1];
+            cellMap.set(colLetters, cellMatch[0]);
+        }
+
+        // For each column in highlight range, ensure cell exists with fill
+        for (let col = highlight.startCol; col <= highlight.endCol; col++) {
+            const colLetter = columnIndexToLetter(col);
+            const cellRef = `${colLetter}${rowNum}`;
+
+            if (cellMap.has(colLetter)) {
+                // Cell exists — add or replace s attribute
+                let cellXml = cellMap.get(colLetter);
+                if (/\ss="[^"]*"/.test(cellXml)) {
+                    cellXml = cellXml.replace(/\ss="[^"]*"/, ` s="${sValue}"`);
+                } else {
+                    cellXml = cellXml.replace(/<c r="([^"]+)"/, `<c r="$1" s="${sValue}"`);
+                }
+                cellMap.set(colLetter, cellXml);
+            } else {
+                // Cell doesn't exist — create empty cell with fill
+                cellMap.set(colLetter, `<c r="${cellRef}" s="${sValue}"/>`);
+            }
+        }
+
+        // Rebuild row content sorted by column
+        const sortedCells = [...cellMap.entries()]
+            .sort((a, b) => {
+                // Sort by column: first by length (A < AA), then alphabetically
+                if (a[0].length !== b[0].length) return a[0].length - b[0].length;
+                return a[0] < b[0] ? -1 : 1;
+            })
+            .map(([, cellXml]) => cellXml)
+            .join('');
+
+        return `<row r="${rowNumStr}"${rowAttrs}>${sortedCells}</row>`;
+    });
+
+    return xml;
 }
 
 /**
@@ -1360,17 +1500,54 @@ export async function exportMasterListCSV() {
         ];
 
         const ldaSheetNames = [];
+        const rowHighlights = []; // Track rows to highlight across sheets
+
+        // Build LDA column definitions: insert Assigned before name, Outreach after missingCount
+        const ldaColumns = [];
+        // Insert "Assigned" before the first column (name)
+        ldaColumns.push({ header: 'Assigned', field: 'assigned', width: 12 });
+        for (const col of activeColumns) {
+            ldaColumns.push(col);
+            // Insert "Outreach" right after Missing Assignments
+            if (col.field === 'missingCount') {
+                ldaColumns.push({ header: 'Outreach', field: 'outreach', width: 35 });
+            }
+        }
+
+        // Find the outreach column index for highlight range start
+        const outreachColIndex = ldaColumns.findIndex(col => col.field === 'outreach');
+        const totalLdaCols = ldaColumns.length;
+
+        // Adjust grade column index for LDA sheets (shifted by custom columns)
+        const ldaGradeColIndex = ldaColumns.findIndex(col => col.conditionalFormatting === 'grade');
 
         // Build and append each LDA sheet
         ldaGroups.forEach((group, groupIndex) => {
             const sheetIndex = 2 + groupIndex; // 0=Master List, 1=Missing Assignments
-            const ldaHeaders = activeColumns.map(col => col.header);
+            const ldaHeaders = ldaColumns.map(col => col.header);
             const ldaData = [ldaHeaders];
             const ldaHyperlinkMetadata = [];
+            const highlightRows = []; // 0-based data row indices to highlight
 
-            group.students.forEach(student => {
+            group.students.forEach((student, studentIndex) => {
                 const rowMetadata = {};
-                const row = activeColumns.map((col, colIndex) => {
+                const missingCount = parseInt(getFieldValue(student, 'missingCount') || 0);
+                const nextDueRaw = getFieldValue(student, 'nextAssignment.DueDate');
+
+                const row = ldaColumns.map((col, colIndex) => {
+                    // Custom LDA-only columns
+                    if (col.field === 'assigned') return '';
+                    if (col.field === 'outreach') {
+                        if (missingCount === 0 && nextDueRaw) {
+                            const dueDate = parseDate(nextDueRaw);
+                            if (dueDate) {
+                                const friendly = formatFriendlyDate(dueDate, referenceDate);
+                                return `Student's next assignment is due ${friendly}.`;
+                            }
+                        }
+                        return '';
+                    }
+
                     let value = getFieldValue(student, col.field, col.fallback);
 
                     if (col.field === 'missingCount') {
@@ -1392,6 +1569,12 @@ export async function exportMasterListCSV() {
 
                     return value;
                 });
+
+                // Track rows that qualify for outreach highlighting
+                if (missingCount === 0 && nextDueRaw && parseDate(nextDueRaw)) {
+                    highlightRows.push(studentIndex);
+                }
+
                 ldaData.push(row);
                 ldaHyperlinkMetadata.push(rowMetadata);
             });
@@ -1415,10 +1598,10 @@ export async function exportMasterListCSV() {
             });
 
             // Set column widths
-            ws['!cols'] = calculateColumnWidths(activeColumns, ldaData);
+            ws['!cols'] = calculateColumnWidths(ldaColumns, ldaData);
 
             // Hide columns not in LDA_VISIBLE_COLUMNS whitelist
-            activeColumns.forEach((col, i) => {
+            ldaColumns.forEach((col, i) => {
                 if (!LDA_VISIBLE_COLUMNS.includes(col.field)) {
                     if (!ws['!cols'][i]) ws['!cols'][i] = {};
                     ws['!cols'][i].hidden = true;
@@ -1426,8 +1609,19 @@ export async function exportMasterListCSV() {
             });
 
             // Conditional formatting for grade column
-            if (gradeColIndex !== -1 && group.students.length > 0) {
-                condFmtSheets.push({ sheetIndex, colIndex: gradeColIndex, rowCount: group.students.length });
+            if (ldaGradeColIndex !== -1 && group.students.length > 0) {
+                condFmtSheets.push({ sheetIndex, colIndex: ldaGradeColIndex, rowCount: group.students.length });
+            }
+
+            // Record row highlights for this sheet (outreach → end of row)
+            if (highlightRows.length > 0 && outreachColIndex !== -1) {
+                rowHighlights.push({
+                    sheetIndex,
+                    rows: highlightRows,
+                    startCol: outreachColIndex,
+                    endCol: totalLdaCols - 1,
+                    fillColor: 'FFE2EFDA' // light green #e2efda
+                });
             }
 
             // Sheet name: campus name if multiple, otherwise "LDA MM-DD-YYYY"
@@ -1451,9 +1645,9 @@ export async function exportMasterListCSV() {
             high: 'FF' + (colorSettings[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] || '#63BE7B').replace('#', '')
         };
 
-        // Write workbook to buffer, then inject conditional formatting and tab colors via JSZip
+        // Write workbook to buffer, then inject conditional formatting, tab colors, and row highlights via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);
