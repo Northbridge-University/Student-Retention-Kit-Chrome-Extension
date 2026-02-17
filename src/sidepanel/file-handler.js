@@ -998,21 +998,31 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
         if (!xml) continue;
 
         // --- Tab Color ---
+        // <sheetPr> must appear before <dimension>/<sheetViews> per OOXML schema
         const tabColor = tabColors.find(t => t.sheetIndex === sheetIndex);
         if (tabColor) {
-            const tabColorXml = `<sheetPr><tabColor rgb="${tabColor.rgb}"/></sheetPr>`;
-            if (xml.includes('<sheetPr')) {
-                // Add tabColor inside existing sheetPr
-                xml = xml.replace(/<sheetPr([^>]*)\/>/, `<sheetPr$1><tabColor rgb="${tabColor.rgb}"/></sheetPr>`);
-                xml = xml.replace(/<sheetPr([^>]*)>/, `<sheetPr$1><tabColor rgb="${tabColor.rgb}"/>`);
-            } else if (xml.includes('<sheetViews')) {
-                xml = xml.replace('<sheetViews', tabColorXml + '<sheetViews');
-            } else if (xml.includes('<sheetData')) {
-                xml = xml.replace('<sheetData', tabColorXml + '<sheetData');
+            const tabColorTag = `<tabColor rgb="${tabColor.rgb}"/>`;
+
+            if (/<sheetPr[^>]*\/>/.test(xml)) {
+                // Self-closing <sheetPr/> — expand to contain tabColor
+                xml = xml.replace(/<sheetPr([^>]*)\/>/,
+                    `<sheetPr$1>${tabColorTag}</sheetPr>`);
+            } else if (/<sheetPr[^>]*>/.test(xml)) {
+                // Opening <sheetPr> with children — insert tabColor as first child
+                xml = xml.replace(/<sheetPr([^>]*)>/,
+                    `<sheetPr$1>${tabColorTag}`);
+            } else {
+                // No <sheetPr> exists — insert before first structural element
+                const anchor = ['<dimension', '<sheetViews', '<sheetFormatPr', '<sheetData']
+                    .find(tag => xml.includes(tag));
+                if (anchor) {
+                    xml = xml.replace(anchor, `<sheetPr>${tabColorTag}</sheetPr>${anchor}`);
+                }
             }
         }
 
         // --- Conditional Formatting ---
+        // Must appear after <mergeCells> but before <hyperlinks>/<pageMargins>
         const condFmt = condFmtSheets.find(c => c.sheetIndex === sheetIndex);
         if (condFmt) {
             const colLetter = columnIndexToLetter(condFmt.colIndex);
@@ -1032,10 +1042,11 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
                     `</cfRule>` +
                 `</conditionalFormatting>`;
 
-            if (xml.includes('</sheetData>')) {
-                xml = xml.replace('</sheetData>', '</sheetData>' + cfXml);
-            } else {
-                xml = xml.replace('</worksheet>', cfXml + '</worksheet>');
+            // Insert at the correct OOXML element order position
+            const insertBefore = ['<hyperlinks', '<printOptions', '<pageMargins', '<pageSetup', '</worksheet>']
+                .find(tag => xml.includes(tag));
+            if (insertBefore) {
+                xml = xml.replace(insertBefore, cfXml + insertBefore);
             }
         }
 
