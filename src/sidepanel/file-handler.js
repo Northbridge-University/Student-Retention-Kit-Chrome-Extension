@@ -967,46 +967,88 @@ function getFieldValue(obj, field, fallback) {
 }
 
 /**
- * Applies conditional formatting to grade cells based on value
- * GREEN >= 70, YELLOW 60-69, RED < 60
- * @param {Object} worksheet - The worksheet object
- * @param {number} colIndex - Column index for grades
- * @param {number} startRow - Starting row (usually 2, after header)
- * @param {number} endRow - Ending row
+ * Writes an XLSX buffer to a file with Excel conditional formatting injected.
+ * Uses JSZip to post-process the XLSX (which is a ZIP archive) and inject
+ * Green-Yellow-Red color scale conditional formatting into sheet XML.
+ *
+ * @param {ArrayBuffer} wbBuffer - The XLSX workbook as an ArrayBuffer
+ * @param {string} filename - Output filename
+ * @param {Array} condFmtSheets - Array of {sheetIndex, colIndex, rowCount}
  */
-function applyGradeConditionalFormatting(worksheet, colIndex, startRow, endRow) {
-    for (let row = startRow; row <= endRow; row++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row - 1, c: colIndex }); // -1 because XLSX is 0-indexed
-        const cell = worksheet[cellAddress];
-
-        if (cell && cell.v !== null && cell.v !== undefined && cell.v !== '') {
-            const grade = parseFloat(cell.v);
-            if (!isNaN(grade)) {
-                // Initialize cell style if not exists
-                if (!cell.s) cell.s = {};
-
-                if (grade >= 70) {
-                    // GREEN
-                    cell.s = {
-                        fill: { fgColor: { rgb: '92D050' } },
-                        font: { color: { rgb: '000000' } }
-                    };
-                } else if (grade >= 60) {
-                    // YELLOW
-                    cell.s = {
-                        fill: { fgColor: { rgb: 'FFFF00' } },
-                        font: { color: { rgb: '000000' } }
-                    };
-                } else {
-                    // RED
-                    cell.s = {
-                        fill: { fgColor: { rgb: 'FF0000' } },
-                        font: { color: { rgb: 'FFFFFF' } }
-                    };
-                }
-            }
-        }
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets) {
+    if (condFmtSheets.length === 0) {
+        // No conditional formatting needed — download directly
+        const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        downloadBlob(blob, filename);
+        return;
     }
+
+    const zip = await JSZip.loadAsync(wbBuffer);
+
+    for (const { sheetIndex, colIndex, rowCount } of condFmtSheets) {
+        const sheetPath = `xl/worksheets/sheet${sheetIndex + 1}.xml`;
+        const xml = await zip.file(sheetPath)?.async('string');
+        if (!xml) continue;
+
+        // Build the cell range for the grade column (e.g. "D2:D523")
+        const colLetter = columnIndexToLetter(colIndex);
+        const sqref = `${colLetter}2:${colLetter}${rowCount + 1}`;
+
+        // Excel's built-in Green-Yellow-Red color scale
+        const cfXml =
+            `<conditionalFormatting sqref="${sqref}">` +
+                `<cfRule type="colorScale" priority="1">` +
+                    `<colorScale>` +
+                        `<cfvo type="num" val="0"/>` +
+                        `<cfvo type="num" val="65"/>` +
+                        `<cfvo type="num" val="100"/>` +
+                        `<color rgb="FFF8696B"/>` +
+                        `<color rgb="FFFFEB84"/>` +
+                        `<color rgb="FF63BE7B"/>` +
+                    `</colorScale>` +
+                `</cfRule>` +
+            `</conditionalFormatting>`;
+
+        // Insert before </sheetData>'s next sibling or before </worksheet>
+        let modifiedXml;
+        if (xml.includes('</sheetData>')) {
+            modifiedXml = xml.replace('</sheetData>', '</sheetData>' + cfXml);
+        } else {
+            modifiedXml = xml.replace('</worksheet>', cfXml + '</worksheet>');
+        }
+
+        zip.file(sheetPath, modifiedXml);
+    }
+
+    const modifiedBuffer = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    downloadBlob(modifiedBuffer, filename);
+}
+
+/**
+ * Converts a 0-based column index to an Excel column letter (0='A', 25='Z', 26='AA').
+ */
+function columnIndexToLetter(index) {
+    let letter = '';
+    let i = index;
+    while (i >= 0) {
+        letter = String.fromCharCode((i % 26) + 65) + letter;
+        i = Math.floor(i / 26) - 1;
+    }
+    return letter;
+}
+
+/**
+ * Triggers a browser download for a Blob.
+ */
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 /**
@@ -1196,20 +1238,17 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Find Grade column index for conditional formatting in Master List
+        // Find Grade column indices for conditional formatting
         const gradeColIndex = activeColumns.findIndex(col => col.conditionalFormatting === 'grade');
-
-        // Apply conditional formatting to Grade column in Master List (GREEN >= 70, YELLOW 60-69, RED < 60)
-        if (gradeColIndex !== -1 && students.length > 0) {
-            applyGradeConditionalFormatting(ws1, gradeColIndex, 2, students.length + 1);
-        }
-
-        // Find Overall Grade column index for conditional formatting in Missing Assignments
         const missingGradeColIndex = EXPORT_MISSING_ASSIGNMENTS_COLUMNS.findIndex(col => col.conditionalFormatting === 'grade');
 
-        // Apply conditional formatting to Overall Grade column in Missing Assignments (GREEN >= 70, YELLOW 60-69, RED < 60)
+        // Build list of {sheetIndex, colIndex, rowCount} for conditional formatting injection
+        const condFmtSheets = [];
+        if (gradeColIndex !== -1 && students.length > 0) {
+            condFmtSheets.push({ sheetIndex: 0, colIndex: gradeColIndex, rowCount: students.length });
+        }
         if (missingGradeColIndex !== -1 && missingAssignmentsData.length > 1) {
-            applyGradeConditionalFormatting(ws2, missingGradeColIndex, 2, missingAssignmentsData.length);
+            condFmtSheets.push({ sheetIndex: 1, colIndex: missingGradeColIndex, rowCount: missingAssignmentsData.length - 1 });
         }
 
         // Set column widths for Master List (custom or auto-fit)
@@ -1287,11 +1326,6 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Apply conditional formatting to Grade column in LDA sheet (GREEN >= 70, YELLOW 60-69, RED < 60)
-        if (gradeColIndex !== -1 && filteredStudents.length > 0) {
-            applyGradeConditionalFormatting(ws3, gradeColIndex, 2, filteredStudents.length + 1);
-        }
-
         // Set column widths for LDA sheet (custom or auto-fit)
         ws3['!cols'] = calculateColumnWidths(activeColumns, ldaData);
 
@@ -1302,6 +1336,11 @@ export async function exportMasterListCSV() {
                 ws3['!cols'][i].hidden = true;
             }
         });
+
+        // Add LDA sheet conditional formatting (same grade column as Master List)
+        if (gradeColIndex !== -1 && filteredStudents.length > 0) {
+            condFmtSheets.push({ sheetIndex: 2, colIndex: gradeColIndex, rowCount: filteredStudents.length });
+        }
 
         // Create sheet name with reference date formatted as MM-DD-YYYY
         const ldaMonth = String(referenceDate.getMonth() + 1).padStart(2, '0');
@@ -1316,8 +1355,9 @@ export async function exportMasterListCSV() {
         const timestamp = new Date().toISOString().split('T')[0];
         const filename = `student_report_${timestamp}.xlsx`;
 
-        // Write file with cell styles enabled
-        XLSX.writeFile(wb, filename, { cellStyles: true });
+        // Write workbook to buffer, then inject Excel conditional formatting via JSZip
+        const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);
