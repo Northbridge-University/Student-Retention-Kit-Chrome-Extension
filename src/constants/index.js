@@ -433,8 +433,6 @@ export const LDA_VISIBLE_COLUMNS = [
     'outreach',
     'phone',
     'otherPhone',
-    'courseStartDate',
-    'courseEndDate',
     'lastCourseGrade',
     'lastCourseLetterGrade',
     'enrollGpa'
