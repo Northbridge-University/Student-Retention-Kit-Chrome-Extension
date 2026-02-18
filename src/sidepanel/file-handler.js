@@ -1072,9 +1072,10 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
             const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
 
             const preset = COLOR_SCALE_PRESETS[condFmt.type] || COLOR_SCALE_PRESETS.grade;
-            const csLow = colorScale.low || preset.low;
-            const csMid = colorScale.mid || preset.mid;
-            const csHigh = colorScale.high || preset.high;
+            // Only apply user color-scale overrides to grade columns; GPA uses its own preset
+            const csLow = condFmt.type === 'gpa' ? preset.low : (colorScale.low || preset.low);
+            const csMid = condFmt.type === 'gpa' ? preset.mid : (colorScale.mid || preset.mid);
+            const csHigh = condFmt.type === 'gpa' ? preset.high : (colorScale.high || preset.high);
 
             const cfXml =
                 `<conditionalFormatting sqref="${sqref}">` +
