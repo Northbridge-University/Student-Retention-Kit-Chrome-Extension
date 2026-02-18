@@ -423,17 +423,19 @@ export const EXPORT_MISSING_ASSIGNMENTS_COLUMNS = [
 export const LDA_VISIBLE_COLUMNS = [
     'assigned',
     'name',
-    'StudentNumber',
     'url',
     'grade',
-    'missingCount',
-    'outreach',
+    'programVersion',
+    'shift',
     'lda',
     'daysOut',
-    'shift',
-    'programVersion',
+    'missingCount',
+    'outreach',
     'phone',
-    'otherPhone'
+    'otherPhone',
+    'lastCourseGrade',
+    'lastCourseLetterGrade',
+    'enrollGpa'
 ];
 
 /**

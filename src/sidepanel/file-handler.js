@@ -1736,16 +1736,25 @@ export async function exportMasterListCSV() {
 
         const cellValueFmts = []; // Track cell-value conditional formatting across sheets
 
-        // Build LDA column definitions: insert Assigned before name, Outreach after missingCount
+        // Build LDA column definitions with explicit ordering from LDA_VISIBLE_COLUMNS
+        // Extra columns added for LDA only (not in activeColumns)
+        const ldaExtraCols = {
+            assigned: { header: 'Assigned', field: 'assigned', width: 12 },
+            outreach: { header: 'Outreach', field: 'outreach', width: 35 }
+        };
+        // All available columns for LDA (activeColumns + extras)
+        const allLdaCols = [...activeColumns];
+        for (const [field, def] of Object.entries(ldaExtraCols)) {
+            if (!allLdaCols.some(c => c.field === field)) allLdaCols.push(def);
+        }
+        // Build ordered ldaColumns: visible columns first (in LDA_VISIBLE_COLUMNS order), then the rest
         const ldaColumns = [];
-        // Insert "Assigned" before the first column (name)
-        ldaColumns.push({ header: 'Assigned', field: 'assigned', width: 12 });
-        for (const col of activeColumns) {
-            ldaColumns.push(col);
-            // Insert "Outreach" right after Missing Assignments
-            if (col.field === 'missingCount') {
-                ldaColumns.push({ header: 'Outreach', field: 'outreach', width: 35 });
-            }
+        for (const field of LDA_VISIBLE_COLUMNS) {
+            const col = allLdaCols.find(c => c.field === field);
+            if (col) ldaColumns.push(col);
+        }
+        for (const col of allLdaCols) {
+            if (!LDA_VISIBLE_COLUMNS.includes(col.field)) ldaColumns.push(col);
         }
 
         // Find the outreach column index for highlight range start
