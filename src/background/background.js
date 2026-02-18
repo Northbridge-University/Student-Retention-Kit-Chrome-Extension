@@ -733,13 +733,19 @@ async function sendHighlightStudentRowPayload(entry) {
         editText = editText.replace(/{assignment}/g, entry.assignment);
     }
 
-    // Process targetSheet to replace MM-DD-YYYY with current date
+    // Resolve targetSheet based on the selected mode
     let targetSheet = settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const year = now.getFullYear();
-    targetSheet = targetSheet.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
+    if (targetSheet === 'Campus') {
+        // Use the student's trimmed campus name as the sheet name
+        targetSheet = entry.campus || 'Sheet1';
+    } else {
+        // Replace MM-DD-YYYY placeholders with current date
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const year = now.getFullYear();
+        targetSheet = targetSheet.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
+    }
 
     // Build the payload
     const payload = {

@@ -245,7 +245,9 @@ export function cacheDomElements() {
     elements.highlightEndColInput = document.getElementById('highlightEndColInput');
     elements.highlightEditColumnInput = document.getElementById('highlightEditColumnInput');
     elements.highlightEditTextInput = document.getElementById('highlightEditTextInput');
-    elements.highlightTargetSheetInput = document.getElementById('highlightTargetSheetInput');
+    elements.highlightTargetSheetSelect = document.getElementById('highlightTargetSheetSelect');
+    elements.highlightTargetSheetCustomInput = document.getElementById('highlightTargetSheetCustomInput');
+    elements.highlightTargetSheetHint = document.getElementById('highlightTargetSheetHint');
     elements.highlightRowColorInput = document.getElementById('highlightRowColorInput');
     elements.highlightRowColorTextInput = document.getElementById('highlightRowColorTextInput');
     elements.exportTabColorInput = document.getElementById('exportTabColorInput');

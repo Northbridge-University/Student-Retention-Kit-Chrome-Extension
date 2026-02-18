@@ -6,6 +6,18 @@ import { updateToggleUI, isToggleEnabled, setElementEnabled } from '../../utils/
 import { elements } from '../ui-manager.js';
 
 /**
+ * Updates the hint text below the Target Sheet dropdown based on the selected value.
+ */
+function updateTargetSheetHint(value) {
+    if (!elements.highlightTargetSheetHint) return;
+    const hints = {
+        'LDA MM-DD-YYYY': "LDA sheet with today's date (e.g. LDA 02-18-2026)",
+        'Campus': "Uses the student's campus name as the sheet name"
+    };
+    elements.highlightTargetSheetHint.textContent = hints[value] || 'Custom worksheet name';
+}
+
+/**
  * Opens the connections modal for a specific connection type
  * @param {string} connectionType - 'excel', 'powerAutomate', 'canvas', or 'five9'
  */
@@ -161,8 +173,30 @@ export async function openConnectionsModal(connectionType) {
     if (elements.highlightEditTextInput) {
         elements.highlightEditTextInput.value = result[STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT] || 'Submitted {assignment}';
     }
-    if (elements.highlightTargetSheetInput) {
-        elements.highlightTargetSheetInput.value = result[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
+    if (elements.highlightTargetSheetSelect) {
+        const savedValue = result[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
+        // Check if the saved value matches a preset option
+        const presetValues = ['LDA MM-DD-YYYY', 'Campus'];
+        if (presetValues.includes(savedValue)) {
+            elements.highlightTargetSheetSelect.value = savedValue;
+            if (elements.highlightTargetSheetCustomInput) elements.highlightTargetSheetCustomInput.style.display = 'none';
+        } else {
+            elements.highlightTargetSheetSelect.value = 'Custom';
+            if (elements.highlightTargetSheetCustomInput) {
+                elements.highlightTargetSheetCustomInput.style.display = 'block';
+                elements.highlightTargetSheetCustomInput.value = savedValue;
+            }
+        }
+        updateTargetSheetHint(savedValue);
+
+        // Toggle custom input visibility and hint on dropdown change
+        elements.highlightTargetSheetSelect.onchange = () => {
+            const selected = elements.highlightTargetSheetSelect.value;
+            if (elements.highlightTargetSheetCustomInput) {
+                elements.highlightTargetSheetCustomInput.style.display = selected === 'Custom' ? 'block' : 'none';
+            }
+            updateTargetSheetHint(selected);
+        };
     }
     if (elements.highlightRowColorInput && elements.highlightRowColorTextInput) {
         const color = result[STORAGE_KEYS.HIGHLIGHT_ROW_COLOR] || '#92d050';
@@ -283,8 +317,13 @@ export async function saveConnectionsSettings() {
     if (elements.highlightEditTextInput) {
         settingsToSave[STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT] = elements.highlightEditTextInput.value || 'Submitted {assignment}';
     }
-    if (elements.highlightTargetSheetInput) {
-        settingsToSave[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] = elements.highlightTargetSheetInput.value || 'LDA MM-DD-YYYY';
+    if (elements.highlightTargetSheetSelect) {
+        const selected = elements.highlightTargetSheetSelect.value;
+        if (selected === 'Custom' && elements.highlightTargetSheetCustomInput) {
+            settingsToSave[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] = elements.highlightTargetSheetCustomInput.value || 'LDA MM-DD-YYYY';
+        } else {
+            settingsToSave[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] = selected;
+        }
     }
     if (elements.highlightRowColorTextInput) {
         settingsToSave[STORAGE_KEYS.HIGHLIGHT_ROW_COLOR] = elements.highlightRowColorTextInput.value || '#92d050';
