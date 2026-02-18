@@ -26,13 +26,14 @@ export const RELEASE_NOTES = {
         title: 'Latest Updates',
         date: 'February 18, 2026',
         updates: [
-            'Academic report support — automatically detects the report type and picks each student\'s current class',
-            'New columns added to LDA sheets: Last Course Grade, Last Course Letter Grade, and Enroll GPA',
-            'New students are now highlighted based on the most recent start date in the report',
-            'You can now select two files at once — the second file fills in any missing columns automatically',
-            'Target Sheet setting is now a dropdown: choose LDA date, Campus name, or a custom sheet name',
-            'Reorganized LDA sheet columns for a cleaner layout',
-            'Campus names are automatically shortened for easier reading'
+            'Revamped the downloadable report',
+            'You can now select two files at once — the second file fills in additional columns',
+			'Multiple Campusus are now automatically detected and organized',
+            'Target Highlight Sheet setting is now a dropdown: choose LDA date, Campus name, or a custom sheet name',
+			'Implemented Next Assignmet Due feature',
+			'Implemented Previous Class Grade',
+			'Significantly faster Update Master List process with optimized Canvas API calls',
+			'For any bugs or feature requests please refer to settings'
         ]
     },
 	'11.2': {
@@ -136,5 +137,6 @@ export function getLatestReleaseNotes() {
         notes: RELEASE_NOTES[latestVersion]
     };
 }
+
 
 
