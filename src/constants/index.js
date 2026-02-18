@@ -362,7 +362,7 @@ export const FIELD_ALIASES = {
 export const MASTER_LIST_COLUMNS = [
     { header: 'Student Name', field: 'name', width: 25 },
     { header: 'Student Number', field: 'StudentNumber', width: 13 },
-    { header: 'Grade Book', field: 'url', hyperlink: true, hyperlinkText: 'Grade Book', width: 9 },
+    { header: 'Grade Book', field: 'url', hyperlink: true, hyperlinkText: 'Grade Book', width: 12 },
     { header: 'Grade', field: 'grade', fallback: 'currentGrade', conditionalFormatting: 'grade', width: 6 },
     { header: 'Missing Assignments', field: 'missingCount', width: 10 },
     { header: 'Next Assignment Due', field: 'nextAssignment.DueDate', width: 15 },
@@ -393,7 +393,7 @@ export const MASTER_LIST_COLUMNS = [
     { header: 'Letter Grade', field: 'letterGrade', width: 8 },
     { header: 'Last Course Grade', field: 'lastCourseGrade', conditionalFormatting: 'grade', width: 10 },
     { header: 'Last Course Letter Grade', field: 'lastCourseLetterGrade', width: 10 },
-    { header: 'Enroll GPA', field: 'enrollGpa', conditionalFormatting: 'gpa', width: 8 },
+    { header: 'Enroll GPA', field: 'enrollGpa', conditionalFormatting: 'gpa', width: 11 },
     { header: 'Enrollment Status', field: 'currEnrollStatus', width: 15 },
     { header: 'Campus', field: 'campus', width: 15 }
 ];

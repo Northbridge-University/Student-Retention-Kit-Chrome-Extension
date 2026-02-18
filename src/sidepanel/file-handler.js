@@ -758,11 +758,150 @@ export function hideCampusFilter() {
 }
 
 /**
- * Handles CSV/Excel file import
- * @param {File} file - The uploaded file
+ * Reads a File object and returns its content as a Promise.
+ * @param {File} file - The file to read
+ * @returns {Promise<{content: *, isCSV: boolean}>}
+ */
+function readFileContent(file) {
+    return new Promise((resolve, reject) => {
+        const isCSV = file.name.toLowerCase().endsWith('.csv');
+        const reader = new FileReader();
+        reader.onload = (e) => resolve({ content: e.target.result, isCSV });
+        reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+        if (isCSV) {
+            reader.readAsText(file);
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
+    });
+}
+
+/**
+ * Merges additional columns from a supplementary file into existing students.
+ * Matches students by SyStudentId, falling back to StudentNumber.
+ * Only adds columns that don't already exist in the primary data.
+ *
+ * @param {Array} students - Primary student array to merge into (mutated)
+ * @param {*} data - Raw file content from FileReader
+ * @param {boolean} isCSV - Whether the supplementary file is CSV
+ */
+function mergeSupplementaryFile(students, data, isCSV) {
+    if (!students.length) return;
+
+    let workbook;
+    if (isCSV) {
+        workbook = XLSX.read(data, { type: 'string' });
+    } else {
+        workbook = XLSX.read(data, { type: 'array', cellDates: true });
+    }
+
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+    if (rows.length < 2) return;
+
+    // Find header row using 'name' field (same logic as primary parser)
+    const nameNormalized = _normalizedFieldNames['name'] || normalizeFieldName('name');
+    let headerRowIndex = -1;
+    let headers = [];
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        const hasNameField = row.some(cell => {
+            if (!cell) return false;
+            const normalized = normalizeFieldName(cell);
+            return normalized === nameNormalized || _normalizedAliasToField[normalized] === 'name';
+        });
+        if (hasNameField) {
+            headerRowIndex = i;
+            headers = row;
+            break;
+        }
+    }
+    if (headerRowIndex === -1) return;
+
+    const normalizedHeaders = headers.map(h => h ? normalizeFieldName(h) : '');
+
+    // Determine which columns in the supplementary file are "extra" (not in primary data)
+    // Check which MASTER_LIST_COLUMNS fields the primary students already have data for
+    const primaryFields = new Set();
+    for (const col of MASTER_LIST_COLUMNS) {
+        if (students.some(s => s[col.field] !== null && s[col.field] !== undefined)) {
+            primaryFields.add(col.field);
+        }
+    }
+
+    // Find supplementary columns that map to MASTER_LIST_COLUMNS fields missing from primary
+    const extraColumnMapping = {};
+    MASTER_LIST_COLUMNS.forEach(col => {
+        if (primaryFields.has(col.field)) return; // Primary already has this column
+        const index = findColumnIndex(normalizedHeaders, headers, col.field);
+        if (index !== -1) {
+            extraColumnMapping[col.field] = index;
+        } else if (col.fallback) {
+            const fallbackIndex = findColumnIndex(normalizedHeaders, headers, col.fallback);
+            if (fallbackIndex !== -1) {
+                extraColumnMapping[col.field] = fallbackIndex;
+            }
+        }
+    });
+
+    if (Object.keys(extraColumnMapping).length === 0) return; // No extra columns to merge
+
+    // Find identifier columns in the supplementary file
+    // Priority: SyStudentId > StudentNumber
+    const suppSyStudentIdCol = findColumnIndex(normalizedHeaders, headers, 'SyStudentId');
+    const suppStudentNumberCol = findColumnIndex(normalizedHeaders, headers, 'StudentNumber');
+
+    if (suppSyStudentIdCol === -1 && suppStudentNumberCol === -1) return; // No way to match
+
+    // Build lookup maps from primary students for matching
+    // Priority order: SyStudentId, then StudentNumber as fallback
+    const bySyStudentId = new Map();
+    const byStudentNumber = new Map();
+    for (const student of students) {
+        if (student.SyStudentId) bySyStudentId.set(String(student.SyStudentId), student);
+        if (student.StudentNumber) byStudentNumber.set(String(student.StudentNumber), student);
+    }
+
+    // Parse supplementary data rows and merge extra columns
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        // Match to a primary student using identifier priority
+        let student = null;
+        if (suppSyStudentIdCol !== -1 && row[suppSyStudentIdCol]) {
+            student = bySyStudentId.get(String(row[suppSyStudentIdCol]));
+        }
+        if (!student && suppStudentNumberCol !== -1 && row[suppStudentNumberCol]) {
+            student = byStudentNumber.get(String(row[suppStudentNumberCol]));
+        }
+
+        if (!student) continue;
+
+        // Merge extra columns into the matched student
+        for (const [field, colIndex] of Object.entries(extraColumnMapping)) {
+            if (colIndex < row.length) {
+                let value = row[colIndex];
+                if (value !== null && value !== undefined) {
+                    student[field] = value;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Handles CSV/Excel file import (supports multiple files)
+ * @param {File|FileList|Array} files - The uploaded file(s)
  * @param {Function} onSuccess - Callback after successful import
  */
-export function handleFileImport(file, onSuccess) {
+export function handleFileImport(files, onSuccess) {
+    // Support both single File and FileList/Array
+    const fileList = files instanceof FileList ? Array.from(files) : (Array.isArray(files) ? files : [files]);
+    const file = fileList[0];
+    const supplementaryFile = fileList.length > 1 ? fileList[1] : null;
+
     if (!file) {
         resetQueueUI();
         return;
@@ -790,21 +929,26 @@ export function handleFileImport(file, onSuccess) {
         return;
     }
 
-    const reader = new FileReader();
-
-    reader.onload = function (e) {
-        const content = e.target.result;
-        let students = [];
-        let referenceDate = null;
-
+    (async () => {
         try {
-            // Pass file last modified time for daysOut calculation
-            const result = parseFileWithSheetJS(content, isCSV, file.lastModified);
-            students = result.students;
-            referenceDate = result.referenceDate;
+            // Read and parse the primary file
+            const { content, isCSV: primaryIsCSV } = await readFileContent(file);
+            const result = parseFileWithSheetJS(content, primaryIsCSV, file.lastModified);
+            let students = result.students;
+            const referenceDate = result.referenceDate;
 
             if (students.length === 0) {
                 throw new Error("No valid student data found (Check header row).");
+            }
+
+            // If a supplementary file was selected, merge its extra columns
+            if (supplementaryFile) {
+                const suppName = supplementaryFile.name.toLowerCase();
+                const suppIsValid = suppName.endsWith('.csv') || suppName.endsWith('.xlsx') || suppName.endsWith('.xls');
+                if (suppIsValid) {
+                    const { content: suppContent, isCSV: suppIsCSV } = await readFileContent(supplementaryFile);
+                    mergeSupplementaryFile(students, suppContent, suppIsCSV);
+                }
             }
 
             // Update campus filter dropdown based on imported data
@@ -848,13 +992,7 @@ export function handleFileImport(file, onSuccess) {
         }
 
         elements.studentPopFile.value = '';
-    };
-
-    if (isCSV) {
-        reader.readAsText(file);
-    } else if (isXLSX) {
-        reader.readAsArrayBuffer(file);
-    }
+    })();
 }
 
 /**
@@ -1782,6 +1920,18 @@ export async function exportMasterListCSV() {
                 const missingCount = hasMissingData ? parseInt(missingRaw) : null;
                 const nextDueRaw = getFieldValue(student, 'nextAssignment.DueDate');
 
+                // Check if this student is in the newest cohort
+                let isNewStudent = false;
+                if (maxExpStartTime) {
+                    const expStart = getFieldValue(student, 'expStartDate');
+                    if (expStart) {
+                        const expDate = parseDate(expStart);
+                        if (expDate && expDate.getTime() === maxExpStartTime) {
+                            isNewStudent = true;
+                        }
+                    }
+                }
+
                 const row = ldaColumns.map((col, colIndex) => {
                     // Custom LDA-only columns
                     if (col.field === 'assigned') return '';
@@ -1813,6 +1963,11 @@ export async function exportMasterListCSV() {
                                 value = formatDateToMMDDYY(dateObj);
                             }
                         }
+                    }
+
+                    // New students don't have a meaningful Enroll GPA yet — leave blank
+                    if (isNewStudent && col.field === 'enrollGpa') {
+                        value = '';
                     }
 
                     if (col.hyperlink && col.hyperlinkText && value) {
