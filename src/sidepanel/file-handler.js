@@ -1500,6 +1500,10 @@ export async function exportMasterListCSV() {
                     value = (value !== null && value !== undefined && value !== '') ? value : '-';
                 } else if (col.field === 'daysOut') {
                     value = parseInt(value || 0);
+                } else if (col.conditionalFormatting) {
+                    // Ensure grade/gpa values are numeric so Excel color scales apply
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) value = num;
                 } else if (col.field === 'lda') {
                     if (value) {
                         // Format LDA dates to MM-DD-YY format
@@ -1779,6 +1783,10 @@ export async function exportMasterListCSV() {
                         value = (value !== null && value !== undefined && value !== '') ? value : '-';
                     } else if (col.field === 'daysOut') {
                         value = parseInt(value || 0);
+                    } else if (col.conditionalFormatting) {
+                        // Ensure grade/gpa values are numeric so Excel color scales apply
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) value = num;
                     } else if (col.field === 'lda') {
                         if (value) {
                             const dateObj = parseDate(value);
