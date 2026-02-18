@@ -1486,9 +1486,17 @@ export async function exportMasterListCSV() {
         const masterListData = [masterListHeaders];
         const masterListHyperlinkMetadata = []; // Store hyperlink info for each row
 
-        // Determine the 1-month-ago cutoff for new student highlighting
-        const newStudentCutoff = new Date(referenceDate);
-        newStudentCutoff.setMonth(newStudentCutoff.getMonth() - 1);
+        // Find the most recent ExpStartDate to identify the newest cohort
+        let maxExpStartTime = 0;
+        students.forEach(student => {
+            const expStart = getFieldValue(student, 'expStartDate');
+            if (expStart) {
+                const expDate = parseDate(expStart);
+                if (expDate && expDate.getTime() > maxExpStartTime) {
+                    maxExpStartTime = expDate.getTime();
+                }
+            }
+        });
         const newStudentRows = []; // 0-based data row indices for new students
 
         students.forEach((student, studentIndex) => {
@@ -1524,12 +1532,14 @@ export async function exportMasterListCSV() {
             masterListData.push(row);
             masterListHyperlinkMetadata.push(rowMetadata);
 
-            // Check if student is new (ExpStartDate within 1 month of report date)
-            const expStart = getFieldValue(student, 'expStartDate');
-            if (expStart) {
-                const expDate = parseDate(expStart);
-                if (expDate && expDate >= newStudentCutoff && expDate <= referenceDate) {
-                    newStudentRows.push(studentIndex);
+            // Highlight students sharing the most recent ExpStartDate (newest cohort)
+            if (maxExpStartTime) {
+                const expStart = getFieldValue(student, 'expStartDate');
+                if (expStart) {
+                    const expDate = parseDate(expStart);
+                    if (expDate && expDate.getTime() === maxExpStartTime) {
+                        newStudentRows.push(studentIndex);
+                    }
                 }
             }
         });
