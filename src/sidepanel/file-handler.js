@@ -1782,6 +1782,18 @@ export async function exportMasterListCSV() {
                 const missingCount = hasMissingData ? parseInt(missingRaw) : null;
                 const nextDueRaw = getFieldValue(student, 'nextAssignment.DueDate');
 
+                // Check if this student is in the newest cohort
+                let isNewStudent = false;
+                if (maxExpStartTime) {
+                    const expStart = getFieldValue(student, 'expStartDate');
+                    if (expStart) {
+                        const expDate = parseDate(expStart);
+                        if (expDate && expDate.getTime() === maxExpStartTime) {
+                            isNewStudent = true;
+                        }
+                    }
+                }
+
                 const row = ldaColumns.map((col, colIndex) => {
                     // Custom LDA-only columns
                     if (col.field === 'assigned') return '';
@@ -1813,6 +1825,11 @@ export async function exportMasterListCSV() {
                                 value = formatDateToMMDDYY(dateObj);
                             }
                         }
+                    }
+
+                    // New students don't have a meaningful Enroll GPA yet — leave blank
+                    if (isNewStudent && col.field === 'enrollGpa') {
+                        value = '';
                     }
 
                     if (col.hyperlink && col.hyperlinkText && value) {
