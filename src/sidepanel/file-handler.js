@@ -1486,9 +1486,17 @@ export async function exportMasterListCSV() {
         const masterListData = [masterListHeaders];
         const masterListHyperlinkMetadata = []; // Store hyperlink info for each row
 
-        // Determine the 1-month-ago cutoff for new student highlighting
-        const newStudentCutoff = new Date(referenceDate);
-        newStudentCutoff.setMonth(newStudentCutoff.getMonth() - 1);
+        // Find the most recent ExpStartDate to identify the newest cohort
+        let maxExpStartTime = 0;
+        students.forEach(student => {
+            const expStart = getFieldValue(student, 'expStartDate');
+            if (expStart) {
+                const expDate = parseDate(expStart);
+                if (expDate && expDate.getTime() > maxExpStartTime) {
+                    maxExpStartTime = expDate.getTime();
+                }
+            }
+        });
         const newStudentRows = []; // 0-based data row indices for new students
 
         students.forEach((student, studentIndex) => {
@@ -1500,6 +1508,10 @@ export async function exportMasterListCSV() {
                     value = (value !== null && value !== undefined && value !== '') ? value : '-';
                 } else if (col.field === 'daysOut') {
                     value = parseInt(value || 0);
+                } else if (col.conditionalFormatting) {
+                    // Ensure grade/gpa values are numeric so Excel color scales apply
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) value = num;
                 } else if (col.field === 'lda') {
                     if (value) {
                         // Format LDA dates to MM-DD-YY format
@@ -1520,12 +1532,14 @@ export async function exportMasterListCSV() {
             masterListData.push(row);
             masterListHyperlinkMetadata.push(rowMetadata);
 
-            // Check if student is new (ExpStartDate within 1 month of report date)
-            const expStart = getFieldValue(student, 'expStartDate');
-            if (expStart) {
-                const expDate = parseDate(expStart);
-                if (expDate && expDate >= newStudentCutoff && expDate <= referenceDate) {
-                    newStudentRows.push(studentIndex);
+            // Highlight students sharing the most recent ExpStartDate (newest cohort)
+            if (maxExpStartTime) {
+                const expStart = getFieldValue(student, 'expStartDate');
+                if (expStart) {
+                    const expDate = parseDate(expStart);
+                    if (expDate && expDate.getTime() === maxExpStartTime) {
+                        newStudentRows.push(studentIndex);
+                    }
                 }
             }
         });
@@ -1779,6 +1793,10 @@ export async function exportMasterListCSV() {
                         value = (value !== null && value !== undefined && value !== '') ? value : '-';
                     } else if (col.field === 'daysOut') {
                         value = parseInt(value || 0);
+                    } else if (col.conditionalFormatting) {
+                        // Ensure grade/gpa values are numeric so Excel color scales apply
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) value = num;
                     } else if (col.field === 'lda') {
                         if (value) {
                             const dateObj = parseDate(value);
