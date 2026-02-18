@@ -24,14 +24,15 @@ export const RELEASE_NOTES = {
     // The key should match the version in manifest.json
 	'12.0': {
         title: 'Latest Updates',
-        date: 'February 10, 2026',
+        date: 'February 18, 2026',
         updates: [
-            'Added Academic report support — auto-detects the report type and deduplicates students by SyStudentId',
-            'Automatically selects the current class row when a student has multiple courses',
-            'New columns: Instructor, Course Code, Course, Enroll GPA, Enrollment Status',
-            'Letter Grade and Last Course Letter Grade columns auto-convert numeric grades to A/B/C/D/F',
-            'Last Course Grade column pulls the final grade from the previous course for comparison',
-            'Campus names now auto-trim the prefix for cleaner display (e.g. "Northbridge - South Miami" shows as "South Miami")'
+            'Academic report support — automatically detects the report type and picks each student\'s current class',
+            'New columns added to LDA sheets: Last Course Grade, Last Course Letter Grade, and Enroll GPA',
+            'New students are now highlighted based on the most recent start date in the report',
+            'You can now select two files at once — the second file fills in any missing columns automatically',
+            'Target Sheet setting is now a dropdown: choose LDA date, Campus name, or a custom sheet name',
+            'Reorganized LDA sheet columns for a cleaner layout',
+            'Campus names are automatically shortened for easier reading'
         ]
     },
 	'11.2': {

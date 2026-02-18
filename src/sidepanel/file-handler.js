@@ -781,6 +781,10 @@ function readFileContent(file) {
  * Matches students by SyStudentId, falling back to StudentNumber.
  * Only adds columns that don't already exist in the primary data.
  *
+ * If the supplementary file is an Academic report and the primary data lacks
+ * lastCourseGrade, rows are grouped per student, deduplicated via
+ * rankCourseRows, and lastCourseGrade / lastCourseLetterGrade are derived.
+ *
  * @param {Array} students - Primary student array to merge into (mutated)
  * @param {*} data - Raw file content from FileReader
  * @param {boolean} isCSV - Whether the supplementary file is CSV
@@ -845,7 +849,12 @@ function mergeSupplementaryFile(students, data, isCSV) {
         }
     });
 
-    if (Object.keys(extraColumnMapping).length === 0) return; // No extra columns to merge
+    // Check if supplementary is an academic report and primary lacks derived grade fields
+    const isAcademic = detectAcademicReport(normalizedHeaders);
+    const needsLastCourseGrade = isAcademic && !primaryFields.has('lastCourseGrade');
+
+    const hasExtraColumns = Object.keys(extraColumnMapping).length > 0;
+    if (!hasExtraColumns && !needsLastCourseGrade) return; // Nothing to merge
 
     // Find identifier columns in the supplementary file
     // Priority: SyStudentId > StudentNumber
@@ -863,28 +872,116 @@ function mergeSupplementaryFile(students, data, isCSV) {
         if (student.StudentNumber) byStudentNumber.set(String(student.StudentNumber), student);
     }
 
-    // Parse supplementary data rows and merge extra columns
-    for (let i = headerRowIndex + 1; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row || row.length === 0) continue;
+    /** Convert a raw cell value for a date field to MM-DD-YY string */
+    function convertDateValue(value) {
+        if (value instanceof Date) return formatDateToMMDDYY(value);
+        return convertExcelDate(value);
+    }
 
-        // Match to a primary student using identifier priority
-        let student = null;
-        if (suppSyStudentIdCol !== -1 && row[suppSyStudentIdCol]) {
-            student = bySyStudentId.get(String(row[suppSyStudentIdCol]));
+    if (needsLastCourseGrade) {
+        // Academic supplementary file: group rows per student, dedup, derive lastCourseGrade
+        const finalGradeColIndex = normalizedHeaders.indexOf('finalnumericgrade');
+        const courseStartCol = findColumnIndex(normalizedHeaders, headers, 'courseStartDate');
+        const courseEndCol = findColumnIndex(normalizedHeaders, headers, 'courseEndDate');
+
+        // Group supplementary rows by matched primary student
+        const grouped = new Map();
+        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let student = null;
+            let studentKey = null;
+            if (suppSyStudentIdCol !== -1 && row[suppSyStudentIdCol]) {
+                const id = String(row[suppSyStudentIdCol]);
+                student = bySyStudentId.get(id);
+                if (student) studentKey = id;
+            }
+            if (!student && suppStudentNumberCol !== -1 && row[suppStudentNumberCol]) {
+                const num = String(row[suppStudentNumberCol]);
+                student = byStudentNumber.get(num);
+                if (student) studentKey = num;
+            }
+            if (!student) continue;
+
+            if (!grouped.has(studentKey)) grouped.set(studentKey, { student, entries: [] });
+
+            // Build temp entry with extra columns + fields needed for course ranking
+            const tempEntry = {};
+            for (const [field, colIndex] of Object.entries(extraColumnMapping)) {
+                if (colIndex < row.length) {
+                    let value = row[colIndex];
+                    if (value !== null && value !== undefined) {
+                        tempEntry[field] = isDateField(field) ? convertDateValue(value) : value;
+                    }
+                }
+            }
+            // Always grab courseStartDate/courseEndDate for ranking (even if primary has them)
+            if (courseStartCol !== -1 && courseStartCol < row.length && row[courseStartCol] != null) {
+                tempEntry.courseStartDate = convertDateValue(row[courseStartCol]);
+            }
+            if (courseEndCol !== -1 && courseEndCol < row.length && row[courseEndCol] != null) {
+                tempEntry.courseEndDate = convertDateValue(row[courseEndCol]);
+            }
+            // Grab FinalNumericGrade for lastCourseGrade derivation
+            if (finalGradeColIndex !== -1 && finalGradeColIndex < row.length) {
+                const rawFinal = row[finalGradeColIndex];
+                if (rawFinal !== null && rawFinal !== undefined && rawFinal !== '') {
+                    tempEntry._rawFinalGrade = String(rawFinal);
+                }
+            }
+
+            grouped.get(studentKey).entries.push(tempEntry);
         }
-        if (!student && suppStudentNumberCol !== -1 && row[suppStudentNumberCol]) {
-            student = byStudentNumber.get(String(row[suppStudentNumberCol]));
+
+        // Dedup each group and merge into primary students
+        for (const [, { student, entries }] of grouped) {
+            let selected;
+            if (entries.length === 1) {
+                selected = entries[0];
+            } else {
+                const ranked = rankCourseRows(entries, new Date());
+                selected = ranked[0];
+                const prevGrade = getLastCourseGrade(ranked);
+                if (prevGrade) {
+                    selected.lastCourseGrade = prevGrade;
+                    selected.lastCourseLetterGrade = numericToLetterGrade(prevGrade);
+                }
+            }
+
+            // Merge extra column values from the selected (current) course row
+            for (const field of Object.keys(extraColumnMapping)) {
+                if (selected[field] !== null && selected[field] !== undefined) {
+                    student[field] = selected[field];
+                }
+            }
+            // Merge derived grade fields
+            if (selected.lastCourseGrade) {
+                student.lastCourseGrade = selected.lastCourseGrade;
+                student.lastCourseLetterGrade = selected.lastCourseLetterGrade;
+            }
         }
+    } else {
+        // Non-academic or primary already has lastCourseGrade: simple row-by-row merge
+        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
 
-        if (!student) continue;
+            let student = null;
+            if (suppSyStudentIdCol !== -1 && row[suppSyStudentIdCol]) {
+                student = bySyStudentId.get(String(row[suppSyStudentIdCol]));
+            }
+            if (!student && suppStudentNumberCol !== -1 && row[suppStudentNumberCol]) {
+                student = byStudentNumber.get(String(row[suppStudentNumberCol]));
+            }
+            if (!student) continue;
 
-        // Merge extra columns into the matched student
-        for (const [field, colIndex] of Object.entries(extraColumnMapping)) {
-            if (colIndex < row.length) {
-                let value = row[colIndex];
-                if (value !== null && value !== undefined) {
-                    student[field] = value;
+            for (const [field, colIndex] of Object.entries(extraColumnMapping)) {
+                if (colIndex < row.length) {
+                    let value = row[colIndex];
+                    if (value !== null && value !== undefined) {
+                        student[field] = isDateField(field) ? convertDateValue(value) : value;
+                    }
                 }
             }
         }
