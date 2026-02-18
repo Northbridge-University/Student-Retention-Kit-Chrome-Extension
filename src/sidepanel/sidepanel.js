@@ -1266,7 +1266,7 @@ function setupEventListeners() {
 
     if (elements.studentPopFile) {
         elements.studentPopFile.addEventListener('change', (e) => {
-            handleFileImport(e.target.files[0], (students) => {
+            handleFileImport(e.target.files, (students) => {
                 renderMasterList(students, (entry, li, evt) => {
                     queueManager.handleStudentClick(entry, li, evt);
                 });
