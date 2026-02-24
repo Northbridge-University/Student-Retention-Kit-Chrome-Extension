@@ -1941,8 +1941,8 @@ export async function exportMasterListCSV() {
         ];
 
         // Create sheet name with reference date formatted as MM-DD-YYYY
-        const ldaMonth = String(referenceDate.getMonth() + 1).padStart(2, '0');
-        const ldaDay = String(referenceDate.getDate()).padStart(2, '0');
+        const ldaMonth = String(referenceDate.getMonth() + 1);
+        const ldaDay = String(referenceDate.getDate());
         const ldaYear = String(referenceDate.getFullYear());
         const ldaDateSuffix = `LDA ${ldaMonth}-${ldaDay}-${ldaYear}`;
 

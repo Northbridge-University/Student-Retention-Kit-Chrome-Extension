@@ -11,7 +11,7 @@ import { elements } from '../ui-manager.js';
 function updateTargetSheetHint(value) {
     if (!elements.highlightTargetSheetHint) return;
     const hints = {
-        'LDA MM-DD-YYYY': "LDA sheet with today's date (e.g. LDA 02-18-2026)",
+        'LDA MM-DD-YYYY': "LDA sheet with today's date (e.g. LDA 2-18-2026)",
         'Campus': "Uses the student's campus name as the sheet name"
     };
     elements.highlightTargetSheetHint.textContent = hints[value] || 'Custom worksheet name';
