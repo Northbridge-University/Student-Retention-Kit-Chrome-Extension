@@ -735,15 +735,16 @@ async function sendHighlightStudentRowPayload(entry) {
 
     // Resolve targetSheet based on the selected mode
     let targetSheet = settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
+    // Replace MM-DD-YYYY placeholders with current date (used for default and as campus fallback)
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = now.getFullYear();
+
     if (targetSheet === 'Campus') {
-        // Use the student's trimmed campus name as the sheet name
-        targetSheet = entry.campus || 'Sheet1';
+        // Use the student's trimmed campus name, fall back to date-based sheet name
+        targetSheet = entry.campus || `LDA ${month}-${day}-${year}`;
     } else {
-        // Replace MM-DD-YYYY placeholders with current date
-        const now = new Date();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const year = now.getFullYear();
         targetSheet = targetSheet.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
     }
 

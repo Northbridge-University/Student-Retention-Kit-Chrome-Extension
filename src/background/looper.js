@@ -394,7 +394,8 @@ async function analyzeSubmissionMode(entry, submissions) {
                     url: gradebookUrl,
                     timestamp: sub.submitted_at,
                     assignment: sub.assignment ? sub.assignment.name : 'Unknown Assignment',
-                    syStudentId: entry.SyStudentId || null
+                    syStudentId: entry.SyStudentId || null,
+                    campus: entry.campus || null
                 };
                 break;
             }
