@@ -141,7 +141,8 @@ import {
     startExcelConnectionMonitor,
     stopExcelConnectionMonitor,
     pingExcelAddIn,
-    sendConnectionPing
+    sendConnectionPing,
+    checkExcelConnectionStatus
 } from './excel-integration.js';
 
 // --- STATE MANAGEMENT ---
@@ -355,6 +356,21 @@ function addConsoleMessage(type, args) {
     }
 }
 
+/**
+ * Re-checks Excel connection when navigating to the Settings tab.
+ * If the status is not 'connected', sends both pings to double-check.
+ */
+async function recheckExcelConnection() {
+    const status = await checkExcelConnectionStatus();
+    if (status !== 'connected') {
+        console.log(`🏓 Settings tab opened — Excel status is "${status}", sending pings to re-check...`);
+        await pingExcelAddIn();
+        await sendConnectionPing();
+    } else {
+        console.log('🏓 Settings tab opened — Excel already connected, skipping ping');
+    }
+}
+
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
     // Tab switching
@@ -363,6 +379,7 @@ function setupEventListeners() {
             switchTab(tab.dataset.tab);
             if (tab.dataset.tab === 'settings') {
                 updateCacheStats();
+                recheckExcelConnection();
             } else if (tab.dataset.tab === 'about') {
                 loadAboutContent();
             } else if (tab.dataset.tab === 'contact') {
@@ -385,7 +402,10 @@ function setupEventListeners() {
 
     // Header and modals
     if (elements.headerSettingsBtn) {
-        elements.headerSettingsBtn.addEventListener('click', () => switchTab('settings'));
+        elements.headerSettingsBtn.addEventListener('click', () => {
+            switchTab('settings');
+            recheckExcelConnection();
+        });
     }
 
     // Title toggles README/About page
