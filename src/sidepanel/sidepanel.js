@@ -1322,6 +1322,7 @@ function setupEventListeners() {
 
     if (elements.studentPopFile) {
         elements.studentPopFile.addEventListener('change', (e) => {
+            const fileCount = e.target.files.length;
             handleFileImport(e.target.files, (students) => {
                 renderMasterList(students, (entry, li, evt) => {
                     queueManager.handleStudentClick(entry, li, evt);
@@ -1335,7 +1336,7 @@ function setupEventListeners() {
                     await processStep4(finalStudents);
                     // Create backup after the entire update process completes
                     const lastUpdatedData = await chrome.storage.local.get([STORAGE_KEYS.LAST_UPDATED]);
-                    await createMasterListBackup(finalStudents, lastUpdatedData[STORAGE_KEYS.LAST_UPDATED]);
+                    await createMasterListBackup(finalStudents, lastUpdatedData[STORAGE_KEYS.LAST_UPDATED], fileCount);
                 });
             });
         });

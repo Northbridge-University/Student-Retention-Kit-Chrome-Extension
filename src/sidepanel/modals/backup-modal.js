@@ -11,8 +11,9 @@ const MAX_BACKUPS = 4;
  * Keeps up to MAX_BACKUPS entries, removing the oldest when full.
  * @param {Array} students - The master list array
  * @param {string} lastUpdated - The formatted timestamp string from the update
+ * @param {number} [fileCount=1] - Number of files used to create the master list
  */
-export async function createMasterListBackup(students, lastUpdated) {
+export async function createMasterListBackup(students, lastUpdated, fileCount = 1) {
     if (!students || students.length === 0) return;
 
     try {
@@ -29,6 +30,7 @@ export async function createMasterListBackup(students, lastUpdated) {
             createdAt: new Date().toISOString(),
             studentCount: students.length,
             sizeBytes: sizeBytes,
+            fileCount: fileCount,
             data: students
         };
 
@@ -137,6 +139,7 @@ async function renderBackupList() {
 
         const timeDisplay = formatBackupTime(backup.timestamp, backup.createdAt);
         const isLatest = index === 0;
+        const multiFile = backup.fileCount > 1;
 
         card.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
@@ -145,6 +148,7 @@ async function renderBackupList() {
                         <i class="fas fa-clock" style="color:var(--primary-color); font-size:0.85em;"></i>
                         <span style="font-weight:600; font-size:0.9em; color:var(--text-main);">${timeDisplay}</span>
                         ${isLatest ? '<span style="font-size:0.7em; background:#10b981; color:white; padding:1px 6px; border-radius:8px; font-weight:600;">Latest</span>' : ''}
+                        ${multiFile ? '<span title="Created from 2 files" style="font-size:0.7em; background:#6366f1; color:white; padding:1px 6px; border-radius:8px; font-weight:600;"><i class="fas fa-copy" style="margin-right:2px;"></i>2 Files</span>' : ''}
                     </div>
                     <div style="display:flex; gap:12px; font-size:0.8em; color:var(--text-secondary); margin-top:2px;">
                         <span><i class="fas fa-users" style="margin-right:3px;"></i>${backup.studentCount} students</span>
@@ -179,6 +183,7 @@ function showConfirmation(backup, index) {
     if (!mainView || !confirmView) return;
 
     const timeDisplay = formatBackupTime(backup.timestamp, backup.createdAt);
+    const multiFile = backup.fileCount > 1;
 
     // Populate confirmation details
     const detailEl = elements.backupConfirmDetail;
@@ -188,6 +193,7 @@ function showConfirmation(backup, index) {
                 <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
                     <i class="fas fa-clock" style="color:var(--primary-color); font-size:0.85em;"></i>
                     <span style="font-weight:600; font-size:0.9em;">${timeDisplay}</span>
+                    ${multiFile ? '<span style="font-size:0.7em; background:#6366f1; color:white; padding:1px 6px; border-radius:8px; font-weight:600;"><i class="fas fa-copy" style="margin-right:2px;"></i>2 Files</span>' : ''}
                 </div>
                 <div style="display:flex; gap:12px; font-size:0.8em; color:var(--text-secondary);">
                     <span><i class="fas fa-users" style="margin-right:3px;"></i>${backup.studentCount} students</span>
