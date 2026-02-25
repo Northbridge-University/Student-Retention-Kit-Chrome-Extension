@@ -20,6 +20,7 @@ import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { elements } from './ui-manager.js';
 import { formatDuration, updateTotalTime } from './canvas-api.js';
+import { createMasterListBackup } from './modals/backup-modal.js';
 
 /**
  * Sends master list data to Excel via SRK_IMPORT_MASTER_LIST payload
@@ -1075,6 +1076,9 @@ export function handleFileImport(files, onSuccess) {
                 if (elements.lastUpdatedText) {
                     elements.lastUpdatedText.textContent = lastUpdated;
                 }
+
+                // Create a backup of the master list
+                await createMasterListBackup(students, lastUpdated);
 
                 if (onSuccess) {
                     onSuccess(students);
