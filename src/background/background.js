@@ -1,7 +1,7 @@
 // [2025-12-17 01:25 PM]
 // Version: 14.5 - Organized Storage Structure
 import { startLoop, stopLoop, addToFoundUrlCache } from './looper.js';
-import { STORAGE_KEYS, CHECKER_MODES, MESSAGE_TYPES, EXTENSION_STATES, CONNECTION_TYPES, FIVE9_CONNECTION_STATES, CANVAS_DOMAIN } from '../constants/index.js';
+import { STORAGE_KEYS, CHECKER_MODES, MESSAGE_TYPES, EXTENSION_STATES, CONNECTION_TYPES, FIVE9_CONNECTION_STATES, CANVAS_DOMAIN, HIGHLIGHT_STATUS } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { decrypt } from '../utils/encryption.js';
 
@@ -461,6 +461,30 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
       }, 'selected students');
   }
 
+  // --- HIGHLIGHT CONFIRMATION FROM EXCEL ADD-IN ---
+  else if (msg.type === MESSAGE_TYPES.SRK_HIGHLIGHT_CONFIRMATION) {
+      const { syStudentId, status, message } = msg.data || {};
+      const confirmStatus = status === 'success' ? HIGHLIGHT_STATUS.CONFIRMED : HIGHLIGHT_STATUS.ERROR;
+      console.log(`%c [Background] Highlight Confirmation: ${status}`, `color: ${confirmStatus === HIGHLIGHT_STATUS.CONFIRMED ? 'green' : 'orange'}; font-weight: bold`, message);
+
+      // Update the matching found entry's highlightStatus
+      const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
+      const foundEntries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
+      let updated = false;
+      for (const entry of foundEntries) {
+          if (entry.syStudentId === syStudentId) {
+              entry.highlightStatus = confirmStatus;
+              updated = true;
+          }
+      }
+      if (updated) {
+          await chrome.storage.local.set({ [STORAGE_KEYS.FOUND_ENTRIES]: foundEntries });
+          console.log(`[SRK] Updated highlightStatus to '${confirmStatus}' for SyStudentId: ${syStudentId}`);
+      } else {
+          console.warn(`[SRK] No found entry matched SyStudentId: ${syStudentId}`);
+      }
+  }
+
   // --- IMPORT MASTER LIST TO EXCEL ---
   else if (msg.type === 'SRK_SEND_IMPORT_MASTER_LIST') {
       console.log('%c [Background] Forwarding Master List Import to Excel', 'background: #4CAF50; color: white; font-weight: bold; padding: 2px 4px;');
@@ -905,7 +929,9 @@ async function addStudentToFoundList(entry) {
     const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
     const foundEntries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
     const map = new Map(foundEntries.map(e => [e.url, e]));
-    map.set(entry.url, entry);
+    // Set initial highlightStatus to pending (waiting for Excel confirmation)
+    const entryWithStatus = { ...entry, highlightStatus: HIGHLIGHT_STATUS.PENDING };
+    map.set(entry.url, entryWithStatus);
     addToFoundUrlCache(entry.url);
     await chrome.storage.local.set({ [STORAGE_KEYS.FOUND_ENTRIES]: Array.from(map.values()) });
 }

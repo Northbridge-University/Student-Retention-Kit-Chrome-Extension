@@ -350,6 +350,19 @@ if (window.hasSRKConnectorRun) {
           });
       }
 
+      // Handle Highlight Confirmation from Excel Add-in
+      else if (event.data.type === "SRK_HIGHLIGHT_CONFIRMATION") {
+          console.log("%c SRK Connector: Highlight Confirmation received from Office Add-in", "color: green; font-weight: bold");
+          console.log("   Status:", event.data.data?.status);
+          console.log("   SyStudentId:", event.data.data?.syStudentId);
+
+          // Forward confirmation to extension background
+          safeSendMessage({
+              type: "SRK_HIGHLIGHT_CONFIRMATION",
+              data: event.data.data
+          });
+      }
+
       // Handle Links Request from Excel Add-in
       else if (event.data.type === "SRK_LINKS") {
           console.log("%c SRK Connector: Links Received!", "color: blue; font-weight: bold");
