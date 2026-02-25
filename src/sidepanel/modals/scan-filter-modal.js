@@ -82,10 +82,13 @@ export async function updateScanFilterCount() {
         }
 
         let isFailing = false;
-        if (includeFailing && entry.grade != null) {
-            const grade = parseFloat(entry.grade);
-            if (!isNaN(grade) && grade < 60) {
-                isFailing = true;
+        if (includeFailing) {
+            const rawGrade = entry.grade ?? entry.currentGrade ?? null;
+            if (rawGrade != null) {
+                const grade = parseFloat(rawGrade);
+                if (!isNaN(grade) && grade < 60) {
+                    isFailing = true;
+                }
             }
         }
 
