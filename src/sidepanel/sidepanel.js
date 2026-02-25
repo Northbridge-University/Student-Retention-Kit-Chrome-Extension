@@ -155,16 +155,18 @@ let embedHelperEnabled = true;
 let highlightColor = '#ffff00';
 
 // --- RESEND HIGHLIGHT PING FUNCTIONS ---
-async function resendHighlightPing(entry) {
+async function resendHighlightPing(entry, targetTabId = null) {
     await chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.RESEND_HIGHLIGHT_PING,
-        entry: entry
+        entry: entry,
+        targetTabId: targetTabId
     });
 }
 
-async function resendAllHighlightPings() {
+async function resendAllHighlightPings(targetTabId = null) {
     await chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.RESEND_ALL_HIGHLIGHT_PINGS
+        type: MESSAGE_TYPES.RESEND_ALL_HIGHLIGHT_PINGS,
+        targetTabId: targetTabId
     });
 }
 
@@ -1267,13 +1269,27 @@ function setupEventListeners() {
                 elements.checkerContextMenu.style.display = 'none';
             }
 
+            // Check for multiple Excel instances and show selector if needed
+            const excelTabs = await getExcelTabs();
+            let targetTabId = null;
+
+            if (excelTabs.length > 1) {
+                targetTabId = await openExcelInstanceModal(
+                    excelTabs,
+                    'Multiple Excel instances detected. Select which one to send the highlight ping to:'
+                );
+                if (targetTabId === null) return; // User cancelled
+            } else if (excelTabs.length === 1) {
+                targetTabId = excelTabs[0].id;
+            }
+
             if (selectedStudentEntry) {
                 // Resend ping for single student
-                await resendHighlightPing(selectedStudentEntry);
+                await resendHighlightPing(selectedStudentEntry, targetTabId);
                 console.log('Resent highlight ping for:', selectedStudentEntry.name);
             } else {
                 // Resend pings for all students
-                await resendAllHighlightPings();
+                await resendAllHighlightPings(targetTabId);
                 console.log('Resent all highlight pings');
             }
         });
