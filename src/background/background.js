@@ -549,6 +549,92 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
       })();
   }
 
+  // --- NAVIGATE TO STUDENT IN EXCEL ---
+  else if (msg.type === MESSAGE_TYPES.SRK_NAVIGATE_TO_STUDENT) {
+      console.log('%c [SRK] Navigate to Student in Excel', 'background: #2196F3; color: white; font-weight: bold; padding: 2px 4px;', msg.syStudentId);
+
+      (async () => {
+          try {
+              // Resolve targetSheet using the same settings as highlight
+              const settings = await storageGet([STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET]);
+              let targetSheet = settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
+              const now = new Date();
+              const month = String(now.getMonth() + 1);
+              const day = String(now.getDate());
+              const year = now.getFullYear();
+
+              if (targetSheet === 'Campus') {
+                  targetSheet = msg.campus || `LDA ${month}-${day}-${year}`;
+              } else {
+                  targetSheet = targetSheet.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
+              }
+
+              const payload = {
+                  type: 'SRK_NAVIGATE_TO_STUDENT',
+                  data: {
+                      syStudentId: msg.syStudentId,
+                      targetSheet: targetSheet
+                  }
+              };
+
+              // Determine which tab to send to and focus
+              const targetTabId = await storageGetValue(STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID, null);
+              let focusTabId = null;
+
+              if (targetTabId) {
+                  try {
+                      await chrome.tabs.sendMessage(targetTabId, {
+                          action: 'postToPage',
+                          message: payload
+                      });
+                      focusTabId = targetTabId;
+                      console.log(`[SRK] Sent navigate payload to selected tab ${targetTabId}`);
+                  } catch (err) {
+                      console.warn(`[SRK] Failed to send navigate to selected tab ${targetTabId}:`, err.message);
+                      // Fallback to all Excel tabs
+                      const tabs = await chrome.tabs.query({ url: TARGET_URL_PATTERNS });
+                      for (const tab of tabs) {
+                          try {
+                              await chrome.tabs.sendMessage(tab.id, {
+                                  action: 'postToPage',
+                                  message: payload
+                              });
+                              if (!focusTabId) focusTabId = tab.id;
+                              console.log(`[SRK] Sent navigate payload to tab ${tab.id}`);
+                          } catch (tabErr) {
+                              console.warn(`[SRK] Failed to send navigate to tab ${tab.id}:`, tabErr.message);
+                          }
+                      }
+                  }
+              } else {
+                  const tabs = await chrome.tabs.query({ url: TARGET_URL_PATTERNS });
+                  for (const tab of tabs) {
+                      try {
+                          await chrome.tabs.sendMessage(tab.id, {
+                              action: 'postToPage',
+                              message: payload
+                          });
+                          if (!focusTabId) focusTabId = tab.id;
+                          console.log(`[SRK] Sent navigate payload to tab ${tab.id}`);
+                      } catch (err) {
+                          console.warn(`[SRK] Failed to send navigate to tab ${tab.id}:`, err.message);
+                      }
+                  }
+              }
+
+              // Focus the Excel tab after sending the navigate payload
+              if (focusTabId) {
+                  const tab = await chrome.tabs.get(focusTabId);
+                  await chrome.tabs.update(focusTabId, { active: true });
+                  await chrome.windows.update(tab.windowId, { focused: true });
+                  console.log(`[SRK] Focused Excel tab ${focusTabId}`);
+              }
+          } catch (err) {
+              console.error('[SRK] Failed to navigate to student:', err);
+          }
+      })();
+  }
+
   // --- CREATE SHEET IN EXCEL ---
   else if (msg.type === MESSAGE_TYPES.SRK_CREATE_SHEET) {
       console.log('%c [Background] Forwarding Create Sheet Request to Excel', 'background: #4CAF50; color: white; font-weight: bold; padding: 2px 4px;');
