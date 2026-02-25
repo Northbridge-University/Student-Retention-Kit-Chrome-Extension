@@ -12,8 +12,9 @@ const MAX_BACKUPS = 4;
  * @param {Array} students - The master list array
  * @param {string} lastUpdated - The formatted timestamp string from the update
  * @param {number} [fileCount=1] - Number of files used to create the master list
+ * @param {number} [totalDuration=0] - Total completion time in seconds
  */
-export async function createMasterListBackup(students, lastUpdated, fileCount = 1) {
+export async function createMasterListBackup(students, lastUpdated, fileCount = 1, totalDuration = 0) {
     if (!students || students.length === 0) return;
 
     try {
@@ -31,6 +32,7 @@ export async function createMasterListBackup(students, lastUpdated, fileCount = 
             studentCount: students.length,
             sizeBytes: sizeBytes,
             fileCount: fileCount,
+            totalDuration: totalDuration,
             data: students
         };
 
@@ -67,6 +69,17 @@ function formatSize(bytes) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * Formats a duration in seconds to a human-readable string.
+ * @param {number} seconds
+ * @returns {string}
+ */
+function formatDuration(seconds) {
+    if (!seconds) return '';
+    if (seconds >= 60) return `${(seconds / 60).toFixed(1)}m`;
+    return `${seconds.toFixed(1)}s`;
 }
 
 /**
@@ -153,6 +166,7 @@ async function renderBackupList() {
                     <div style="display:flex; gap:12px; font-size:0.8em; color:var(--text-secondary); margin-top:2px;">
                         <span><i class="fas fa-users" style="margin-right:3px;"></i>${backup.studentCount} students</span>
                         <span><i class="fas fa-database" style="margin-right:3px;"></i>${formatSize(backup.sizeBytes)}</span>
+                        ${backup.totalDuration ? `<span><i class="fas fa-stopwatch" style="margin-right:3px;"></i>${formatDuration(backup.totalDuration)}</span>` : ''}
                     </div>
                 </div>
                 <button class="backup-revert-btn btn-secondary" data-backup-index="${index}" style="padding:5px 12px; font-size:0.8em; white-space:nowrap; flex-shrink:0; margin-left:8px;">
@@ -198,6 +212,7 @@ function showConfirmation(backup, index) {
                 <div style="display:flex; gap:12px; font-size:0.8em; color:var(--text-secondary);">
                     <span><i class="fas fa-users" style="margin-right:3px;"></i>${backup.studentCount} students</span>
                     <span><i class="fas fa-database" style="margin-right:3px;"></i>${formatSize(backup.sizeBytes)}</span>
+                    ${backup.totalDuration ? `<span><i class="fas fa-stopwatch" style="margin-right:3px;"></i>${formatDuration(backup.totalDuration)}</span>` : ''}
                 </div>
             </div>
         `;

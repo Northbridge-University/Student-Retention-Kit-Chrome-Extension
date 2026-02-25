@@ -1336,7 +1336,11 @@ function setupEventListeners() {
                     await processStep4(finalStudents);
                     // Create backup after the entire update process completes
                     const lastUpdatedData = await chrome.storage.local.get([STORAGE_KEYS.LAST_UPDATED]);
-                    await createMasterListBackup(finalStudents, lastUpdatedData[STORAGE_KEYS.LAST_UPDATED], fileCount);
+                    const totalTimeEl = document.getElementById('queueTotalTime');
+                    const totalDuration = totalTimeEl?.dataset.processStartTime
+                        ? (Date.now() - parseInt(totalTimeEl.dataset.processStartTime)) / 1000
+                        : 0;
+                    await createMasterListBackup(finalStudents, lastUpdatedData[STORAGE_KEYS.LAST_UPDATED], fileCount, totalDuration);
                 });
             });
         });
