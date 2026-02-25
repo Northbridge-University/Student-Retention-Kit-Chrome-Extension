@@ -121,7 +121,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
-import { openBackupModal, closeBackupModal, initBackupModal } from './modals/backup-modal.js';
+import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 
 import {
     shouldShowLatestUpdatesModal,
@@ -873,6 +873,9 @@ function setupEventListeners() {
         if (elements.guidesModal && e.target === elements.guidesModal) {
             closeGuidesModal();
         }
+        if (elements.backupModal && e.target === elements.backupModal) {
+            closeBackupModal();
+        }
     });
 
     // Cache Management
@@ -1161,23 +1164,21 @@ function setupEventListeners() {
     initBackupModal();
 
     // Hide context menu when clicking elsewhere
-    document.addEventListener('click', () => {
-        if (elements.updateMasterContextMenu) {
-            elements.updateMasterContextMenu.style.display = 'none';
-        }
-        if (elements.checkerContextMenu) {
-            elements.checkerContextMenu.style.display = 'none';
-        }
-        if (elements.settingsContextMenu) {
-            elements.settingsContextMenu.style.display = 'none';
-        }
-        if (elements.dataTabContextMenu) {
-            elements.dataTabContextMenu.style.display = 'none';
-        }
-    });
+    document.addEventListener('click', hideAllContextMenus);
 
     // Variable to track the selected student entry for context menu
     let selectedStudentEntry = null;
+
+    /**
+     * Hides all context menus. Called before showing a new one to ensure
+     * only one context menu is visible at a time.
+     */
+    function hideAllContextMenus() {
+        if (elements.updateMasterContextMenu) elements.updateMasterContextMenu.style.display = 'none';
+        if (elements.checkerContextMenu) elements.checkerContextMenu.style.display = 'none';
+        if (elements.settingsContextMenu) elements.settingsContextMenu.style.display = 'none';
+        if (elements.dataTabContextMenu) elements.dataTabContextMenu.style.display = 'none';
+    }
 
     /**
      * Positions a context menu at the mouse position, adjusting if it would overflow the viewport
@@ -1186,6 +1187,9 @@ function setupEventListeners() {
      * @param {number} mouseY - The mouse Y position (e.pageY)
      */
     function positionContextMenu(menu, mouseX, mouseY) {
+        // Hide any other open context menus first
+        hideAllContextMenus();
+
         // First, show the menu off-screen to measure its dimensions
         menu.style.visibility = 'hidden';
         menu.style.display = 'block';
@@ -1318,6 +1322,7 @@ function setupEventListeners() {
 
     if (elements.studentPopFile) {
         elements.studentPopFile.addEventListener('change', (e) => {
+            const fileCount = e.target.files.length;
             handleFileImport(e.target.files, (students) => {
                 renderMasterList(students, (entry, li, evt) => {
                     queueManager.handleStudentClick(entry, li, evt);
@@ -1329,6 +1334,13 @@ function setupEventListeners() {
                     const finalStudents = await processStep3(updatedStudents);
                     // Send master list with missing assignments to Excel
                     await processStep4(finalStudents);
+                    // Create backup after the entire update process completes
+                    const lastUpdatedData = await chrome.storage.local.get([STORAGE_KEYS.LAST_UPDATED]);
+                    const totalTimeEl = document.getElementById('queueTotalTime');
+                    const totalDuration = totalTimeEl?.dataset.processStartTime
+                        ? (Date.now() - parseInt(totalTimeEl.dataset.processStartTime)) / 1000
+                        : 0;
+                    await createMasterListBackup(finalStudents, lastUpdatedData[STORAGE_KEYS.LAST_UPDATED], fileCount, totalDuration);
                 });
             });
         });
