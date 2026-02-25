@@ -121,6 +121,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
+import { openBackupModal, closeBackupModal, initBackupModal } from './modals/backup-modal.js';
 
 import {
     shouldShowLatestUpdatesModal,
@@ -1131,6 +1132,34 @@ function setupEventListeners() {
         });
     }
 
+    // Right-click context menu on the Data tab (except Update Master List button)
+    const dataTabContent = document.getElementById('data');
+    if (dataTabContent && elements.dataTabContextMenu) {
+        dataTabContent.addEventListener('contextmenu', (e) => {
+            // Don't show backup context menu if right-clicking on the Update Master List button
+            // (that button has its own context menu)
+            if (elements.updateMasterBtn && (elements.updateMasterBtn === e.target || elements.updateMasterBtn.contains(e.target))) {
+                return;
+            }
+
+            e.preventDefault();
+            positionContextMenu(elements.dataTabContextMenu, e.pageX, e.pageY);
+        });
+    }
+
+    // "View Backups" context menu item opens the backup modal
+    if (elements.viewBackupsMenuItem) {
+        elements.viewBackupsMenuItem.addEventListener('click', () => {
+            if (elements.dataTabContextMenu) {
+                elements.dataTabContextMenu.style.display = 'none';
+            }
+            openBackupModal();
+        });
+    }
+
+    // Initialize backup modal event listeners
+    initBackupModal();
+
     // Hide context menu when clicking elsewhere
     document.addEventListener('click', () => {
         if (elements.updateMasterContextMenu) {
@@ -1141,6 +1170,9 @@ function setupEventListeners() {
         }
         if (elements.settingsContextMenu) {
             elements.settingsContextMenu.style.display = 'none';
+        }
+        if (elements.dataTabContextMenu) {
+            elements.dataTabContextMenu.style.display = 'none';
         }
     });
 

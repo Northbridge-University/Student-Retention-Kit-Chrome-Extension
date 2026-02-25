@@ -279,6 +279,20 @@ export function cacheDomElements() {
     elements.autoSwitchCallTabToggle = document.getElementById('autoSwitchCallTabToggle');
     elements.saveConnectionsBtn = document.getElementById('saveConnectionsBtn');
 
+    // Data Tab Context Menu
+    elements.dataTabContextMenu = document.getElementById('dataTabContextMenu');
+    elements.viewBackupsMenuItem = document.getElementById('viewBackupsMenuItem');
+
+    // Backup Modal
+    elements.backupModal = document.getElementById('backupModal');
+    elements.closeBackupModalBtn = document.getElementById('closeBackupModalBtn');
+    elements.backupMainView = document.getElementById('backupMainView');
+    elements.backupConfirmView = document.getElementById('backupConfirmView');
+    elements.backupList = document.getElementById('backupList');
+    elements.backupConfirmDetail = document.getElementById('backupConfirmDetail');
+    elements.backupConfirmCancelBtn = document.getElementById('backupConfirmCancelBtn');
+    elements.backupConfirmRevertBtn = document.getElementById('backupConfirmRevertBtn');
+
     // Cache Management (old reference for compatibility)
     elements.cacheStatsText = document.getElementById('cacheStatsText');
     elements.clearCacheBtn = document.getElementById('clearCacheBtn');
