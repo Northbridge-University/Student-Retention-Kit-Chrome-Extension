@@ -121,7 +121,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
-import { openBackupModal, closeBackupModal, initBackupModal } from './modals/backup-modal.js';
+import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 
 import {
     shouldShowLatestUpdatesModal,
@@ -1333,6 +1333,9 @@ function setupEventListeners() {
                     const finalStudents = await processStep3(updatedStudents);
                     // Send master list with missing assignments to Excel
                     await processStep4(finalStudents);
+                    // Create backup after the entire update process completes
+                    const lastUpdatedData = await chrome.storage.local.get([STORAGE_KEYS.LAST_UPDATED]);
+                    await createMasterListBackup(finalStudents, lastUpdatedData[STORAGE_KEYS.LAST_UPDATED]);
                 });
             });
         });
