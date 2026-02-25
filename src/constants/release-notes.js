@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'12.2': {
+        title: 'Latest Updates',
+        date: 'February 24, 2026',
+        updates: [
+            'Fixed Include Failing Students Toggle',
+            'Added a Backups Section. Right click anywhere on the Data tab.'
+        ]
+    },
 	'12.1': {
         title: 'Latest Updates',
         date: 'February 24, 2026',
@@ -145,6 +153,7 @@ export function getLatestReleaseNotes() {
         notes: RELEASE_NOTES[latestVersion]
     };
 }
+
 
 
 
