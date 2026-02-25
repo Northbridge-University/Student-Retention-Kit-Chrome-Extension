@@ -1,6 +1,6 @@
 // Student Renderer - Handles rendering of student lists and active student display
 import { elements } from './ui-manager.js';
-import { GENERIC_AVATAR_URL, STORAGE_KEYS, HIGHLIGHT_STATUS } from '../constants/index.js';
+import { GENERIC_AVATAR_URL, STORAGE_KEYS, HIGHLIGHT_STATUS, MESSAGE_TYPES } from '../constants/index.js';
 import { updateCallTabDisplay } from './call-tab-placeholder.js';
 
 /**
@@ -298,6 +298,18 @@ export async function renderFoundList(rawEntries) {
             });
             nameLink.addEventListener('mouseenter', () => nameLink.style.textDecoration = 'underline');
             nameLink.addEventListener('mouseleave', () => nameLink.style.textDecoration = 'none');
+        }
+
+        // Click anywhere on the row (except name link) to navigate in Excel
+        if (raw.syStudentId) {
+            li.style.cursor = 'pointer';
+            li.addEventListener('click', () => {
+                chrome.runtime.sendMessage({
+                    type: MESSAGE_TYPES.SRK_NAVIGATE_TO_STUDENT,
+                    syStudentId: raw.syStudentId,
+                    campus: raw.campus || null
+                });
+            });
         }
 
         // Store the ORIGINAL raw entry data on the li element for context menu access
