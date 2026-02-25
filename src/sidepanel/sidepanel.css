@@ -494,6 +494,7 @@ input:focus, textarea:focus, select:focus {
     flex-shrink: 0;
 }
 
+.heatmap-gray { background-color: #9ca3af; }
 .heatmap-green { background-color: #10b981; }
 .heatmap-yellow { background-color: #f59e0b; }
 .heatmap-orange { background-color: #f97316; }

@@ -55,10 +55,21 @@ export const MESSAGE_TYPES = {
     SRK_REQUEST_SHEET_LIST: 'SRK_REQUEST_SHEET_LIST',
     SRK_SHEET_LIST_RESPONSE: 'SRK_SHEET_LIST_RESPONSE',
     SRK_LINKS: 'SRK_LINKS',
+    SRK_HIGHLIGHT_CONFIRMATION: 'SRK_HIGHLIGHT_CONFIRMATION',
     RESEND_HIGHLIGHT_PING: 'resendHighlightPing',
     RESEND_ALL_HIGHLIGHT_PINGS: 'resendAllHighlightPings',
     CANVAS_AUTH_ERROR: 'canvasAuthError',
     CANVAS_AUTH_RESPONSE: 'canvasAuthResponse'
+};
+
+/**
+ * An enum-like object for highlight confirmation statuses.
+ * Used to track whether the Excel add-in confirmed the row highlight.
+ */
+export const HIGHLIGHT_STATUS = {
+    PENDING: 'pending',     // Waiting for confirmation (gray)
+    CONFIRMED: 'confirmed', // Successfully highlighted (green)
+    ERROR: 'error'          // Highlight failed (orange)
 };
 
 /**

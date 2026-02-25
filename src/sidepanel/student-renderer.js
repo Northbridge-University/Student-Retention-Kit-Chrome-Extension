@@ -1,6 +1,6 @@
 // Student Renderer - Handles rendering of student lists and active student display
 import { elements } from './ui-manager.js';
-import { GENERIC_AVATAR_URL, STORAGE_KEYS } from '../constants/index.js';
+import { GENERIC_AVATAR_URL, STORAGE_KEYS, HIGHLIGHT_STATUS } from '../constants/index.js';
 import { updateCallTabDisplay } from './call-tab-placeholder.js';
 
 /**
@@ -271,9 +271,15 @@ export async function renderFoundList(rawEntries) {
 
         const assignmentTitle = resolved.assignment || 'Untitled Assignment';
 
+        // Determine indicator class based on highlight confirmation status
+        const status = raw.highlightStatus || HIGHLIGHT_STATUS.PENDING;
+        let indicatorClass = 'heatmap-gray';  // Default: pending/waiting
+        if (status === HIGHLIGHT_STATUS.CONFIRMED) indicatorClass = 'heatmap-green';
+        else if (status === HIGHLIGHT_STATUS.ERROR) indicatorClass = 'heatmap-orange';
+
         li.innerHTML = `
             <div style="display: flex; align-items: center; width:100%;">
-                <div class="heatmap-indicator heatmap-green"></div>
+                <div class="heatmap-indicator ${indicatorClass}" title="${status === HIGHLIGHT_STATUS.CONFIRMED ? 'Excel confirmed' : status === HIGHLIGHT_STATUS.ERROR ? 'Excel highlight failed' : 'Waiting for Excel confirmation'}"></div>
                 <div style="flex-grow:1; display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; flex-direction:column;">
                         <span class="student-name" style="font-weight:500; color:${resolved.url ? 'var(--primary-color)' : 'var(--text-secondary)'}; cursor:${resolved.url ? 'pointer' : 'default'};" ${resolved.url ? '' : 'title="No gradebook URL available"'}>${resolved.name}</span>
