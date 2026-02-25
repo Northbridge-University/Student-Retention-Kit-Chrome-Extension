@@ -873,6 +873,9 @@ function setupEventListeners() {
         if (elements.guidesModal && e.target === elements.guidesModal) {
             closeGuidesModal();
         }
+        if (elements.backupModal && e.target === elements.backupModal) {
+            closeBackupModal();
+        }
     });
 
     // Cache Management
@@ -1161,23 +1164,21 @@ function setupEventListeners() {
     initBackupModal();
 
     // Hide context menu when clicking elsewhere
-    document.addEventListener('click', () => {
-        if (elements.updateMasterContextMenu) {
-            elements.updateMasterContextMenu.style.display = 'none';
-        }
-        if (elements.checkerContextMenu) {
-            elements.checkerContextMenu.style.display = 'none';
-        }
-        if (elements.settingsContextMenu) {
-            elements.settingsContextMenu.style.display = 'none';
-        }
-        if (elements.dataTabContextMenu) {
-            elements.dataTabContextMenu.style.display = 'none';
-        }
-    });
+    document.addEventListener('click', hideAllContextMenus);
 
     // Variable to track the selected student entry for context menu
     let selectedStudentEntry = null;
+
+    /**
+     * Hides all context menus. Called before showing a new one to ensure
+     * only one context menu is visible at a time.
+     */
+    function hideAllContextMenus() {
+        if (elements.updateMasterContextMenu) elements.updateMasterContextMenu.style.display = 'none';
+        if (elements.checkerContextMenu) elements.checkerContextMenu.style.display = 'none';
+        if (elements.settingsContextMenu) elements.settingsContextMenu.style.display = 'none';
+        if (elements.dataTabContextMenu) elements.dataTabContextMenu.style.display = 'none';
+    }
 
     /**
      * Positions a context menu at the mouse position, adjusting if it would overflow the viewport
@@ -1186,6 +1187,9 @@ function setupEventListeners() {
      * @param {number} mouseY - The mouse Y position (e.pageY)
      */
     function positionContextMenu(menu, mouseX, mouseY) {
+        // Hide any other open context menus first
+        hideAllContextMenus();
+
         // First, show the menu off-screen to measure its dimensions
         menu.style.visibility = 'hidden';
         menu.style.display = 'block';
