@@ -384,14 +384,14 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
     }
   } else if (msg.type === MESSAGE_TYPES.RESEND_HIGHLIGHT_PING) {
     if (msg.entry) {
-      await sendHighlightStudentRowPayload(msg.entry);
+      await sendHighlightStudentRowPayload(msg.entry, msg.targetTabId || null);
       console.log('Resent highlight ping for:', msg.entry.name);
     }
   } else if (msg.type === MESSAGE_TYPES.RESEND_ALL_HIGHLIGHT_PINGS) {
     const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
     const foundEntries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
     for (const entry of foundEntries) {
-      await sendHighlightStudentRowPayload(entry);
+      await sendHighlightStudentRowPayload(entry, msg.targetTabId || null);
     }
     console.log('Resent all highlight pings for', foundEntries.length, 'students');
   } else if (msg.type === 'GET_FIVE9_CONNECTION_STATE') {
@@ -810,7 +810,7 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
 });
 
 // --- HIGHLIGHT STUDENT ROW HANDLING ---
-async function sendHighlightStudentRowPayload(entry) {
+async function sendHighlightStudentRowPayload(entry, overrideTabId = null) {
     console.log('%c [SRK] Submission Found - Sending payload to Office Add-in', 'background: #4CAF50; color: white; font-weight: bold; padding: 2px 4px;', entry.name);
 
     // Check if highlight feature is enabled
@@ -875,8 +875,8 @@ async function sendHighlightStudentRowPayload(entry) {
 
     console.log('[SRK] Sending highlight student row payload:', payload);
 
-    // Check if a specific target tab was selected
-    const targetTabId = await storageGetValue(STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID, null);
+    // Use override tab ID if provided (e.g. from context menu), otherwise fall back to stored setting
+    const targetTabId = overrideTabId || await storageGetValue(STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID, null);
 
     try {
         if (targetTabId) {
