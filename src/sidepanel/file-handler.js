@@ -346,6 +346,24 @@ function detectAcademicReport(normalizedHeaders) {
 }
 
 /**
+ * Detects if the imported file is an Attendance report.
+ * Attendance reports contain AttMin and SchedMin columns.
+ *
+ * @param {Array} normalizedHeaders - Array of pre-normalized header strings
+ * @returns {boolean} True if the file appears to be an Attendance report
+ */
+function detectAttendanceReport(normalizedHeaders) {
+    // Check for AttMin and SchedMin using normalized matching (also checks aliases)
+    const hasAttMin = normalizedHeaders.some(h =>
+        h === 'attmin' || _normalizedAliasToField[h] === 'attMin'
+    );
+    const hasSchedMin = normalizedHeaders.some(h =>
+        h === 'schedmin' || _normalizedAliasToField[h] === 'schedMin'
+    );
+    return hasAttMin && hasSchedMin;
+}
+
+/**
  * Ranks course rows by relevance, most current first.
  * Priority: active course (started but not ended) > latest end date > latest start date.
  *
@@ -552,6 +570,38 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         // This is not in MASTER_LIST_COLUMNS but needed during Academic report deduplication
         const finalGradeColIndex = normalizedHeaders.indexOf('finalnumericgrade');
 
+        // Detect Attendance report and locate AttMin/SchedMin/InstructorName columns
+        const isAttendanceReport = detectAttendanceReport(normalizedHeaders);
+        let attMinColIndex = -1;
+        let schedMinColIndex = -1;
+        let attInstructorColIndex = -1;
+        if (isAttendanceReport) {
+            // Find AttMin column
+            for (let i = 0; i < normalizedHeaders.length; i++) {
+                const nh = normalizedHeaders[i];
+                if (nh === 'attmin' || _normalizedAliasToField[nh] === 'attMin') {
+                    attMinColIndex = i;
+                    break;
+                }
+            }
+            // Find SchedMin column
+            for (let i = 0; i < normalizedHeaders.length; i++) {
+                const nh = normalizedHeaders[i];
+                if (nh === 'schedmin' || _normalizedAliasToField[nh] === 'schedMin') {
+                    schedMinColIndex = i;
+                    break;
+                }
+            }
+            // Find InstructorName column (already mapped via MASTER_LIST_COLUMNS as 'instructorName')
+            attInstructorColIndex = columnMapping.instructorName !== undefined ? columnMapping.instructorName : -1;
+            if (attInstructorColIndex === -1) {
+                // Fallback: direct normalized header lookup
+                attInstructorColIndex = normalizedHeaders.indexOf('instructorname');
+            }
+        }
+        // Collect raw attendance rows keyed by SyStudentId (before deduplication)
+        const attendanceRowsBySyId = isAttendanceReport ? new Map() : null;
+
         // Parse data rows
         let students = [];
         for (let i = headerRowIndex + 1; i < rows.length; i++) {
@@ -637,6 +687,26 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 }
             }
 
+            // Collect raw attendance data (AttMin, SchedMin, InstructorName) per student
+            // Attendance reports have multiple rows per student (different class sessions)
+            if (isAttendanceReport && entry.SyStudentId && attMinColIndex !== -1 && schedMinColIndex !== -1) {
+                const attMinVal = parseFloat(row[attMinColIndex]) || 0;
+                const schedMinVal = parseFloat(row[schedMinColIndex]) || 0;
+                const instructorVal = attInstructorColIndex !== -1 && attInstructorColIndex < row.length
+                    ? String(row[attInstructorColIndex] || '').trim()
+                    : '';
+
+                const syId = entry.SyStudentId;
+                if (!attendanceRowsBySyId.has(syId)) {
+                    attendanceRowsBySyId.set(syId, []);
+                }
+                attendanceRowsBySyId.get(syId).push({
+                    attMin: attMinVal,
+                    schedMin: schedMinVal,
+                    instructorName: instructorVal
+                });
+            }
+
             students.push(entry);
         }
 
@@ -645,6 +715,17 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         const isAcademicReport = detectAcademicReport(normalizedHeaders);
         if (isAcademicReport && students.length > 0) {
             students = deduplicateAcademicStudents(students, referenceDate);
+        }
+
+        // Attach raw attendance rows to deduplicated students
+        // These rows are preserved un-aggregated for the On-Ground Attendance export sheet
+        if (isAttendanceReport && attendanceRowsBySyId && attendanceRowsBySyId.size > 0) {
+            for (const student of students) {
+                if (student.SyStudentId && attendanceRowsBySyId.has(student.SyStudentId)) {
+                    student._attendanceRows = attendanceRowsBySyId.get(student.SyStudentId);
+                }
+            }
+            console.log(`Attendance report: ${attendanceRowsBySyId.size} students with attendance data`);
         }
 
         // Compute letter grades from any available numeric grades
@@ -852,8 +933,32 @@ function mergeSupplementaryFile(students, data, isCSV) {
     const isAcademic = detectAcademicReport(normalizedHeaders);
     const needsLastCourseGrade = isAcademic && !primaryFields.has('lastCourseGrade');
 
+    // Check if supplementary is an attendance report
+    const isSuppAttendance = detectAttendanceReport(normalizedHeaders);
+    let suppAttMinCol = -1;
+    let suppSchedMinCol = -1;
+    let suppAttInstructorCol = -1;
+    if (isSuppAttendance) {
+        for (let i = 0; i < normalizedHeaders.length; i++) {
+            const nh = normalizedHeaders[i];
+            if (suppAttMinCol === -1 && (nh === 'attmin' || _normalizedAliasToField[nh] === 'attMin')) {
+                suppAttMinCol = i;
+            }
+            if (suppSchedMinCol === -1 && (nh === 'schedmin' || _normalizedAliasToField[nh] === 'schedMin')) {
+                suppSchedMinCol = i;
+            }
+        }
+        // InstructorName column
+        const instructorIdx = findColumnIndex(normalizedHeaders, headers, 'instructorName');
+        if (instructorIdx !== -1) {
+            suppAttInstructorCol = instructorIdx;
+        } else {
+            suppAttInstructorCol = normalizedHeaders.indexOf('instructorname');
+        }
+    }
+
     const hasExtraColumns = Object.keys(extraColumnMapping).length > 0;
-    if (!hasExtraColumns && !needsLastCourseGrade) return; // Nothing to merge
+    if (!hasExtraColumns && !needsLastCourseGrade && !isSuppAttendance) return; // Nothing to merge
 
     // Find identifier columns in the supplementary file
     // Priority: SyStudentId > StudentNumber
@@ -984,6 +1089,39 @@ function mergeSupplementaryFile(students, data, isCSV) {
                 }
             }
         }
+    }
+
+    // Merge attendance rows from supplementary file
+    if (isSuppAttendance && suppAttMinCol !== -1 && suppSchedMinCol !== -1) {
+        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let student = null;
+            if (suppSyStudentIdCol !== -1 && row[suppSyStudentIdCol]) {
+                student = bySyStudentId.get(String(row[suppSyStudentIdCol]));
+            }
+            if (!student && suppStudentNumberCol !== -1 && row[suppStudentNumberCol]) {
+                student = byStudentNumber.get(String(row[suppStudentNumberCol]));
+            }
+            if (!student) continue;
+
+            const attMinVal = parseFloat(row[suppAttMinCol]) || 0;
+            const schedMinVal = parseFloat(row[suppSchedMinCol]) || 0;
+            const instructorVal = suppAttInstructorCol !== -1 && suppAttInstructorCol < row.length
+                ? String(row[suppAttInstructorCol] || '').trim()
+                : '';
+
+            if (!student._attendanceRows) {
+                student._attendanceRows = [];
+            }
+            student._attendanceRows.push({
+                attMin: attMinVal,
+                schedMin: schedMinVal,
+                instructorName: instructorVal
+            });
+        }
+        console.log(`Supplementary attendance report: merged attendance rows for ${students.filter(s => s._attendanceRows).length} students`);
     }
 }
 
@@ -2150,6 +2288,87 @@ export async function exportMasterListCSV() {
                 tabColors.push({ sheetIndex, rgb: PASTEL_TAB_COLORS[groupIndex % PASTEL_TAB_COLORS.length] });
             }
         });
+
+        // --- ON-GROUND ATTENDANCE SHEET ---
+        // Only generated when students have attendance data (_attendanceRows)
+        const onGroundStudents = students.filter(s =>
+            s._attendanceRows && s._attendanceRows.length > 0 &&
+            // On-Ground = Shift does NOT contain "Online"
+            !(s.shift && String(s.shift).toLowerCase().includes('online'))
+        );
+
+        let attendanceSheetIndex = -1;
+        if (onGroundStudents.length > 0) {
+            attendanceSheetIndex = 2 + ldaGroups.length; // After Master List, Missing Assignments, and LDA sheets
+
+            // --- Table 1: Instructor Summary ---
+            // Aggregate AttMin and SchedMin per instructor across all on-ground students
+            const instructorAgg = new Map(); // instructorName → { attMin, schedMin }
+            for (const student of onGroundStudents) {
+                for (const row of student._attendanceRows) {
+                    const name = row.instructorName || 'Unknown';
+                    if (!instructorAgg.has(name)) {
+                        instructorAgg.set(name, { attMin: 0, schedMin: 0 });
+                    }
+                    const agg = instructorAgg.get(name);
+                    agg.attMin += row.attMin;
+                    agg.schedMin += row.schedMin;
+                }
+            }
+
+            // Sort instructors alphabetically
+            const instructorRows = [...instructorAgg.entries()]
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([name, agg]) => {
+                    const pct = agg.schedMin > 0 ? (agg.attMin / agg.schedMin) * 100 : 0;
+                    return [name, agg.attMin, agg.schedMin, Math.round(pct * 100) / 100];
+                });
+
+            // --- Table 2: Student Summary ---
+            // Aggregate AttMin and SchedMin per student across all their class sessions
+            const studentRows = onGroundStudents
+                .map(student => {
+                    let totalAttMin = 0;
+                    let totalSchedMin = 0;
+                    for (const row of student._attendanceRows) {
+                        totalAttMin += row.attMin;
+                        totalSchedMin += row.schedMin;
+                    }
+                    const pct = totalSchedMin > 0 ? (totalAttMin / totalSchedMin) * 100 : 0;
+                    return [student.name, totalAttMin, totalSchedMin, Math.round(pct * 100) / 100];
+                })
+                .sort((a, b) => a[0].localeCompare(b[0])); // Sort alphabetically by student name
+
+            // Build sheet data: Table 1 header, instructor rows, gap, Table 2 header, student rows
+            const attendanceData = [];
+            // Instructor table header
+            attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+            for (const row of instructorRows) {
+                attendanceData.push(row);
+            }
+            // Gap row between tables
+            attendanceData.push([]);
+            // Student table header
+            attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+            for (const row of studentRows) {
+                attendanceData.push(row);
+            }
+
+            const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
+
+            // Set column widths
+            const attendanceColWidths = [
+                { wch: 30 }, // Name
+                { wch: 22 }, // Attended Minutes
+                { wch: 22 }, // Scheduled Minutes
+                { wch: 15 }  // Percentage
+            ];
+            wsAttendance['!cols'] = attendanceColWidths;
+
+            XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
+
+            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students`);
+        }
 
         const timestamp = new Date().toISOString().split('T')[0];
         const filename = `student_report_${timestamp}.xlsx`;

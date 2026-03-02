@@ -357,7 +357,10 @@ export const FIELD_ALIASES = {
     // Academic report aliases
     programVersion: ['progverdescrip'],
     amRep: ['admrep'],
-    adSAPStatus: ['sapstatus', 'sapdescripterm']
+    adSAPStatus: ['sapstatus', 'sapdescripterm'],
+    // Attendance report aliases
+    attMin: ['attendedminutes', 'attendanceminutes', 'attminutes'],
+    schedMin: ['scheduledminutes', 'schedminutes', 'scheduledmin']
 };
 
 /**
