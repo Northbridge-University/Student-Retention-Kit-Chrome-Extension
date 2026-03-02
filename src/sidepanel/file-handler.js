@@ -703,7 +703,8 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 attendanceRowsBySyId.get(syId).push({
                     attMin: attMinVal,
                     schedMin: schedMinVal,
-                    instructorName: instructorVal
+                    instructorName: instructorVal,
+                    shift: entry.shift ? String(entry.shift).trim() : ''
                 });
             }
 
@@ -1093,6 +1094,9 @@ function mergeSupplementaryFile(students, data, isCSV) {
 
     // Merge attendance rows from supplementary file
     if (isSuppAttendance && suppAttMinCol !== -1 && suppSchedMinCol !== -1) {
+        // Find Shift column in the supplementary file for per-row filtering
+        const suppShiftCol = findColumnIndex(normalizedHeaders, headers, 'shift');
+
         for (let i = headerRowIndex + 1; i < rows.length; i++) {
             const row = rows[i];
             if (!row || row.length === 0) continue;
@@ -1111,6 +1115,9 @@ function mergeSupplementaryFile(students, data, isCSV) {
             const instructorVal = suppAttInstructorCol !== -1 && suppAttInstructorCol < row.length
                 ? String(row[suppAttInstructorCol] || '').trim()
                 : '';
+            const shiftVal = suppShiftCol !== -1 && suppShiftCol < row.length
+                ? String(row[suppShiftCol] || '').trim()
+                : (student.shift ? String(student.shift).trim() : '');
 
             if (!student._attendanceRows) {
                 student._attendanceRows = [];
@@ -1118,7 +1125,8 @@ function mergeSupplementaryFile(students, data, isCSV) {
             student._attendanceRows.push({
                 attMin: attMinVal,
                 schedMin: schedMinVal,
-                instructorName: instructorVal
+                instructorName: instructorVal,
+                shift: shiftVal
             });
         }
         console.log(`Supplementary attendance report: merged attendance rows for ${students.filter(s => s._attendanceRows).length} students`);
@@ -1685,7 +1693,8 @@ function applyRowHighlights(xml, highlight, fillStyleMap) {
  * adds relationships, and references tables from each sheet.
  *
  * @param {JSZip} zip - The XLSX workbook as a JSZip instance
- * @param {Array} tableMetadata - Array of {sheetIndex, displayName, columns: [{header}], dataRowCount}
+ * @param {Array} tableMetadata - Array of {sheetIndex, displayName, columns: [{header}], dataRowCount, startRow?}
+ *   startRow is 1-indexed (default 1). The header occupies startRow and data follows below.
  */
 async function injectExcelTables(zip, tableMetadata) {
     if (!tableMetadata || tableMetadata.length === 0) return;
@@ -1708,8 +1717,9 @@ async function injectExcelTables(zip, tableMetadata) {
         // --- Create xl/tables/tableN.xml ---
         const safeName = meta.displayName.replace(/[^a-zA-Z0-9_]/g, '_');
         const lastCol = columnIndexToLetter(meta.columns.length - 1);
-        const lastRow = meta.dataRowCount + 1; // +1 for header
-        const ref = `A1:${lastCol}${lastRow}`;
+        const startRow = meta.startRow || 1;
+        const lastRow = startRow + meta.dataRowCount; // startRow is header, data ends at startRow + dataRowCount
+        const ref = `A${startRow}:${lastCol}${lastRow}`;
 
         const colsXml = meta.columns.map((col, idx) => {
             const name = String(col.header)
@@ -1753,9 +1763,21 @@ async function injectExcelTables(zip, tableMetadata) {
         const sheetPath = `xl/worksheets/sheet${meta.sheetIndex + 1}.xml`;
         let sheetXml = await zip.file(sheetPath)?.async('string');
         if (sheetXml) {
-            const tableParts = `<tableParts count="1"><tablePart r:id="${rId}"/></tableParts>`;
-            // Insert right before </worksheet> to avoid conflicts with conditional formatting
-            sheetXml = sheetXml.replace('</worksheet>', tableParts + '</worksheet>');
+            if (sheetXml.includes('<tableParts')) {
+                // Sheet already has tableParts — increment count and append new tablePart
+                sheetXml = sheetXml.replace(
+                    /<tableParts count="(\d+)">/,
+                    (match, count) => `<tableParts count="${parseInt(count) + 1}">`
+                );
+                sheetXml = sheetXml.replace(
+                    '</tableParts>',
+                    `<tablePart r:id="${rId}"/></tableParts>`
+                );
+            } else {
+                const tableParts = `<tableParts count="1"><tablePart r:id="${rId}"/></tableParts>`;
+                // Insert right before </worksheet> to avoid conflicts with conditional formatting
+                sheetXml = sheetXml.replace('</worksheet>', tableParts + '</worksheet>');
+            }
             zip.file(sheetPath, sheetXml);
         }
     }
@@ -2290,23 +2312,49 @@ export async function exportMasterListCSV() {
         });
 
         // --- ON-GROUND ATTENDANCE SHEET ---
-        // Only generated when students have attendance data (_attendanceRows)
-        const onGroundStudents = students.filter(s =>
-            s._attendanceRows && s._attendanceRows.length > 0 &&
-            // On-Ground = Shift does NOT contain "Online"
-            !(s.shift && String(s.shift).toLowerCase().includes('online'))
-        );
+        // Filter at the attendance-row level: only include rows where shift is NOT "Online"
+        const studentsWithAttendance = students.filter(s => s._attendanceRows && s._attendanceRows.length > 0);
+
+        // Collect on-ground rows and identify online instructors
+        const onlineInstructors = new Set(); // Instructors who teach ANY online student
+        const onGroundRowsByStudent = new Map(); // SyStudentId → { name, rows: [] }
+
+        for (const student of studentsWithAttendance) {
+            const onGroundRows = [];
+            for (const row of student._attendanceRows) {
+                const isOnline = row.shift && String(row.shift).toLowerCase().includes('online');
+                if (isOnline) {
+                    // Track this instructor as having online students
+                    if (row.instructorName) {
+                        onlineInstructors.add(row.instructorName);
+                    }
+                } else {
+                    onGroundRows.push(row);
+                }
+            }
+            if (onGroundRows.length > 0) {
+                onGroundRowsByStudent.set(student.SyStudentId || student.name, {
+                    name: student.name,
+                    rows: onGroundRows
+                });
+            }
+        }
 
         let attendanceSheetIndex = -1;
-        if (onGroundStudents.length > 0) {
+        let attendanceInstructorRowCount = 0;
+        let attendanceStudentRowCount = 0;
+        if (onGroundRowsByStudent.size > 0) {
             attendanceSheetIndex = 2 + ldaGroups.length; // After Master List, Missing Assignments, and LDA sheets
 
             // --- Table 1: Instructor Summary ---
-            // Aggregate AttMin and SchedMin per instructor across all on-ground students
+            // Aggregate AttMin and SchedMin per instructor (only on-ground rows, excluding online instructors)
             const instructorAgg = new Map(); // instructorName → { attMin, schedMin }
-            for (const student of onGroundStudents) {
-                for (const row of student._attendanceRows) {
+            for (const [, { rows }] of onGroundRowsByStudent) {
+                for (const row of rows) {
                     const name = row.instructorName || 'Unknown';
+                    // Skip instructors who also teach online students
+                    if (onlineInstructors.has(name)) continue;
+
                     if (!instructorAgg.has(name)) {
                         instructorAgg.set(name, { attMin: 0, schedMin: 0 });
                     }
@@ -2325,19 +2373,22 @@ export async function exportMasterListCSV() {
                 });
 
             // --- Table 2: Student Summary ---
-            // Aggregate AttMin and SchedMin per student across all their class sessions
-            const studentRows = onGroundStudents
-                .map(student => {
+            // Aggregate AttMin and SchedMin per student (only on-ground rows)
+            const studentRows = [...onGroundRowsByStudent.values()]
+                .map(({ name, rows }) => {
                     let totalAttMin = 0;
                     let totalSchedMin = 0;
-                    for (const row of student._attendanceRows) {
+                    for (const row of rows) {
                         totalAttMin += row.attMin;
                         totalSchedMin += row.schedMin;
                     }
                     const pct = totalSchedMin > 0 ? (totalAttMin / totalSchedMin) * 100 : 0;
-                    return [student.name, totalAttMin, totalSchedMin, Math.round(pct * 100) / 100];
+                    return [name, totalAttMin, totalSchedMin, Math.round(pct * 100) / 100];
                 })
                 .sort((a, b) => a[0].localeCompare(b[0])); // Sort alphabetically by student name
+
+            attendanceInstructorRowCount = instructorRows.length;
+            attendanceStudentRowCount = studentRows.length;
 
             // Build sheet data: Table 1 header, instructor rows, gap, Table 2 header, student rows
             const attendanceData = [];
@@ -2367,7 +2418,7 @@ export async function exportMasterListCSV() {
 
             XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
-            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students`);
+            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students (${onlineInstructors.size} online instructors excluded)`);
         }
 
         const timestamp = new Date().toISOString().split('T')[0];
@@ -2381,6 +2432,15 @@ export async function exportMasterListCSV() {
         };
 
         // Build table metadata for all sheets
+        const attendanceTableColumns = [
+            { header: 'Instructor Name' }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+        const studentTableColumns = [
+            { header: 'Student Name' }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+
         const tableMetadata = [
             { sheetIndex: 0, displayName: 'MasterList', columns: activeColumns, dataRowCount: students.length },
             { sheetIndex: 1, displayName: 'MissingAssignments', columns: EXPORT_MISSING_ASSIGNMENTS_COLUMNS, dataRowCount: missingAssignmentsData.length - 1 }
@@ -2394,6 +2454,28 @@ export async function exportMasterListCSV() {
                 dataRowCount: group.students.length
             });
         });
+
+        // Add On-Ground Attendance table metadata (two tables on one sheet)
+        if (attendanceSheetIndex !== -1 && attendanceInstructorRowCount > 0) {
+            // Table 1: Instructor Summary — starts at row 1
+            tableMetadata.push({
+                sheetIndex: attendanceSheetIndex,
+                displayName: 'InstructorAttendance',
+                columns: attendanceTableColumns,
+                dataRowCount: attendanceInstructorRowCount,
+                startRow: 1
+            });
+            // Table 2: Student Summary — starts after instructor rows + gap row
+            // Row layout: 1=instructor header, 2..N+1=instructor data, N+2=gap, N+3=student header
+            const studentTableStartRow = attendanceInstructorRowCount + 3;
+            tableMetadata.push({
+                sheetIndex: attendanceSheetIndex,
+                displayName: 'StudentAttendance',
+                columns: studentTableColumns,
+                dataRowCount: attendanceStudentRowCount,
+                startRow: studentTableStartRow
+            });
+        }
 
         // Write workbook to buffer, then inject conditional formatting, tab colors, row highlights, and tables via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
