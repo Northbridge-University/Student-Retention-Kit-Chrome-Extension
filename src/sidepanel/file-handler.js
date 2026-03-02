@@ -1190,6 +1190,17 @@ export function handleFileImport(files, onSuccess) {
                 if (suppIsValid) {
                     const { content: suppContent, isCSV: suppIsCSV } = await readFileContent(supplementaryFile);
                     mergeSupplementaryFile(students, suppContent, suppIsCSV);
+
+                    // Recalculate daysOut for students whose lda came from the supplementary file.
+                    // mergeSupplementaryFile adds lda values but cannot compute daysOut
+                    // because it lacks referenceDate.
+                    if (referenceDate) {
+                        for (const student of students) {
+                            if (student.lda && (student.daysOut === undefined || student.daysOut === null)) {
+                                student.daysOut = calculateDaysSinceLastAttendance(student.lda, referenceDate);
+                            }
+                        }
+                    }
                 }
             }
 
