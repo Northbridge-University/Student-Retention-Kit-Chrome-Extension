@@ -365,7 +365,8 @@ export const FIELD_ALIASES = {
     attMin: ['attendedminutes', 'attendanceminutes', 'attminutes'],
     schedMin: ['scheduledminutes', 'schedminutes', 'scheduledmin'],
     attComment: ['attendancecomment', 'attcomments', 'attendancecomments'],
-    attDate: ['date', 'attendancedate', 'classdate', 'sessiondate']
+    attDate: ['date', 'attendancedate', 'classdate', 'sessiondate'],
+    startTime: ['classstarttime', 'scheduledstarttime', 'sessionstarttime']
 };
 
 /**

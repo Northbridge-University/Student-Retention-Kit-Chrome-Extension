@@ -577,6 +577,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         let attInstructorColIndex = -1;
         let attCommentColIndex = -1;
         let attDateColIndex = -1;
+        let attStartTimeColIndex = -1;
         if (isAttendanceReport) {
             // Find AttMin column
             for (let i = 0; i < normalizedHeaders.length; i++) {
@@ -613,6 +614,14 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 const nh = normalizedHeaders[i];
                 if (nh === 'attdate' || _normalizedAliasToField[nh] === 'attDate') {
                     attDateColIndex = i;
+                    break;
+                }
+            }
+            // Find StartTime column for shift determination
+            for (let i = 0; i < normalizedHeaders.length; i++) {
+                const nh = normalizedHeaders[i];
+                if (nh === 'starttime' || _normalizedAliasToField[nh] === 'startTime') {
+                    attStartTimeColIndex = i;
                     break;
                 }
             }
@@ -724,12 +733,16 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 const attDateVal = attDateColIndex !== -1 && attDateColIndex < row.length
                     ? String(row[attDateColIndex] || '').trim()
                     : '';
+                const startTimeVal = attStartTimeColIndex !== -1 && attStartTimeColIndex < row.length
+                    ? String(row[attStartTimeColIndex] || '').trim()
+                    : '';
                 attendanceRowsBySyId.get(syId).push({
                     attMin: attMinVal,
                     schedMin: schedMinVal,
                     instructorName: instructorVal,
                     attComment: attCommentVal,
-                    attDate: attDateVal
+                    attDate: attDateVal,
+                    startTime: startTimeVal
                 });
             }
 
@@ -966,6 +979,7 @@ function mergeSupplementaryFile(students, data, isCSV) {
     let suppAttInstructorCol = -1;
     let suppAttCommentCol = -1;
     let suppAttDateCol = -1;
+    let suppStartTimeCol = -1;
     if (isSuppAttendance) {
         for (let i = 0; i < normalizedHeaders.length; i++) {
             const nh = normalizedHeaders[i];
@@ -980,6 +994,9 @@ function mergeSupplementaryFile(students, data, isCSV) {
             }
             if (suppAttDateCol === -1 && (nh === 'attdate' || _normalizedAliasToField[nh] === 'attDate')) {
                 suppAttDateCol = i;
+            }
+            if (suppStartTimeCol === -1 && (nh === 'starttime' || _normalizedAliasToField[nh] === 'startTime')) {
+                suppStartTimeCol = i;
             }
         }
         // InstructorName column
@@ -1155,12 +1172,16 @@ function mergeSupplementaryFile(students, data, isCSV) {
             const attDateVal = suppAttDateCol !== -1 && suppAttDateCol < row.length
                 ? String(row[suppAttDateCol] || '').trim()
                 : '';
+            const startTimeVal = suppStartTimeCol !== -1 && suppStartTimeCol < row.length
+                ? String(row[suppStartTimeCol] || '').trim()
+                : '';
             student._attendanceRows.push({
                 attMin: attMinVal,
                 schedMin: schedMinVal,
                 instructorName: instructorVal,
                 attComment: attCommentVal,
-                attDate: attDateVal
+                attDate: attDateVal,
+                startTime: startTimeVal
             });
         }
         console.log(`Supplementary attendance report: merged attendance rows for ${students.filter(s => s._attendanceRows).length} students`);
@@ -1765,11 +1786,13 @@ async function injectExcelTables(zip, tableMetadata) {
 
         // --- Create xl/tables/tableN.xml ---
         const safeName = meta.displayName.replace(/[^a-zA-Z0-9_]/g, '_');
-        const lastCol = columnIndexToLetter(meta.columns.length - 1);
+        const startCol = meta.startCol || 0;
+        const firstColLetter = columnIndexToLetter(startCol);
+        const lastCol = columnIndexToLetter(startCol + meta.columns.length - 1);
         const startRow = meta.startRow || 1;
         const hasTotals = meta.totalsRowFunctions && meta.totalsRowFunctions.length > 0;
         const lastRow = startRow + meta.dataRowCount + (hasTotals ? 1 : 0);
-        const ref = `A${startRow}:${lastCol}${lastRow}`;
+        const ref = `${firstColLetter}${startRow}:${lastCol}${lastRow}`;
 
         const colsXml = meta.columns.map((col, idx) => {
             const name = String(col.header)
@@ -1791,7 +1814,7 @@ async function injectExcelTables(zip, tableMetadata) {
             ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"` +
             ` id="${tableId}" name="${safeName}" displayName="${safeName}" ref="${ref}"` +
             ` totalsRowShown="${hasTotals ? '1' : '0'}"${hasTotals ? ' totalsRowCount="1"' : ''}>` +
-                `<autoFilter ref="A${startRow}:${lastCol}${startRow + meta.dataRowCount}"/>` +
+                `<autoFilter ref="${firstColLetter}${startRow}:${lastCol}${startRow + meta.dataRowCount}"/>` +
                 `<tableColumns count="${meta.columns.length}">${colsXml}</tableColumns>` +
                 `<tableStyleInfo name="TableStyleMedium16" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>` +
             `</table>`;
@@ -1832,7 +1855,7 @@ async function injectExcelTables(zip, tableMetadata) {
                     const func = meta.totalsRowFunctions[colIdx];
                     if (!func) continue;
 
-                    const colLetter = columnIndexToLetter(colIdx);
+                    const colLetter = columnIndexToLetter(startCol + colIdx);
                     const cellRef = `${colLetter}${totalsRowNum}`;
 
                     let formula;
@@ -1856,13 +1879,31 @@ async function injectExcelTables(zip, tableMetadata) {
                 }
 
                 if (formulaCells) {
-                    // Find the totals row and append formula cells at the END (before </row>)
-                    // This preserves column ordering: A (label) then B, C, D (formulas)
+                    // Insert formula cells into the totals row, maintaining column sort order.
+                    // When multiple tables share a row (side-by-side layout), cells must be
+                    // in ascending column order or Excel will flag them as corrupt.
                     const rowRegex = new RegExp(
                         `(<row r="${totalsRowNum}"[^>]*>)([\\s\\S]*?)(</row>)`
                     );
                     if (rowRegex.test(sheetXml)) {
-                        sheetXml = sheetXml.replace(rowRegex, `$1$2${formulaCells}$3`);
+                        sheetXml = sheetXml.replace(rowRegex, (_, open, existing, close) => {
+                            // Parse all cells (existing + new) into a map keyed by column letters
+                            const allCells = (existing + formulaCells).match(/<c\s[^>]*>.*?<\/c>|<c\s[^/]*\/>/g) || [];
+                            const cellMap = new Map();
+                            for (const cell of allCells) {
+                                const refMatch = cell.match(/r="([A-Z]+)\d+"/);
+                                if (refMatch) cellMap.set(refMatch[1], cell);
+                            }
+                            // Sort by column: shorter letters first (A < AA), then alphabetically
+                            const sorted = [...cellMap.entries()]
+                                .sort((a, b) => {
+                                    if (a[0].length !== b[0].length) return a[0].length - b[0].length;
+                                    return a[0] < b[0] ? -1 : 1;
+                                })
+                                .map(([, xml]) => xml)
+                                .join('');
+                            return `${open}${sorted}${close}`;
+                        });
                     }
                 }
             }
@@ -2009,7 +2050,19 @@ export async function exportAttendanceOnly() {
             return;
         }
 
-        // Instructor Summary
+        // Helper: determine shift from startTime string
+        function getShift(startTime) {
+            if (!startTime) return 'Unknown';
+            const s = String(startTime).toLowerCase().trim();
+            if (s.includes('6:00:00 pm') || s.includes('18:00')) return 'Evening';
+            if (s.includes('9:00:00 am') || s.includes('09:00') || s.includes('9:00')) return 'Morning';
+            // Fallback: check AM/PM
+            if (s.includes('pm')) return 'Evening';
+            if (s.includes('am')) return 'Morning';
+            return 'Unknown';
+        }
+
+        // Instructor Summary (combined)
         const instructorAgg = new Map();
         for (const [, { rows }] of onGroundRowsByStudent) {
             for (const row of rows) {
@@ -2030,6 +2083,29 @@ export async function exportAttendanceOnly() {
             })
             .sort((a, b) => b[3] - a[3]); // highest attendance % first
 
+        // Instructor Summary by Shift
+        const instructorShiftAgg = new Map(); // key: "name|shift"
+        for (const [, { rows }] of onGroundRowsByStudent) {
+            for (const row of rows) {
+                const name = row.instructorName || 'Unknown';
+                const shift = getShift(row.startTime);
+                const key = `${name}|${shift}`;
+                if (!instructorShiftAgg.has(key)) {
+                    instructorShiftAgg.set(key, { name, shift, attMin: 0, schedMin: 0 });
+                }
+                const agg = instructorShiftAgg.get(key);
+                agg.attMin += row.attMin;
+                agg.schedMin += row.schedMin;
+            }
+        }
+
+        const instructorShiftRows = [...instructorShiftAgg.values()]
+            .map(agg => {
+                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                return [agg.name, agg.shift, agg.attMin, agg.schedMin, pct];
+            })
+            .sort((a, b) => b[4] - a[4]); // highest attendance % first
+
         // Student Summary
         const studentRows = [...onGroundRowsByStudent.values()]
             .map(({ name, rows }) => {
@@ -2044,27 +2120,14 @@ export async function exportAttendanceOnly() {
             })
             .sort((a, b) => a[3] - b[3]); // lowest attendance % first
 
-        // Build sheet data with totals rows
-        const attendanceData = [];
-        attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
-        for (const row of instructorRows) attendanceData.push(row);
-        // Totals row for instructor table (label + formulas handled by Excel table)
-        attendanceData.push(['Total', null, null, null]);
-        attendanceData.push([]);
-        attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
-        for (const row of studentRows) attendanceData.push(row);
-        // Totals row for student table
-        attendanceData.push(['Total', null, null, null]);
-
-        // Daily Trend: aggregate all on-ground rows by date
+        // Daily Trend: aggregate all on-ground rows by date (combined)
         const dailyAgg = new Map();
         for (const [, { rows }] of onGroundRowsByStudent) {
             for (const row of rows) {
                 if (!row.attDate) continue;
-                // Parse date string (could be Excel serial or text) into a Date object
                 const dateObj = parseDate(convertExcelDate(row.attDate));
                 if (!dateObj) continue;
-                const key = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD for sorting
+                const key = dateObj.toISOString().split('T')[0];
                 if (!dailyAgg.has(key)) {
                     dailyAgg.set(key, { dateObj, attMin: 0, schedMin: 0 });
                 }
@@ -2074,114 +2137,233 @@ export async function exportAttendanceOnly() {
             }
         }
 
+        // Daily Trend by Shift
+        const dailyShiftAgg = new Map(); // key: "date|shift"
+        for (const [, { rows }] of onGroundRowsByStudent) {
+            for (const row of rows) {
+                if (!row.attDate) continue;
+                const dateObj = parseDate(convertExcelDate(row.attDate));
+                if (!dateObj) continue;
+                const dateKey = dateObj.toISOString().split('T')[0];
+                const shift = getShift(row.startTime);
+                const key = `${dateKey}|${shift}`;
+                if (!dailyShiftAgg.has(key)) {
+                    dailyShiftAgg.set(key, { dateObj, shift, attMin: 0, schedMin: 0 });
+                }
+                const agg = dailyShiftAgg.get(key);
+                agg.attMin += row.attMin;
+                agg.schedMin += row.schedMin;
+            }
+        }
+
         const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        function formatDateLabel(d) {
+            const dayName = DAY_ABBR[d.getDay()];
+            const month = MONTH_ABBR[d.getMonth()];
+            const day = d.getDate();
+            const yr = String(d.getFullYear()).slice(-2);
+            return `${month} ${day}, ${yr} (${dayName})`;
+        }
+
         const dailyRows = [...dailyAgg.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([, agg]) => {
-                const d = agg.dateObj;
-                const dayName = DAY_ABBR[d.getDay()];
-                const month = MONTH_ABBR[d.getMonth()];
-                const day = d.getDate();
-                const yr = String(d.getFullYear()).slice(-2);
-                const label = `${month} ${day}, ${yr} (${dayName})`;
                 const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
-                return [label, agg.attMin, agg.schedMin, pct];
+                return [formatDateLabel(agg.dateObj), agg.attMin, agg.schedMin, pct];
             });
 
-        // Append daily trend table after the student table
+        const dailyShiftRows = [...dailyShiftAgg.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([, agg]) => {
+                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                return [formatDateLabel(agg.dateObj), agg.shift, agg.attMin, agg.schedMin, pct];
+            });
+
+        // ===== Build sheet layout =====
+        // Left side (cols A-D): Instructor → Daily Timeline → Students
+        // Right side (cols F-J): Instructor by Shift → Daily Timeline by Shift (with 1 col gap)
+        const RIGHT_START_COL = 5; // Column F (0-indexed = 5)
+
+        // --- Left side: build main data array ---
+        // Table order: Instructor, Daily Timeline, Students
+        const attendanceData = [];
+
+        // 1. Instructor table
+        attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+        for (const row of instructorRows) attendanceData.push(row);
+        attendanceData.push(['Total', null, null, null]); // totals row
+
+        // 2. Gap + Daily Timeline table
+        attendanceData.push([]); // gap row
+        const dailyTableLeftStartRow = attendanceData.length; // 0-indexed row where daily header will be
         if (dailyRows.length > 0) {
-            attendanceData.push([]);
             attendanceData.push(['Date', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
             for (const row of dailyRows) attendanceData.push(row);
-            attendanceData.push(['Total', null, null, null]);
+            attendanceData.push(['Total', null, null, null]); // totals row
         }
+
+        // 3. Gap + Student table
+        attendanceData.push([]); // gap row
+        const studentTableStartRow = attendanceData.length; // 0-indexed
+        attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+        for (const row of studentRows) attendanceData.push(row);
+        attendanceData.push(['Total', null, null, null]); // totals row
 
         const wb = XLSX.utils.book_new();
         const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
+
+        // --- Right side: Instructor by Shift table (starting at col F, row 1) ---
+        const instShiftData = [];
+        instShiftData.push(['Instructor Name', 'Shift', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+        for (const row of instructorShiftRows) instShiftData.push(row);
+        instShiftData.push(['Total', null, null, null, null]); // totals row
+        XLSX.utils.sheet_add_aoa(wsAttendance, instShiftData, { origin: { r: 0, c: RIGHT_START_COL } });
+
+        // --- Right side: Daily Timeline by Shift table ---
+        const dailyShiftStartRow = instructorShiftRows.length + 3; // header + data + totals + gap
+        if (dailyShiftRows.length > 0) {
+            const dailyShiftData = [];
+            dailyShiftData.push(['Date', 'Shift', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+            for (const row of dailyShiftRows) dailyShiftData.push(row);
+            dailyShiftData.push(['Total', null, null, null, null]); // totals row
+            XLSX.utils.sheet_add_aoa(wsAttendance, dailyShiftData, { origin: { r: dailyShiftStartRow, c: RIGHT_START_COL } });
+        }
+
+        // Set column widths (A-D left tables, E gap, F-J right tables)
         wsAttendance['!cols'] = [
-            { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 15 }
+            { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 15 }, // A-D
+            { wch: 3 },  // E (gap)
+            { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 15 } // F-J
         ];
 
-        // Apply percentage format to Attendance % cells in all tables
+        // Apply percentage format to Attendance % cells in left-side tables
+        // Instructor table (col D, 0-indexed col 3)
         applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
-        const studentStartDataRow = instructorRows.length + 4;
-        applyPercentageFormat(wsAttendance, 3, studentStartDataRow, studentStartDataRow + studentRows.length);
+        // Daily Timeline table (col D)
         if (dailyRows.length > 0) {
-            // +2 for gap row and header row after student totals row
-            const dailyStartDataRow = studentStartDataRow + studentRows.length + 3;
-            applyPercentageFormat(wsAttendance, 3, dailyStartDataRow, dailyStartDataRow + dailyRows.length);
+            const dailyDataStart = dailyTableLeftStartRow + 1; // skip header
+            applyPercentageFormat(wsAttendance, 3, dailyDataStart, dailyDataStart + dailyRows.length);
+        }
+        // Student table (col D)
+        const studentDataStart = studentTableStartRow + 1; // skip header
+        applyPercentageFormat(wsAttendance, 3, studentDataStart, studentDataStart + studentRows.length);
+
+        // Apply percentage format to right-side tables (col J = index 9)
+        // Instructor by Shift table
+        applyPercentageFormat(wsAttendance, RIGHT_START_COL + 4, 1, instructorShiftRows.length + 1);
+        // Daily Timeline by Shift table
+        if (dailyShiftRows.length > 0) {
+            const dailyShiftDataStart = dailyShiftStartRow + 1;
+            applyPercentageFormat(wsAttendance, RIGHT_START_COL + 4, dailyShiftDataStart, dailyShiftDataStart + dailyShiftRows.length);
         }
 
         XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
-        // Table metadata with totals rows
-        const attendanceTableColumns = [
-            { header: 'Instructor Name' }, { header: 'Total Attended Minutes' },
-            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
-        ];
-        const studentTableColumns = [
-            { header: 'Student Name' }, { header: 'Total Attended Minutes' },
-            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
-        ];
-        const dailyTableColumns = [
-            { header: 'Date' }, { header: 'Total Attended Minutes' },
-            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
-        ];
-        const totalsFunctions = [null, 'sum', 'sum', 'custom'];
-        const totalsLabels = ['Total', null, null, null];
+        // ===== Table metadata =====
+        const totalsFunctions4 = [null, 'sum', 'sum', 'custom'];
+        const totalsLabels4 = ['Total', null, null, null];
+        const totalsFunctions5 = [null, null, 'sum', 'sum', 'custom'];
+        const totalsLabels5 = ['Total', null, null, null, null];
 
         const tableMetadata = [];
+        const condFmtSheets = [];
+
         if (instructorRows.length > 0) {
+            // Left: Instructor table (startRow is 1-based)
             const instName = 'InstructorAttendance';
             tableMetadata.push({
                 sheetIndex: 0,
                 displayName: instName,
-                columns: attendanceTableColumns,
+                columns: [
+                    { header: 'Instructor Name' }, { header: 'Total Attended Minutes' },
+                    { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+                ],
                 dataRowCount: instructorRows.length,
                 startRow: 1,
-                totalsRowFunctions: totalsFunctions,
-                totalsRowLabels: totalsLabels,
+                totalsRowFunctions: totalsFunctions4,
+                totalsRowLabels: totalsLabels4,
                 totalsCustomFormulas: { 3: `${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]` }
             });
-            const studentTableStartRow = instructorRows.length + 4;
-            const studName = 'StudentAttendance';
-            tableMetadata.push({
-                sheetIndex: 0,
-                displayName: studName,
-                columns: studentTableColumns,
-                dataRowCount: studentRows.length,
-                startRow: studentTableStartRow,
-                totalsRowFunctions: totalsFunctions,
-                totalsRowLabels: totalsLabels,
-                totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
-            });
+            condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: instructorRows.length, startRow: 1, type: 'attendance' });
+
+            // Left: Daily Timeline table
             if (dailyRows.length > 0) {
-                const dailyTableStartRow = studentTableStartRow + studentRows.length + 3;
                 const dailyName = 'DailyAttendanceTrend';
+                const dailyStartRow1 = dailyTableLeftStartRow + 1; // 1-based
                 tableMetadata.push({
                     sheetIndex: 0,
                     displayName: dailyName,
-                    columns: dailyTableColumns,
+                    columns: [
+                        { header: 'Date' }, { header: 'Total Attended Minutes' },
+                        { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+                    ],
                     dataRowCount: dailyRows.length,
-                    startRow: dailyTableStartRow,
-                    totalsRowFunctions: totalsFunctions,
-                    totalsRowLabels: totalsLabels,
+                    startRow: dailyStartRow1,
+                    totalsRowFunctions: totalsFunctions4,
+                    totalsRowLabels: totalsLabels4,
                     totalsCustomFormulas: { 3: `${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]` }
                 });
+                condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: dailyRows.length, startRow: dailyStartRow1, type: 'attendance' });
             }
-        }
 
-        // Color scale conditional formatting for Attendance % column (index 3) in each table
-        const condFmtSheets = [];
-        if (instructorRows.length > 0) {
-            condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: instructorRows.length, startRow: 1, type: 'attendance' });
-            const studentTableStartRow = instructorRows.length + 4;
-            condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: studentRows.length, startRow: studentTableStartRow, type: 'attendance' });
-            if (dailyRows.length > 0) {
-                const dailyTableStartRow = studentTableStartRow + studentRows.length + 3;
-                condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: dailyRows.length, startRow: dailyTableStartRow, type: 'attendance' });
+            // Left: Student table
+            const studName = 'StudentAttendance';
+            const studStartRow1 = studentTableStartRow + 1; // 1-based
+            tableMetadata.push({
+                sheetIndex: 0,
+                displayName: studName,
+                columns: [
+                    { header: 'Student Name' }, { header: 'Total Attended Minutes' },
+                    { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+                ],
+                dataRowCount: studentRows.length,
+                startRow: studStartRow1,
+                totalsRowFunctions: totalsFunctions4,
+                totalsRowLabels: totalsLabels4,
+                totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
+            });
+            condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: studentRows.length, startRow: studStartRow1, type: 'attendance' });
+
+            // Right: Instructor by Shift table
+            const instShiftName = 'InstructorByShift';
+            tableMetadata.push({
+                sheetIndex: 0,
+                displayName: instShiftName,
+                columns: [
+                    { header: 'Instructor Name' }, { header: 'Shift' }, { header: 'Total Attended Minutes' },
+                    { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+                ],
+                dataRowCount: instructorShiftRows.length,
+                startRow: 1,
+                startCol: RIGHT_START_COL,
+                totalsRowFunctions: totalsFunctions5,
+                totalsRowLabels: totalsLabels5,
+                totalsCustomFormulas: { 4: `${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+            });
+            condFmtSheets.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, rowCount: instructorShiftRows.length, startRow: 1, type: 'attendance' });
+
+            // Right: Daily Timeline by Shift table
+            if (dailyShiftRows.length > 0) {
+                const dailyShiftName = 'DailyTrendByShift';
+                const dailyShiftStartRow1 = dailyShiftStartRow + 1; // 1-based
+                tableMetadata.push({
+                    sheetIndex: 0,
+                    displayName: dailyShiftName,
+                    columns: [
+                        { header: 'Date' }, { header: 'Shift' }, { header: 'Total Attended Minutes' },
+                        { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+                    ],
+                    dataRowCount: dailyShiftRows.length,
+                    startRow: dailyShiftStartRow1,
+                    startCol: RIGHT_START_COL,
+                    totalsRowFunctions: totalsFunctions5,
+                    totalsRowLabels: totalsLabels5,
+                    totalsCustomFormulas: { 4: `${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+                });
+                condFmtSheets.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, rowCount: dailyShiftRows.length, startRow: dailyShiftStartRow1, type: 'attendance' });
             }
         }
 
@@ -2693,16 +2875,26 @@ export async function exportMasterListCSV() {
         let attendanceSheetIndex = -1;
         let attendanceInstructorRowCount = 0;
         let attendanceStudentRowCount = 0;
+        let attendanceLayoutInfo = null;
         if (onGroundRowsByStudent.size > 0) {
             attendanceSheetIndex = 2 + ldaGroups.length; // After Master List, Missing Assignments, and LDA sheets
 
-            // --- Table 1: Instructor Summary ---
-            // Aggregate AttMin and SchedMin per instructor (only clock in/out rows)
-            const instructorAgg = new Map(); // instructorName → { attMin, schedMin }
+            // Helper: determine shift from startTime string
+            function getShift(startTime) {
+                if (!startTime) return 'Unknown';
+                const s = String(startTime).toLowerCase().trim();
+                if (s.includes('6:00:00 pm') || s.includes('18:00')) return 'Evening';
+                if (s.includes('9:00:00 am') || s.includes('09:00') || s.includes('9:00')) return 'Morning';
+                if (s.includes('pm')) return 'Evening';
+                if (s.includes('am')) return 'Morning';
+                return 'Unknown';
+            }
+
+            // --- Instructor Summary (combined) ---
+            const instructorAgg = new Map();
             for (const [, { rows }] of onGroundRowsByStudent) {
                 for (const row of rows) {
                     const name = row.instructorName || 'Unknown';
-
                     if (!instructorAgg.has(name)) {
                         instructorAgg.set(name, { attMin: 0, schedMin: 0 });
                     }
@@ -2712,16 +2904,36 @@ export async function exportMasterListCSV() {
                 }
             }
 
-            // Sort instructors alphabetically
             const instructorRows = [...instructorAgg.entries()]
-                .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([name, agg]) => {
                     const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
                     return [name, agg.attMin, agg.schedMin, pct];
-                });
+                })
+                .sort((a, b) => b[3] - a[3]);
 
-            // --- Table 2: Student Summary ---
-            // Aggregate AttMin and SchedMin per student (only clock in/out rows)
+            // --- Instructor Summary by Shift ---
+            const instructorShiftAgg = new Map();
+            for (const [, { rows }] of onGroundRowsByStudent) {
+                for (const row of rows) {
+                    const name = row.instructorName || 'Unknown';
+                    const shift = getShift(row.startTime);
+                    const key = `${name}|${shift}`;
+                    if (!instructorShiftAgg.has(key)) {
+                        instructorShiftAgg.set(key, { name, shift, attMin: 0, schedMin: 0 });
+                    }
+                    const agg = instructorShiftAgg.get(key);
+                    agg.attMin += row.attMin;
+                    agg.schedMin += row.schedMin;
+                }
+            }
+            const instructorShiftRows = [...instructorShiftAgg.values()]
+                .map(agg => {
+                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    return [agg.name, agg.shift, agg.attMin, agg.schedMin, pct];
+                })
+                .sort((a, b) => b[4] - a[4]);
+
+            // --- Student Summary ---
             const studentRows = [...onGroundRowsByStudent.values()]
                 .map(({ name, rows }) => {
                     let totalAttMin = 0;
@@ -2733,49 +2945,138 @@ export async function exportMasterListCSV() {
                     const pct = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
                     return [name, totalAttMin, totalSchedMin, pct];
                 })
-                .sort((a, b) => a[0].localeCompare(b[0])); // Sort alphabetically by student name
+                .sort((a, b) => a[3] - b[3]);
+
+            // --- Daily Trend (combined) ---
+            const dailyAgg = new Map();
+            for (const [, { rows }] of onGroundRowsByStudent) {
+                for (const row of rows) {
+                    if (!row.attDate) continue;
+                    const dateObj = parseDate(convertExcelDate(row.attDate));
+                    if (!dateObj) continue;
+                    const key = dateObj.toISOString().split('T')[0];
+                    if (!dailyAgg.has(key)) dailyAgg.set(key, { dateObj, attMin: 0, schedMin: 0 });
+                    const agg = dailyAgg.get(key);
+                    agg.attMin += row.attMin;
+                    agg.schedMin += row.schedMin;
+                }
+            }
+
+            // --- Daily Trend by Shift ---
+            const dailyShiftAgg = new Map();
+            for (const [, { rows }] of onGroundRowsByStudent) {
+                for (const row of rows) {
+                    if (!row.attDate) continue;
+                    const dateObj = parseDate(convertExcelDate(row.attDate));
+                    if (!dateObj) continue;
+                    const dateKey = dateObj.toISOString().split('T')[0];
+                    const shift = getShift(row.startTime);
+                    const key = `${dateKey}|${shift}`;
+                    if (!dailyShiftAgg.has(key)) dailyShiftAgg.set(key, { dateObj, shift, attMin: 0, schedMin: 0 });
+                    const agg = dailyShiftAgg.get(key);
+                    agg.attMin += row.attMin;
+                    agg.schedMin += row.schedMin;
+                }
+            }
+
+            const DAY_ABBR_ATT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const MONTH_ABBR_ATT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            function fmtDateLabel(d) {
+                return `${MONTH_ABBR_ATT[d.getMonth()]} ${d.getDate()}, ${String(d.getFullYear()).slice(-2)} (${DAY_ABBR_ATT[d.getDay()]})`;
+            }
+
+            const dailyRows = [...dailyAgg.entries()]
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([, agg]) => {
+                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    return [fmtDateLabel(agg.dateObj), agg.attMin, agg.schedMin, pct];
+                });
+
+            const dailyShiftRows = [...dailyShiftAgg.entries()]
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([, agg]) => {
+                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    return [fmtDateLabel(agg.dateObj), agg.shift, agg.attMin, agg.schedMin, pct];
+                });
 
             attendanceInstructorRowCount = instructorRows.length;
             attendanceStudentRowCount = studentRows.length;
 
-            // Build sheet data: Table 1 header, instructor rows, totals, gap, Table 2 header, student rows, totals
+            // ===== Build sheet: Instructor → Daily Timeline → Students (left), Shift tables (right) =====
+            const RIGHT_COL = 5; // Column F (0-indexed)
             const attendanceData = [];
-            // Instructor table header
+
+            // Left: Instructor table
             attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
-            for (const row of instructorRows) {
-                attendanceData.push(row);
-            }
-            // Totals row for instructor table
+            for (const row of instructorRows) attendanceData.push(row);
             attendanceData.push(['Total', null, null, null]);
-            // Gap row between tables
+
+            // Left: Gap + Daily Timeline table
             attendanceData.push([]);
-            // Student table header
-            attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
-            for (const row of studentRows) {
-                attendanceData.push(row);
+            const attDailyStartRow = attendanceData.length; // 0-indexed
+            if (dailyRows.length > 0) {
+                attendanceData.push(['Date', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+                for (const row of dailyRows) attendanceData.push(row);
+                attendanceData.push(['Total', null, null, null]);
             }
-            // Totals row for student table
+
+            // Left: Gap + Student table
+            attendanceData.push([]);
+            const attStudentStartRow = attendanceData.length; // 0-indexed
+            attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+            for (const row of studentRows) attendanceData.push(row);
             attendanceData.push(['Total', null, null, null]);
 
             const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
 
-            // Set column widths
-            const attendanceColWidths = [
-                { wch: 30 }, // Name
-                { wch: 22 }, // Attended Minutes
-                { wch: 22 }, // Scheduled Minutes
-                { wch: 15 }  // Percentage
-            ];
-            wsAttendance['!cols'] = attendanceColWidths;
+            // Right: Instructor by Shift table
+            const instShiftData = [['Instructor Name', 'Shift', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']];
+            for (const row of instructorShiftRows) instShiftData.push(row);
+            instShiftData.push(['Total', null, null, null, null]);
+            XLSX.utils.sheet_add_aoa(wsAttendance, instShiftData, { origin: { r: 0, c: RIGHT_COL } });
 
-            // Apply percentage format to Attendance % cells
+            // Right: Daily Timeline by Shift table
+            const attDailyShiftStartRow = instructorShiftRows.length + 3;
+            if (dailyShiftRows.length > 0) {
+                const dailyShiftData = [['Date', 'Shift', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']];
+                for (const row of dailyShiftRows) dailyShiftData.push(row);
+                dailyShiftData.push(['Total', null, null, null, null]);
+                XLSX.utils.sheet_add_aoa(wsAttendance, dailyShiftData, { origin: { r: attDailyShiftStartRow, c: RIGHT_COL } });
+            }
+
+            // Column widths
+            wsAttendance['!cols'] = [
+                { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 15 }, // A-D
+                { wch: 3 },  // E (gap)
+                { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 15 } // F-J
+            ];
+
+            // Percentage format — left tables (col D = index 3)
             applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
-            const attStudentStartDataRow = instructorRows.length + 4;
-            applyPercentageFormat(wsAttendance, 3, attStudentStartDataRow, attStudentStartDataRow + studentRows.length);
+            if (dailyRows.length > 0) {
+                applyPercentageFormat(wsAttendance, 3, attDailyStartRow + 1, attDailyStartRow + 1 + dailyRows.length);
+            }
+            applyPercentageFormat(wsAttendance, 3, attStudentStartRow + 1, attStudentStartRow + 1 + studentRows.length);
+            // Percentage format — right tables (col J = index 9)
+            applyPercentageFormat(wsAttendance, RIGHT_COL + 4, 1, instructorShiftRows.length + 1);
+            if (dailyShiftRows.length > 0) {
+                applyPercentageFormat(wsAttendance, RIGHT_COL + 4, attDailyShiftStartRow + 1, attDailyShiftStartRow + 1 + dailyShiftRows.length);
+            }
 
             XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
-            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students`);
+            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students, ${dailyRows.length} daily entries`);
+
+            // Store layout info for table metadata below
+            attendanceLayoutInfo = {
+                dailyStartRow: attDailyStartRow,
+                dailyRowCount: dailyRows.length,
+                studentStartRow: attStudentStartRow,
+                instructorShiftRowCount: instructorShiftRows.length,
+                dailyShiftStartRow: attDailyShiftStartRow,
+                dailyShiftRowCount: dailyShiftRows.length,
+                rightCol: RIGHT_COL
+            };
         }
 
         const timestamp = new Date().toISOString().split('T')[0];
@@ -2789,15 +3090,6 @@ export async function exportMasterListCSV() {
         };
 
         // Build table metadata for all sheets
-        const attendanceTableColumns = [
-            { header: 'Instructor Name' }, { header: 'Total Attended Minutes' },
-            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
-        ];
-        const studentTableColumns = [
-            { header: 'Student Name' }, { header: 'Total Attended Minutes' },
-            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
-        ];
-
         const tableMetadata = [
             { sheetIndex: 0, displayName: 'MasterList', columns: activeColumns, dataRowCount: students.length },
             { sheetIndex: 1, displayName: 'MissingAssignments', columns: EXPORT_MISSING_ASSIGNMENTS_COLUMNS, dataRowCount: missingAssignmentsData.length - 1 }
@@ -2812,36 +3104,80 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Add On-Ground Attendance table metadata (two tables on one sheet) with totals rows
-        const attTotalsFunctions = [null, 'sum', 'sum', 'custom'];
-        const attTotalsLabels = ['Total', null, null, null];
+        // Add On-Ground Attendance table metadata with totals rows
+        const attTotalsFunctions4 = [null, 'sum', 'sum', 'custom'];
+        const attTotalsLabels4 = ['Total', null, null, null];
+        const attTotalsFunctions5 = [null, null, 'sum', 'sum', 'custom'];
+        const attTotalsLabels5 = ['Total', null, null, null, null];
+
+        const attCols4 = (label) => [
+            { header: label }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+        const attCols5 = (label) => [
+            { header: label }, { header: 'Shift' }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+
         if (attendanceSheetIndex !== -1 && attendanceInstructorRowCount > 0) {
+            const layout = attendanceLayoutInfo;
+
+            // Left: Instructor table
             const instName = 'InstructorAttendance';
-            // Table 1: Instructor Summary — starts at row 1
             tableMetadata.push({
-                sheetIndex: attendanceSheetIndex,
-                displayName: instName,
-                columns: attendanceTableColumns,
-                dataRowCount: attendanceInstructorRowCount,
-                startRow: 1,
-                totalsRowFunctions: attTotalsFunctions,
-                totalsRowLabels: attTotalsLabels,
+                sheetIndex: attendanceSheetIndex, displayName: instName,
+                columns: attCols4('Instructor Name'), dataRowCount: attendanceInstructorRowCount,
+                startRow: 1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
                 totalsCustomFormulas: { 3: `${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]` }
             });
-            // Table 2: Student Summary — starts after instructor rows + totals + gap row
-            // Row layout: 1=header, 2..N+1=data, N+2=totals, N+3=gap, N+4=student header
-            const studentTableStartRow = attendanceInstructorRowCount + 4;
+            condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: attendanceInstructorRowCount, startRow: 1, type: 'attendance' });
+
+            // Left: Daily Timeline table
+            if (layout.dailyRowCount > 0) {
+                const dailyName = 'DailyAttendanceTrend';
+                const dailyStartRow1 = layout.dailyStartRow + 1;
+                tableMetadata.push({
+                    sheetIndex: attendanceSheetIndex, displayName: dailyName,
+                    columns: attCols4('Date'), dataRowCount: layout.dailyRowCount,
+                    startRow: dailyStartRow1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
+                    totalsCustomFormulas: { 3: `${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]` }
+                });
+                condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: layout.dailyRowCount, startRow: dailyStartRow1, type: 'attendance' });
+            }
+
+            // Left: Student table
             const studName = 'StudentAttendance';
+            const studStartRow1 = layout.studentStartRow + 1;
             tableMetadata.push({
-                sheetIndex: attendanceSheetIndex,
-                displayName: studName,
-                columns: studentTableColumns,
-                dataRowCount: attendanceStudentRowCount,
-                startRow: studentTableStartRow,
-                totalsRowFunctions: attTotalsFunctions,
-                totalsRowLabels: attTotalsLabels,
+                sheetIndex: attendanceSheetIndex, displayName: studName,
+                columns: attCols4('Student Name'), dataRowCount: attendanceStudentRowCount,
+                startRow: studStartRow1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
                 totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
             });
+            condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: attendanceStudentRowCount, startRow: studStartRow1, type: 'attendance' });
+
+            // Right: Instructor by Shift table
+            const instShiftName = 'InstructorByShift';
+            tableMetadata.push({
+                sheetIndex: attendanceSheetIndex, displayName: instShiftName,
+                columns: attCols5('Instructor Name'), dataRowCount: layout.instructorShiftRowCount,
+                startRow: 1, startCol: layout.rightCol, totalsRowFunctions: attTotalsFunctions5, totalsRowLabels: attTotalsLabels5,
+                totalsCustomFormulas: { 4: `${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+            });
+            condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: layout.rightCol + 4, rowCount: layout.instructorShiftRowCount, startRow: 1, type: 'attendance' });
+
+            // Right: Daily Timeline by Shift table
+            if (layout.dailyShiftRowCount > 0) {
+                const dailyShiftName = 'DailyTrendByShift';
+                const dailyShiftStartRow1 = layout.dailyShiftStartRow + 1;
+                tableMetadata.push({
+                    sheetIndex: attendanceSheetIndex, displayName: dailyShiftName,
+                    columns: attCols5('Date'), dataRowCount: layout.dailyShiftRowCount,
+                    startRow: dailyShiftStartRow1, startCol: layout.rightCol, totalsRowFunctions: attTotalsFunctions5, totalsRowLabels: attTotalsLabels5,
+                    totalsCustomFormulas: { 4: `${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+                });
+                condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: layout.rightCol + 4, rowCount: layout.dailyShiftRowCount, startRow: dailyShiftStartRow1, type: 'attendance' });
+            }
         }
 
         // Write workbook to buffer, then inject conditional formatting, tab colors, row highlights, and tables via JSZip
