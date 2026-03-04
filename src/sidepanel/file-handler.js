@@ -576,6 +576,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         let schedMinColIndex = -1;
         let attInstructorColIndex = -1;
         let attCommentColIndex = -1;
+        let attDateColIndex = -1;
         if (isAttendanceReport) {
             // Find AttMin column
             for (let i = 0; i < normalizedHeaders.length; i++) {
@@ -604,6 +605,14 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 const nh = normalizedHeaders[i];
                 if (nh === 'attcomment' || _normalizedAliasToField[nh] === 'attComment') {
                     attCommentColIndex = i;
+                    break;
+                }
+            }
+            // Find Date column for daily trend
+            for (let i = 0; i < normalizedHeaders.length; i++) {
+                const nh = normalizedHeaders[i];
+                if (nh === 'attdate' || _normalizedAliasToField[nh] === 'attDate') {
+                    attDateColIndex = i;
                     break;
                 }
             }
@@ -712,11 +721,15 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 if (!attendanceRowsBySyId.has(syId)) {
                     attendanceRowsBySyId.set(syId, []);
                 }
+                const attDateVal = attDateColIndex !== -1 && attDateColIndex < row.length
+                    ? String(row[attDateColIndex] || '').trim()
+                    : '';
                 attendanceRowsBySyId.get(syId).push({
                     attMin: attMinVal,
                     schedMin: schedMinVal,
                     instructorName: instructorVal,
-                    attComment: attCommentVal
+                    attComment: attCommentVal,
+                    attDate: attDateVal
                 });
             }
 
@@ -952,6 +965,7 @@ function mergeSupplementaryFile(students, data, isCSV) {
     let suppSchedMinCol = -1;
     let suppAttInstructorCol = -1;
     let suppAttCommentCol = -1;
+    let suppAttDateCol = -1;
     if (isSuppAttendance) {
         for (let i = 0; i < normalizedHeaders.length; i++) {
             const nh = normalizedHeaders[i];
@@ -963,6 +977,9 @@ function mergeSupplementaryFile(students, data, isCSV) {
             }
             if (suppAttCommentCol === -1 && (nh === 'attcomment' || _normalizedAliasToField[nh] === 'attComment')) {
                 suppAttCommentCol = i;
+            }
+            if (suppAttDateCol === -1 && (nh === 'attdate' || _normalizedAliasToField[nh] === 'attDate')) {
+                suppAttDateCol = i;
             }
         }
         // InstructorName column
@@ -1135,11 +1152,15 @@ function mergeSupplementaryFile(students, data, isCSV) {
             if (!student._attendanceRows) {
                 student._attendanceRows = [];
             }
+            const attDateVal = suppAttDateCol !== -1 && suppAttDateCol < row.length
+                ? String(row[suppAttDateCol] || '').trim()
+                : '';
             student._attendanceRows.push({
                 attMin: attMinVal,
                 schedMin: schedMinVal,
                 instructorName: instructorVal,
-                attComment: attCommentVal
+                attComment: attCommentVal,
+                attDate: attDateVal
             });
         }
         console.log(`Supplementary attendance report: merged attendance rows for ${students.filter(s => s._attendanceRows).length} students`);
@@ -2023,16 +2044,63 @@ export async function exportAttendanceOnly() {
         // Totals row for student table
         attendanceData.push(['Total', null, null, null]);
 
+        // Daily Trend: aggregate all on-ground rows by date
+        const dailyAgg = new Map();
+        for (const [, { rows }] of onGroundRowsByStudent) {
+            for (const row of rows) {
+                if (!row.attDate) continue;
+                // Parse date string (could be Excel serial or text) into a Date object
+                const dateObj = parseDate(convertExcelDate(row.attDate));
+                if (!dateObj) continue;
+                const key = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD for sorting
+                if (!dailyAgg.has(key)) {
+                    dailyAgg.set(key, { dateObj, attMin: 0, schedMin: 0 });
+                }
+                const agg = dailyAgg.get(key);
+                agg.attMin += row.attMin;
+                agg.schedMin += row.schedMin;
+            }
+        }
+
+        const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dailyRows = [...dailyAgg.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([, agg]) => {
+                const d = agg.dateObj;
+                const dayName = DAY_ABBR[d.getDay()];
+                const month = MONTH_ABBR[d.getMonth()];
+                const day = d.getDate();
+                const yr = String(d.getFullYear()).slice(-2);
+                const label = `${month} ${day}, ${yr} (${dayName})`;
+                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                return [label, agg.attMin, agg.schedMin, pct];
+            });
+
+        // Append daily trend table after the student table
+        if (dailyRows.length > 0) {
+            attendanceData.push([]);
+            attendanceData.push(['Date', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+            for (const row of dailyRows) attendanceData.push(row);
+            attendanceData.push(['Total', null, null, null]);
+        }
+
         const wb = XLSX.utils.book_new();
         const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
         wsAttendance['!cols'] = [
             { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 15 }
         ];
 
-        // Apply percentage format to Attendance % cells in both tables
+        // Apply percentage format to Attendance % cells in all tables
         applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
         const studentStartDataRow = instructorRows.length + 4;
         applyPercentageFormat(wsAttendance, 3, studentStartDataRow, studentStartDataRow + studentRows.length);
+        if (dailyRows.length > 0) {
+            // +2 for gap row and header row after student totals row
+            const dailyStartDataRow = studentStartDataRow + studentRows.length + 3;
+            applyPercentageFormat(wsAttendance, 3, dailyStartDataRow, dailyStartDataRow + dailyRows.length);
+        }
 
         XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
@@ -2043,6 +2111,10 @@ export async function exportAttendanceOnly() {
         ];
         const studentTableColumns = [
             { header: 'Student Name' }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+        const dailyTableColumns = [
+            { header: 'Date' }, { header: 'Total Attended Minutes' },
             { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
         ];
         const totalsFunctions = [null, 'sum', 'sum', 'average'];
@@ -2069,6 +2141,18 @@ export async function exportAttendanceOnly() {
                 totalsRowFunctions: totalsFunctions,
                 totalsRowLabels: totalsLabels
             });
+            if (dailyRows.length > 0) {
+                const dailyTableStartRow = studentTableStartRow + studentRows.length + 3;
+                tableMetadata.push({
+                    sheetIndex: 0,
+                    displayName: 'DailyAttendanceTrend',
+                    columns: dailyTableColumns,
+                    dataRowCount: dailyRows.length,
+                    startRow: dailyTableStartRow,
+                    totalsRowFunctions: totalsFunctions,
+                    totalsRowLabels: totalsLabels
+                });
+            }
         }
 
         const timestamp = new Date().toISOString().split('T')[0];
@@ -2077,7 +2161,7 @@ export async function exportAttendanceOnly() {
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
         await writeXlsxWithConditionalFormatting(wbBuffer, filename, [], [], {}, [], [], tableMetadata);
 
-        console.log(`Exported attendance-only report: ${instructorRows.length} instructors, ${studentRows.length} students`);
+        console.log(`Exported attendance-only report: ${instructorRows.length} instructors, ${studentRows.length} students, ${dailyRows.length} daily entries`);
 
     } catch (error) {
         console.error('Error exporting attendance report:', error);

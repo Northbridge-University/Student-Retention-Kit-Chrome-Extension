@@ -364,7 +364,8 @@ export const FIELD_ALIASES = {
     // Attendance report aliases
     attMin: ['attendedminutes', 'attendanceminutes', 'attminutes'],
     schedMin: ['scheduledminutes', 'schedminutes', 'scheduledmin'],
-    attComment: ['attendancecomment', 'attcomments', 'attendancecomments']
+    attComment: ['attendancecomment', 'attcomments', 'attendancecomments'],
+    attDate: ['date', 'attendancedate', 'classdate', 'sessiondate']
 };
 
 /**
