@@ -1881,7 +1881,7 @@ function applyPercentageFormat(ws, colIndex, startRow, endRow) {
         const cellRef = `${colLetter}${r + 1}`; // +1 because sheet rows are 1-based and row 1 is header
         const cell = ws[cellRef];
         if (cell && typeof cell.v === 'number') {
-            cell.z = '0.00%';
+            cell.z = '0%';
         }
     }
 }
