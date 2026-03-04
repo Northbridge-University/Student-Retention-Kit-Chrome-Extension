@@ -1879,13 +1879,31 @@ async function injectExcelTables(zip, tableMetadata) {
                 }
 
                 if (formulaCells) {
-                    // Find the totals row and append formula cells at the END (before </row>)
-                    // This preserves column ordering: A (label) then B, C, D (formulas)
+                    // Insert formula cells into the totals row, maintaining column sort order.
+                    // When multiple tables share a row (side-by-side layout), cells must be
+                    // in ascending column order or Excel will flag them as corrupt.
                     const rowRegex = new RegExp(
                         `(<row r="${totalsRowNum}"[^>]*>)([\\s\\S]*?)(</row>)`
                     );
                     if (rowRegex.test(sheetXml)) {
-                        sheetXml = sheetXml.replace(rowRegex, `$1$2${formulaCells}$3`);
+                        sheetXml = sheetXml.replace(rowRegex, (_, open, existing, close) => {
+                            // Parse all cells (existing + new) into a map keyed by column letters
+                            const allCells = (existing + formulaCells).match(/<c\s[^>]*>.*?<\/c>|<c\s[^/]*\/>/g) || [];
+                            const cellMap = new Map();
+                            for (const cell of allCells) {
+                                const refMatch = cell.match(/r="([A-Z]+)\d+"/);
+                                if (refMatch) cellMap.set(refMatch[1], cell);
+                            }
+                            // Sort by column: shorter letters first (A < AA), then alphabetically
+                            const sorted = [...cellMap.entries()]
+                                .sort((a, b) => {
+                                    if (a[0].length !== b[0].length) return a[0].length - b[0].length;
+                                    return a[0] < b[0] ? -1 : 1;
+                                })
+                                .map(([, xml]) => xml)
+                                .join('');
+                            return `${open}${sorted}${close}`;
+                        });
                     }
                 }
             }
