@@ -2737,6 +2737,9 @@ export async function exportMasterListCSV() {
                                 return `Student's next assignment is due ${friendly}.`;
                             }
                         }
+                        if (missingCount === 0 && !nextDueRaw) {
+                            return 'Student has completed all of their assignments.';
+                        }
                         return '';
                     }
 
@@ -2772,7 +2775,7 @@ export async function exportMasterListCSV() {
                 });
 
                 // Track rows that qualify for outreach highlighting
-                if (missingCount === 0 && nextDueRaw && parseDate(nextDueRaw)) {
+                if (missingCount === 0 && (nextDueRaw && parseDate(nextDueRaw) || !nextDueRaw)) {
                     highlightRows.push(studentIndex);
                 }
 
