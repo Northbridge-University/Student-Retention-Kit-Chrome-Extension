@@ -1797,6 +1797,37 @@ async function injectExcelTables(zip, tableMetadata) {
         const sheetPath = `xl/worksheets/sheet${meta.sheetIndex + 1}.xml`;
         let sheetXml = await zip.file(sheetPath)?.async('string');
         if (sheetXml) {
+            // --- Inject SUBTOTAL formulas into totals row cells ---
+            if (hasTotals) {
+                const totalsRowNum = lastRow; // 1-based row number for the totals row
+                const SUBTOTAL_CODES = { sum: 109, average: 101, count: 102, min: 105, max: 104 };
+
+                for (let colIdx = 0; colIdx < meta.columns.length; colIdx++) {
+                    const func = meta.totalsRowFunctions[colIdx];
+                    if (!func || SUBTOTAL_CODES[func] === undefined) continue;
+
+                    const colLetter = columnIndexToLetter(colIdx);
+                    const cellRef = `${colLetter}${totalsRowNum}`;
+                    const colName = meta.columns[colIdx].header;
+                    const code = SUBTOTAL_CODES[func];
+                    const formula = `SUBTOTAL(${code},[${colName}])`;
+                    const formulaCell = `<c r="${cellRef}"><f>${formula}</f></c>`;
+
+                    // Replace existing cell or insert into the row
+                    const cellRegex = new RegExp(`<c r="${cellRef}"[^/]*(?:/>|>[\\s\\S]*?</c>)`);
+                    if (cellRegex.test(sheetXml)) {
+                        sheetXml = sheetXml.replace(cellRegex, formulaCell);
+                    } else {
+                        // Insert before </row> of the totals row
+                        const rowEndRegex = new RegExp(`(<row r="${totalsRowNum}"[^>]*>)`);
+                        const rowMatch = sheetXml.match(rowEndRegex);
+                        if (rowMatch) {
+                            sheetXml = sheetXml.replace(rowMatch[0], rowMatch[0] + formulaCell);
+                        }
+                    }
+                }
+            }
+
             if (sheetXml.includes('<tableParts')) {
                 // Sheet already has tableParts — increment count and append new tablePart
                 sheetXml = sheetXml.replace(
