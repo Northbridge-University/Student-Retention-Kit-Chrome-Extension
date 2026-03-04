@@ -360,7 +360,8 @@ export const FIELD_ALIASES = {
     adSAPStatus: ['sapstatus', 'sapdescripterm'],
     // Attendance report aliases
     attMin: ['attendedminutes', 'attendanceminutes', 'attminutes'],
-    schedMin: ['scheduledminutes', 'schedminutes', 'scheduledmin']
+    schedMin: ['scheduledminutes', 'schedminutes', 'scheduledmin'],
+    attComment: ['attendancecomment', 'attcomments', 'attendancecomments']
 };
 
 /**

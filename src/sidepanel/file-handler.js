@@ -575,6 +575,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         let attMinColIndex = -1;
         let schedMinColIndex = -1;
         let attInstructorColIndex = -1;
+        let attCommentColIndex = -1;
         if (isAttendanceReport) {
             // Find AttMin column
             for (let i = 0; i < normalizedHeaders.length; i++) {
@@ -597,6 +598,14 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
             if (attInstructorColIndex === -1) {
                 // Fallback: direct normalized header lookup
                 attInstructorColIndex = normalizedHeaders.indexOf('instructorname');
+            }
+            // Find ATTComment column
+            for (let i = 0; i < normalizedHeaders.length; i++) {
+                const nh = normalizedHeaders[i];
+                if (nh === 'attcomment' || _normalizedAliasToField[nh] === 'attComment') {
+                    attCommentColIndex = i;
+                    break;
+                }
             }
         }
         // Collect raw attendance rows keyed by SyStudentId (before deduplication)
@@ -695,6 +704,9 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 const instructorVal = attInstructorColIndex !== -1 && attInstructorColIndex < row.length
                     ? String(row[attInstructorColIndex] || '').trim()
                     : '';
+                const attCommentVal = attCommentColIndex !== -1 && attCommentColIndex < row.length
+                    ? String(row[attCommentColIndex] || '').trim()
+                    : '';
 
                 const syId = entry.SyStudentId;
                 if (!attendanceRowsBySyId.has(syId)) {
@@ -704,7 +716,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                     attMin: attMinVal,
                     schedMin: schedMinVal,
                     instructorName: instructorVal,
-                    shift: entry.shift ? String(entry.shift).trim() : ''
+                    attComment: attCommentVal
                 });
             }
 
@@ -939,6 +951,7 @@ function mergeSupplementaryFile(students, data, isCSV) {
     let suppAttMinCol = -1;
     let suppSchedMinCol = -1;
     let suppAttInstructorCol = -1;
+    let suppAttCommentCol = -1;
     if (isSuppAttendance) {
         for (let i = 0; i < normalizedHeaders.length; i++) {
             const nh = normalizedHeaders[i];
@@ -947,6 +960,9 @@ function mergeSupplementaryFile(students, data, isCSV) {
             }
             if (suppSchedMinCol === -1 && (nh === 'schedmin' || _normalizedAliasToField[nh] === 'schedMin')) {
                 suppSchedMinCol = i;
+            }
+            if (suppAttCommentCol === -1 && (nh === 'attcomment' || _normalizedAliasToField[nh] === 'attComment')) {
+                suppAttCommentCol = i;
             }
         }
         // InstructorName column
@@ -1094,9 +1110,6 @@ function mergeSupplementaryFile(students, data, isCSV) {
 
     // Merge attendance rows from supplementary file
     if (isSuppAttendance && suppAttMinCol !== -1 && suppSchedMinCol !== -1) {
-        // Find Shift column in the supplementary file for per-row filtering
-        const suppShiftCol = findColumnIndex(normalizedHeaders, headers, 'shift');
-
         for (let i = headerRowIndex + 1; i < rows.length; i++) {
             const row = rows[i];
             if (!row || row.length === 0) continue;
@@ -1115,9 +1128,9 @@ function mergeSupplementaryFile(students, data, isCSV) {
             const instructorVal = suppAttInstructorCol !== -1 && suppAttInstructorCol < row.length
                 ? String(row[suppAttInstructorCol] || '').trim()
                 : '';
-            const shiftVal = suppShiftCol !== -1 && suppShiftCol < row.length
-                ? String(row[suppShiftCol] || '').trim()
-                : (student.shift ? String(student.shift).trim() : '');
+            const attCommentVal = suppAttCommentCol !== -1 && suppAttCommentCol < row.length
+                ? String(row[suppAttCommentCol] || '').trim()
+                : '';
 
             if (!student._attendanceRows) {
                 student._attendanceRows = [];
@@ -1126,7 +1139,7 @@ function mergeSupplementaryFile(students, data, isCSV) {
                 attMin: attMinVal,
                 schedMin: schedMinVal,
                 instructorName: instructorVal,
-                shift: shiftVal
+                attComment: attCommentVal
             });
         }
         console.log(`Supplementary attendance report: merged attendance rows for ${students.filter(s => s._attendanceRows).length} students`);
@@ -2323,30 +2336,24 @@ export async function exportMasterListCSV() {
         });
 
         // --- ON-GROUND ATTENDANCE SHEET ---
-        // Filter at the attendance-row level: only include rows where shift is NOT "Online"
+        // Filter at the attendance-row level: exclude rows where ATTComment contains "Canvas"
+        // This keeps only clock in/out attendance and excludes Canvas submission attendance
         const studentsWithAttendance = students.filter(s => s._attendanceRows && s._attendanceRows.length > 0);
 
-        // Collect on-ground rows and identify online instructors
-        const onlineInstructors = new Set(); // Instructors who teach ANY online student
         const onGroundRowsByStudent = new Map(); // SyStudentId → { name, rows: [] }
 
         for (const student of studentsWithAttendance) {
-            const onGroundRows = [];
+            const clockInOutRows = [];
             for (const row of student._attendanceRows) {
-                const isOnline = row.shift && String(row.shift).toLowerCase().includes('online');
-                if (isOnline) {
-                    // Track this instructor as having online students
-                    if (row.instructorName) {
-                        onlineInstructors.add(row.instructorName);
-                    }
-                } else {
-                    onGroundRows.push(row);
+                const isCanvas = row.attComment && String(row.attComment).toLowerCase().includes('canvas');
+                if (!isCanvas) {
+                    clockInOutRows.push(row);
                 }
             }
-            if (onGroundRows.length > 0) {
+            if (clockInOutRows.length > 0) {
                 onGroundRowsByStudent.set(student.SyStudentId || student.name, {
                     name: student.name,
-                    rows: onGroundRows
+                    rows: clockInOutRows
                 });
             }
         }
@@ -2358,13 +2365,11 @@ export async function exportMasterListCSV() {
             attendanceSheetIndex = 2 + ldaGroups.length; // After Master List, Missing Assignments, and LDA sheets
 
             // --- Table 1: Instructor Summary ---
-            // Aggregate AttMin and SchedMin per instructor (only on-ground rows, excluding online instructors)
+            // Aggregate AttMin and SchedMin per instructor (only clock in/out rows)
             const instructorAgg = new Map(); // instructorName → { attMin, schedMin }
             for (const [, { rows }] of onGroundRowsByStudent) {
                 for (const row of rows) {
                     const name = row.instructorName || 'Unknown';
-                    // Skip instructors who also teach online students
-                    if (onlineInstructors.has(name)) continue;
 
                     if (!instructorAgg.has(name)) {
                         instructorAgg.set(name, { attMin: 0, schedMin: 0 });
@@ -2384,7 +2389,7 @@ export async function exportMasterListCSV() {
                 });
 
             // --- Table 2: Student Summary ---
-            // Aggregate AttMin and SchedMin per student (only on-ground rows)
+            // Aggregate AttMin and SchedMin per student (only clock in/out rows)
             const studentRows = [...onGroundRowsByStudent.values()]
                 .map(({ name, rows }) => {
                     let totalAttMin = 0;
