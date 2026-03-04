@@ -777,7 +777,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
             }
         }
 
-        return { students, referenceDate };
+        return { students, referenceDate, isAttendanceReport };
 
     } catch (error) {
         console.error('Error parsing file with SheetJS:', error);
@@ -1191,6 +1191,7 @@ export function handleFileImport(files, onSuccess) {
             const result = parseFileWithSheetJS(content, primaryIsCSV, file.lastModified);
             let students = result.students;
             const referenceDate = result.referenceDate;
+            const isAttendanceReport = result.isAttendanceReport;
 
             if (students.length === 0) {
                 throw new Error("No valid student data found (Check header row).");
@@ -1246,7 +1247,7 @@ export function handleFileImport(files, onSuccess) {
                 }
 
                 if (onSuccess) {
-                    onSuccess(students);
+                    onSuccess(students, { isAttendanceReport });
                 }
             });
 
@@ -1868,6 +1869,142 @@ function calculateColumnWidths(columns, data) {
 }
 
 /**
+ * Exports only the On-Ground Attendance sheet (no Canvas data needed).
+ * Used when the user imports an attendance-only file and chooses not to ping Canvas.
+ */
+export async function exportAttendanceOnly() {
+    try {
+        const result = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+        const students = result[STORAGE_KEYS.MASTER_ENTRIES] || [];
+
+        if (students.length === 0) {
+            alert('No data to export.');
+            return;
+        }
+
+        const studentsWithAttendance = students.filter(s => s._attendanceRows && s._attendanceRows.length > 0);
+        if (studentsWithAttendance.length === 0) {
+            alert('No attendance data found in the imported file.');
+            return;
+        }
+
+        // Filter: exclude rows where ATTComment contains "Canvas"
+        const onGroundRowsByStudent = new Map();
+        for (const student of studentsWithAttendance) {
+            const clockInOutRows = [];
+            for (const row of student._attendanceRows) {
+                const isCanvas = row.attComment && String(row.attComment).toLowerCase().includes('canvas');
+                if (!isCanvas) {
+                    clockInOutRows.push(row);
+                }
+            }
+            if (clockInOutRows.length > 0) {
+                onGroundRowsByStudent.set(student.SyStudentId || student.name, {
+                    name: student.name,
+                    rows: clockInOutRows
+                });
+            }
+        }
+
+        if (onGroundRowsByStudent.size === 0) {
+            alert('No on-ground attendance data found after filtering Canvas submissions.');
+            return;
+        }
+
+        // Instructor Summary
+        const instructorAgg = new Map();
+        for (const [, { rows }] of onGroundRowsByStudent) {
+            for (const row of rows) {
+                const name = row.instructorName || 'Unknown';
+                if (!instructorAgg.has(name)) {
+                    instructorAgg.set(name, { attMin: 0, schedMin: 0 });
+                }
+                const agg = instructorAgg.get(name);
+                agg.attMin += row.attMin;
+                agg.schedMin += row.schedMin;
+            }
+        }
+
+        const instructorRows = [...instructorAgg.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([name, agg]) => {
+                const pct = agg.schedMin > 0 ? (agg.attMin / agg.schedMin) * 100 : 0;
+                return [name, agg.attMin, agg.schedMin, Math.round(pct * 100) / 100];
+            });
+
+        // Student Summary
+        const studentRows = [...onGroundRowsByStudent.values()]
+            .map(({ name, rows }) => {
+                let totalAttMin = 0;
+                let totalSchedMin = 0;
+                for (const row of rows) {
+                    totalAttMin += row.attMin;
+                    totalSchedMin += row.schedMin;
+                }
+                const pct = totalSchedMin > 0 ? (totalAttMin / totalSchedMin) * 100 : 0;
+                return [name, totalAttMin, totalSchedMin, Math.round(pct * 100) / 100];
+            })
+            .sort((a, b) => a[0].localeCompare(b[0]));
+
+        // Build sheet data
+        const attendanceData = [];
+        attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+        for (const row of instructorRows) attendanceData.push(row);
+        attendanceData.push([]);
+        attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
+        for (const row of studentRows) attendanceData.push(row);
+
+        const wb = XLSX.utils.book_new();
+        const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
+        wsAttendance['!cols'] = [
+            { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 15 }
+        ];
+        XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
+
+        // Table metadata for the two tables
+        const attendanceTableColumns = [
+            { header: 'Instructor Name' }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+        const studentTableColumns = [
+            { header: 'Student Name' }, { header: 'Total Attended Minutes' },
+            { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
+        ];
+
+        const tableMetadata = [];
+        if (instructorRows.length > 0) {
+            tableMetadata.push({
+                sheetIndex: 0,
+                displayName: 'InstructorAttendance',
+                columns: attendanceTableColumns,
+                dataRowCount: instructorRows.length,
+                startRow: 1
+            });
+            const studentTableStartRow = instructorRows.length + 3;
+            tableMetadata.push({
+                sheetIndex: 0,
+                displayName: 'StudentAttendance',
+                columns: studentTableColumns,
+                dataRowCount: studentRows.length,
+                startRow: studentTableStartRow
+            });
+        }
+
+        const timestamp = new Date().toISOString().split('T')[0];
+        const filename = `attendance_report_${timestamp}.xlsx`;
+
+        const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, [], [], {}, [], [], tableMetadata);
+
+        console.log(`Exported attendance-only report: ${instructorRows.length} instructors, ${studentRows.length} students`);
+
+    } catch (error) {
+        console.error('Error exporting attendance report:', error);
+        alert('Error creating attendance report. Check console for details.');
+    }
+}
+
+/**
  * Exports master list to Excel file with three sheets
  */
 export async function exportMasterListCSV() {
@@ -2434,7 +2571,7 @@ export async function exportMasterListCSV() {
 
             XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
-            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students (${onlineInstructors.size} online instructors excluded)`);
+            console.log(`  - On-Ground Attendance: ${instructorRows.length} instructors, ${studentRows.length} students`);
         }
 
         const timestamp = new Date().toISOString().split('T')[0];

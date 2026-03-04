@@ -36,6 +36,7 @@ import {
     resetQueueUI,
     restoreDefaultQueueUI,
     exportMasterListCSV,
+    exportAttendanceOnly,
     sendMasterListToExcel,
     sendMasterListWithMissingAssignmentsToExcel,
     updateCampusFilter,
@@ -120,6 +121,7 @@ import {
 } from './modals/canvas-auth-modal.js';
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
+import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
 import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 
@@ -750,6 +752,17 @@ function setupEventListeners() {
         });
     }
 
+    // Attendance Report Modal
+    if (elements.closeAttendanceReportBtn) {
+        elements.closeAttendanceReportBtn.addEventListener('click', () => closeAttendanceReportModal(null));
+    }
+    if (elements.attendanceReportYesBtn) {
+        elements.attendanceReportYesBtn.addEventListener('click', () => closeAttendanceReportModal(true));
+    }
+    if (elements.attendanceReportNoBtn) {
+        elements.attendanceReportNoBtn.addEventListener('click', () => closeAttendanceReportModal(false));
+    }
+
     // Latest Updates Modal
     if (elements.closeLatestUpdatesBtn) {
         elements.closeLatestUpdatesBtn.addEventListener('click', closeLatestUpdatesModal);
@@ -877,6 +890,9 @@ function setupEventListeners() {
         }
         if (elements.backupModal && e.target === elements.backupModal) {
             closeBackupModal();
+        }
+        if (elements.attendanceReportModal && e.target === elements.attendanceReportModal) {
+            closeAttendanceReportModal(null);
         }
     });
 
@@ -1339,10 +1355,44 @@ function setupEventListeners() {
     if (elements.studentPopFile) {
         elements.studentPopFile.addEventListener('change', (e) => {
             const fileCount = e.target.files.length;
-            handleFileImport(e.target.files, (students) => {
+            handleFileImport(e.target.files, async (students, meta) => {
                 renderMasterList(students, (entry, li, evt) => {
                     queueManager.handleStudentClick(entry, li, evt);
                 });
+
+                // If this is an attendance-only report, ask user if they want to ping Canvas
+                if (meta && meta.isAttendanceReport) {
+                    const choice = await openAttendanceReportModal();
+
+                    if (choice === false) {
+                        // User chose attendance only - skip Canvas, hide remaining steps
+                        const s2 = document.getElementById('step2');
+                        const s3 = document.getElementById('step3');
+                        const s4 = document.getElementById('step4');
+                        if (s2) s2.style.display = 'none';
+                        if (s3) s3.style.display = 'none';
+                        if (s4) s4.style.display = 'none';
+
+                        // Update download button to reflect attendance-only export
+                        if (elements.downloadMasterBtn) {
+                            const downloadSpan = elements.downloadMasterBtn.querySelector('span');
+                            if (downloadSpan) downloadSpan.textContent = 'Attendance';
+                            elements.downloadMasterBtn.removeEventListener('click', exportMasterListCSV);
+                            elements.downloadMasterBtn.addEventListener('click', exportAttendanceOnly);
+                        }
+
+                        // Auto-download the attendance report
+                        await exportAttendanceOnly();
+                        return;
+                    }
+
+                    if (choice === null) {
+                        // User cancelled - do nothing further
+                        return;
+                    }
+                }
+
+                // Normal flow: ping Canvas (Steps 2-4)
                 // Note: Don't pass render callbacks here - the storage.onChanged listener
                 // already handles re-rendering when MASTER_ENTRIES is updated.
                 // Passing callbacks that also render would cause double renders (duplicate students bug).

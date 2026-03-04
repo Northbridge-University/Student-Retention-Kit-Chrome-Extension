@@ -177,6 +177,12 @@ export function cacheDomElements() {
     elements.campusSelectionList = document.getElementById('campusSelectionList');
     elements.campusSelectionMessage = document.getElementById('campusSelectionMessage');
 
+    // Attendance Report Modal
+    elements.attendanceReportModal = document.getElementById('attendanceReportModal');
+    elements.closeAttendanceReportBtn = document.getElementById('closeAttendanceReportBtn');
+    elements.attendanceReportYesBtn = document.getElementById('attendanceReportYesBtn');
+    elements.attendanceReportNoBtn = document.getElementById('attendanceReportNoBtn');
+
     // Canvas Auth Error Modal
     elements.canvasAuthErrorModal = document.getElementById('canvasAuthErrorModal');
     elements.canvasAuthRetryBtn = document.getElementById('canvasAuthRetryBtn');

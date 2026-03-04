@@ -1033,6 +1033,29 @@
         </div>
     </div>
 
+    <!-- Attendance Report Modal -->
+    <div id="attendanceReportModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-clock" style="color: #f59e0b;"></i> Attendance Report</h3>
+                <button class="icon-btn" id="closeAttendanceReportBtn" title="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="padding: 15px 20px;">
+                <div style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 15px;">
+                    Attendance file detected. Would you like to ping Canvas for the full master list update?
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button class="btn-primary" id="attendanceReportYesBtn" style="width: 100%; display: flex; align-items: center; gap: 10px; justify-content: center;">
+                        <i class="fas fa-check"></i> Yes, Ping Canvas
+                    </button>
+                    <button class="btn-secondary" id="attendanceReportNoBtn" style="width: 100%; display: flex; align-items: center; gap: 10px; justify-content: center;">
+                        <i class="fas fa-download"></i> No, Just Attendance
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Canvas Auth Error Modal -->
     <div id="canvasAuthErrorModal" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width: 420px;">
