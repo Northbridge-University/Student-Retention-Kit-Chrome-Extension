@@ -1830,13 +1830,22 @@ async function injectExcelTables(zip, tableMetadata) {
                 let formulaCells = '';
                 for (let colIdx = 0; colIdx < meta.columns.length; colIdx++) {
                     const func = meta.totalsRowFunctions[colIdx];
-                    if (!func || SUBTOTAL_CODES[func] === undefined) continue;
+                    if (!func) continue;
 
                     const colLetter = columnIndexToLetter(colIdx);
                     const cellRef = `${colLetter}${totalsRowNum}`;
-                    const colName = meta.columns[colIdx].header;
-                    const code = SUBTOTAL_CODES[func];
-                    const formula = `SUBTOTAL(${code},[${colName}])`;
+
+                    let formula;
+                    if (func === 'custom' && meta.totalsCustomFormulas && meta.totalsCustomFormulas[colIdx]) {
+                        // Custom formula using structured table references
+                        formula = meta.totalsCustomFormulas[colIdx];
+                    } else if (SUBTOTAL_CODES[func] !== undefined) {
+                        const colName = meta.columns[colIdx].header;
+                        const code = SUBTOTAL_CODES[func];
+                        formula = `SUBTOTAL(${code},[${colName}])`;
+                    } else {
+                        continue;
+                    }
 
                     // Copy style from a data cell in the same column (preserves % format etc.)
                     const dataCellRef = `${colLetter}${startRow + 1}`;
@@ -2120,8 +2129,9 @@ export async function exportAttendanceOnly() {
             { header: 'Date' }, { header: 'Total Attended Minutes' },
             { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
         ];
-        const totalsFunctions = [null, 'sum', 'sum', 'average'];
+        const totalsFunctions = [null, 'sum', 'sum', 'custom'];
         const totalsLabels = ['Total', null, null, null];
+        const totalsCustomFormulas = { 3: '[Total Attended Minutes]/[Total Scheduled Minutes]' };
 
         const tableMetadata = [];
         if (instructorRows.length > 0) {
@@ -2132,7 +2142,8 @@ export async function exportAttendanceOnly() {
                 dataRowCount: instructorRows.length,
                 startRow: 1,
                 totalsRowFunctions: totalsFunctions,
-                totalsRowLabels: totalsLabels
+                totalsRowLabels: totalsLabels,
+                totalsCustomFormulas: totalsCustomFormulas
             });
             const studentTableStartRow = instructorRows.length + 4;
             tableMetadata.push({
@@ -2142,7 +2153,8 @@ export async function exportAttendanceOnly() {
                 dataRowCount: studentRows.length,
                 startRow: studentTableStartRow,
                 totalsRowFunctions: totalsFunctions,
-                totalsRowLabels: totalsLabels
+                totalsRowLabels: totalsLabels,
+                totalsCustomFormulas: totalsCustomFormulas
             });
             if (dailyRows.length > 0) {
                 const dailyTableStartRow = studentTableStartRow + studentRows.length + 3;
@@ -2153,7 +2165,8 @@ export async function exportAttendanceOnly() {
                     dataRowCount: dailyRows.length,
                     startRow: dailyTableStartRow,
                     totalsRowFunctions: totalsFunctions,
-                    totalsRowLabels: totalsLabels
+                    totalsRowLabels: totalsLabels,
+                    totalsCustomFormulas: totalsCustomFormulas
                 });
             }
         }
@@ -2798,8 +2811,9 @@ export async function exportMasterListCSV() {
         });
 
         // Add On-Ground Attendance table metadata (two tables on one sheet) with totals rows
-        const attTotalsFunctions = [null, 'sum', 'sum', 'average'];
+        const attTotalsFunctions = [null, 'sum', 'sum', 'custom'];
         const attTotalsLabels = ['Total', null, null, null];
+        const attTotalsCustomFormulas = { 3: '[Total Attended Minutes]/[Total Scheduled Minutes]' };
         if (attendanceSheetIndex !== -1 && attendanceInstructorRowCount > 0) {
             // Table 1: Instructor Summary — starts at row 1
             tableMetadata.push({
@@ -2809,7 +2823,8 @@ export async function exportMasterListCSV() {
                 dataRowCount: attendanceInstructorRowCount,
                 startRow: 1,
                 totalsRowFunctions: attTotalsFunctions,
-                totalsRowLabels: attTotalsLabels
+                totalsRowLabels: attTotalsLabels,
+                totalsCustomFormulas: attTotalsCustomFormulas
             });
             // Table 2: Student Summary — starts after instructor rows + totals + gap row
             // Row layout: 1=header, 2..N+1=data, N+2=totals, N+3=gap, N+4=student header
@@ -2821,7 +2836,8 @@ export async function exportMasterListCSV() {
                 dataRowCount: attendanceStudentRowCount,
                 startRow: studentTableStartRow,
                 totalsRowFunctions: attTotalsFunctions,
-                totalsRowLabels: attTotalsLabels
+                totalsRowLabels: attTotalsLabels,
+                totalsCustomFormulas: attTotalsCustomFormulas
             });
         }
 
