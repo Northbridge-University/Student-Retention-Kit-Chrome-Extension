@@ -1489,19 +1489,22 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
         // Must appear after <mergeCells> but before <hyperlinks>/<pageMargins>
         // Scale presets by type
         const COLOR_SCALE_PRESETS = {
-            grade: { minVal: 0, midVal: 65, maxVal: 100, low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' },
-            gpa:   { minVal: 0, midVal: 2,  maxVal: 4,   low: 'FFFFC7CE', mid: 'FF9BC2E6', high: 'FFC6EFCE' }
+            grade:      { minVal: 0,   midVal: 65,  maxVal: 100, low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' },
+            gpa:        { minVal: 0,   midVal: 2,   maxVal: 4,   low: 'FFFFC7CE', mid: 'FF9BC2E6', high: 'FFC6EFCE' },
+            attendance: { minVal: 0,   midVal: 0.5, maxVal: 1,   low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' }
         };
         const condFmtsForSheet = condFmtSheets.filter(c => c.sheetIndex === sheetIndex);
         for (const condFmt of condFmtsForSheet) {
             const colLetter = columnIndexToLetter(condFmt.colIndex);
-            const sqref = `${colLetter}2:${colLetter}${condFmt.rowCount + 1}`;
+            const dataStartRow = (condFmt.startRow || 1) + 1; // +1 to skip header row
+            const sqref = `${colLetter}${dataStartRow}:${colLetter}${dataStartRow + condFmt.rowCount - 1}`;
 
             const preset = COLOR_SCALE_PRESETS[condFmt.type] || COLOR_SCALE_PRESETS.grade;
-            // Only apply user color-scale overrides to grade columns; GPA uses its own preset
-            const csLow = condFmt.type === 'gpa' ? preset.low : (colorScale.low || preset.low);
-            const csMid = condFmt.type === 'gpa' ? preset.mid : (colorScale.mid || preset.mid);
-            const csHigh = condFmt.type === 'gpa' ? preset.high : (colorScale.high || preset.high);
+            // Only apply user color-scale overrides to grade columns; GPA and attendance use their own presets
+            const usePreset = condFmt.type === 'gpa' || condFmt.type === 'attendance';
+            const csLow = usePreset ? preset.low : (colorScale.low || preset.low);
+            const csMid = usePreset ? preset.mid : (colorScale.mid || preset.mid);
+            const csHigh = usePreset ? preset.high : (colorScale.high || preset.high);
 
             const cfXml =
                 `<conditionalFormatting sqref="${sqref}">` +
@@ -2012,11 +2015,11 @@ export async function exportAttendanceOnly() {
         }
 
         const instructorRows = [...instructorAgg.entries()]
-            .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([name, agg]) => {
                 const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
                 return [name, agg.attMin, agg.schedMin, pct];
-            });
+            })
+            .sort((a, b) => b[3] - a[3]); // highest attendance % first
 
         // Student Summary
         const studentRows = [...onGroundRowsByStudent.values()]
@@ -2030,7 +2033,7 @@ export async function exportAttendanceOnly() {
                 const pct = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
                 return [name, totalAttMin, totalSchedMin, pct];
             })
-            .sort((a, b) => a[0].localeCompare(b[0]));
+            .sort((a, b) => a[3] - b[3]); // lowest attendance % first
 
         // Build sheet data with totals rows
         const attendanceData = [];
@@ -2155,11 +2158,23 @@ export async function exportAttendanceOnly() {
             }
         }
 
+        // Color scale conditional formatting for Attendance % column (index 3) in each table
+        const condFmtSheets = [];
+        if (instructorRows.length > 0) {
+            condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: instructorRows.length, startRow: 1, type: 'attendance' });
+            const studentTableStartRow = instructorRows.length + 4;
+            condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: studentRows.length, startRow: studentTableStartRow, type: 'attendance' });
+            if (dailyRows.length > 0) {
+                const dailyTableStartRow = studentTableStartRow + studentRows.length + 3;
+                condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: dailyRows.length, startRow: dailyTableStartRow, type: 'attendance' });
+            }
+        }
+
         const timestamp = new Date().toISOString().split('T')[0];
         const filename = `attendance_report_${timestamp}.xlsx`;
 
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, [], [], {}, [], [], tableMetadata);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, [], {}, [], [], tableMetadata);
 
         console.log(`Exported attendance-only report: ${instructorRows.length} instructors, ${studentRows.length} students, ${dailyRows.length} daily entries`);
 
