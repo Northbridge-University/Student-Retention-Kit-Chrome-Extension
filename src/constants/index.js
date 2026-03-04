@@ -196,6 +196,9 @@ export const STORAGE_KEYS = {
     SPECIFIC_SUBMISSION_DATE: 'specificSubmissionDate',
     OFFICE_USER_INFO: 'officeUserInfo',
 
+    // Attendance report mode flag (persisted across panel close/reopen)
+    IS_ATTENDANCE_MODE: 'isAttendanceMode',
+
     // Legacy key aliases (for migration compatibility)
     // These map old flat keys to new nested paths
     LEGACY_DEBUG_MODE: 'debugMode' // Now at settings.five9.callDemo
