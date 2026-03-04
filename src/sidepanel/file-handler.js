@@ -1813,7 +1813,13 @@ async function injectExcelTables(zip, tableMetadata) {
                     const colName = meta.columns[colIdx].header;
                     const code = SUBTOTAL_CODES[func];
                     const formula = `SUBTOTAL(${code},[${colName}])`;
-                    formulaCells += `<c r="${cellRef}"><f>${formula}</f></c>`;
+
+                    // Copy style from a data cell in the same column (preserves % format etc.)
+                    const dataCellRef = `${colLetter}${startRow + 1}`;
+                    const styleMatch = sheetXml.match(new RegExp(`<c r="${dataCellRef}"[^>]*\\bs="(\\d+)"`));
+                    const styleAttr = styleMatch ? ` s="${styleMatch[1]}"` : '';
+
+                    formulaCells += `<c r="${cellRef}"${styleAttr}><f>${formula}</f></c>`;
                 }
 
                 if (formulaCells) {
