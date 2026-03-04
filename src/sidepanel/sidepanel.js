@@ -1366,20 +1366,10 @@ function setupEventListeners() {
 
                     if (choice === false) {
                         // User chose attendance only - skip Canvas, hide remaining steps
-                        const s2 = document.getElementById('step2');
-                        const s3 = document.getElementById('step3');
-                        const s4 = document.getElementById('step4');
-                        if (s2) s2.style.display = 'none';
-                        if (s3) s3.style.display = 'none';
-                        if (s4) s4.style.display = 'none';
+                        enterAttendanceMode();
 
-                        // Update download button to reflect attendance-only export
-                        if (elements.downloadMasterBtn) {
-                            const downloadSpan = elements.downloadMasterBtn.querySelector('span');
-                            if (downloadSpan) downloadSpan.textContent = 'Attendance';
-                            elements.downloadMasterBtn.removeEventListener('click', exportMasterListCSV);
-                            elements.downloadMasterBtn.addEventListener('click', exportAttendanceOnly);
-                        }
+                        // Persist attendance mode so it survives panel close/reopen
+                        await chrome.storage.local.set({ [STORAGE_KEYS.IS_ATTENDANCE_MODE]: true });
 
                         // Auto-download the attendance report
                         await exportAttendanceOnly();
@@ -1392,7 +1382,10 @@ function setupEventListeners() {
                     }
                 }
 
-                // Normal flow: ping Canvas (Steps 2-4)
+                // Normal flow: exit attendance mode if previously active, then ping Canvas (Steps 2-4)
+                exitAttendanceMode();
+                await chrome.storage.local.set({ [STORAGE_KEYS.IS_ATTENDANCE_MODE]: false });
+
                 // Note: Don't pass render callbacks here - the storage.onChanged listener
                 // already handles re-rendering when MASTER_ENTRIES is updated.
                 // Passing callbacks that also render would cause double renders (duplicate students bug).
@@ -1436,6 +1429,44 @@ function setupEventListeners() {
 }
 
 // --- HELPER FUNCTIONS ---
+
+/**
+ * Enters attendance-only mode: hides steps 2-4 and switches the download button.
+ */
+function enterAttendanceMode() {
+    const s2 = document.getElementById('step2');
+    const s3 = document.getElementById('step3');
+    const s4 = document.getElementById('step4');
+    if (s2) s2.style.display = 'none';
+    if (s3) s3.style.display = 'none';
+    if (s4) s4.style.display = 'none';
+
+    if (elements.downloadMasterBtn) {
+        const downloadSpan = elements.downloadMasterBtn.querySelector('span');
+        if (downloadSpan) downloadSpan.textContent = 'Attendance';
+        elements.downloadMasterBtn.removeEventListener('click', exportMasterListCSV);
+        elements.downloadMasterBtn.addEventListener('click', exportAttendanceOnly);
+    }
+}
+
+/**
+ * Exits attendance-only mode: restores steps 2-4 visibility and resets the download button.
+ */
+function exitAttendanceMode() {
+    const s2 = document.getElementById('step2');
+    const s3 = document.getElementById('step3');
+    const s4 = document.getElementById('step4');
+    if (s2) s2.style.display = '';
+    if (s3) s3.style.display = '';
+    if (s4) s4.style.display = '';
+
+    if (elements.downloadMasterBtn) {
+        const downloadSpan = elements.downloadMasterBtn.querySelector('span');
+        if (downloadSpan) downloadSpan.textContent = 'Download';
+        elements.downloadMasterBtn.removeEventListener('click', exportAttendanceOnly);
+        elements.downloadMasterBtn.addEventListener('click', exportMasterListCSV);
+    }
+}
 
 /**
  * Initializes disposition button states
@@ -1533,7 +1564,8 @@ async function loadStorageData() {
         STORAGE_KEYS.AUTO_UPDATE_MASTER_LIST,
         STORAGE_KEYS.POWER_AUTOMATE_URL,
         STORAGE_KEYS.USE_SPECIFIC_DATE,
-        STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE
+        STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE,
+        STORAGE_KEYS.IS_ATTENDANCE_MODE
     ]);
 
     // Load extension state from session storage (temporary, resets on browser restart)
@@ -1603,6 +1635,11 @@ async function loadStorageData() {
 
     if (elements.specificDateInput && specificDate) {
         elements.specificDateInput.value = specificDate;
+    }
+
+    // Restore attendance-only mode if it was active before panel closed
+    if (data[STORAGE_KEYS.IS_ATTENDANCE_MODE]) {
+        enterAttendanceMode();
     }
 }
 

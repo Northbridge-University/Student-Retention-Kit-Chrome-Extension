@@ -1797,6 +1797,37 @@ async function injectExcelTables(zip, tableMetadata) {
         const sheetPath = `xl/worksheets/sheet${meta.sheetIndex + 1}.xml`;
         let sheetXml = await zip.file(sheetPath)?.async('string');
         if (sheetXml) {
+            // --- Inject SUBTOTAL formulas into totals row cells ---
+            if (hasTotals) {
+                const totalsRowNum = lastRow; // 1-based row number for the totals row
+                const SUBTOTAL_CODES = { sum: 109, average: 101, count: 102, min: 105, max: 104 };
+
+                // Collect all formula cells to inject
+                let formulaCells = '';
+                for (let colIdx = 0; colIdx < meta.columns.length; colIdx++) {
+                    const func = meta.totalsRowFunctions[colIdx];
+                    if (!func || SUBTOTAL_CODES[func] === undefined) continue;
+
+                    const colLetter = columnIndexToLetter(colIdx);
+                    const cellRef = `${colLetter}${totalsRowNum}`;
+                    const colName = meta.columns[colIdx].header;
+                    const code = SUBTOTAL_CODES[func];
+                    const formula = `SUBTOTAL(${code},[${colName}])`;
+                    formulaCells += `<c r="${cellRef}"><f>${formula}</f></c>`;
+                }
+
+                if (formulaCells) {
+                    // Find the totals row and append formula cells at the END (before </row>)
+                    // This preserves column ordering: A (label) then B, C, D (formulas)
+                    const rowRegex = new RegExp(
+                        `(<row r="${totalsRowNum}"[^>]*>)([\\s\\S]*?)(</row>)`
+                    );
+                    if (rowRegex.test(sheetXml)) {
+                        sheetXml = sheetXml.replace(rowRegex, `$1$2${formulaCells}$3`);
+                    }
+                }
+            }
+
             if (sheetXml.includes('<tableParts')) {
                 // Sheet already has tableParts — increment count and append new tablePart
                 sheetXml = sheetXml.replace(
