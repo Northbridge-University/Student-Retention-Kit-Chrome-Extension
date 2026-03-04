@@ -1802,6 +1802,8 @@ async function injectExcelTables(zip, tableMetadata) {
                 const totalsRowNum = lastRow; // 1-based row number for the totals row
                 const SUBTOTAL_CODES = { sum: 109, average: 101, count: 102, min: 105, max: 104 };
 
+                // Collect all formula cells to inject
+                let formulaCells = '';
                 for (let colIdx = 0; colIdx < meta.columns.length; colIdx++) {
                     const func = meta.totalsRowFunctions[colIdx];
                     if (!func || SUBTOTAL_CODES[func] === undefined) continue;
@@ -1811,19 +1813,17 @@ async function injectExcelTables(zip, tableMetadata) {
                     const colName = meta.columns[colIdx].header;
                     const code = SUBTOTAL_CODES[func];
                     const formula = `SUBTOTAL(${code},[${colName}])`;
-                    const formulaCell = `<c r="${cellRef}"><f>${formula}</f></c>`;
+                    formulaCells += `<c r="${cellRef}"><f>${formula}</f></c>`;
+                }
 
-                    // Replace existing cell or insert into the row
-                    const cellRegex = new RegExp(`<c r="${cellRef}"[^/]*(?:/>|>[\\s\\S]*?</c>)`);
-                    if (cellRegex.test(sheetXml)) {
-                        sheetXml = sheetXml.replace(cellRegex, formulaCell);
-                    } else {
-                        // Insert before </row> of the totals row
-                        const rowEndRegex = new RegExp(`(<row r="${totalsRowNum}"[^>]*>)`);
-                        const rowMatch = sheetXml.match(rowEndRegex);
-                        if (rowMatch) {
-                            sheetXml = sheetXml.replace(rowMatch[0], rowMatch[0] + formulaCell);
-                        }
+                if (formulaCells) {
+                    // Find the totals row and append formula cells at the END (before </row>)
+                    // This preserves column ordering: A (label) then B, C, D (formulas)
+                    const rowRegex = new RegExp(
+                        `(<row r="${totalsRowNum}"[^>]*>)([\\s\\S]*?)(</row>)`
+                    );
+                    if (rowRegex.test(sheetXml)) {
+                        sheetXml = sheetXml.replace(rowRegex, `$1$2${formulaCells}$3`);
                     }
                 }
             }
