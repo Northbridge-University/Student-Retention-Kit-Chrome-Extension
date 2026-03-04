@@ -1743,22 +1743,31 @@ async function injectExcelTables(zip, tableMetadata) {
         const safeName = meta.displayName.replace(/[^a-zA-Z0-9_]/g, '_');
         const lastCol = columnIndexToLetter(meta.columns.length - 1);
         const startRow = meta.startRow || 1;
-        const lastRow = startRow + meta.dataRowCount; // startRow is header, data ends at startRow + dataRowCount
+        const hasTotals = meta.totalsRowFunctions && meta.totalsRowFunctions.length > 0;
+        const lastRow = startRow + meta.dataRowCount + (hasTotals ? 1 : 0);
         const ref = `A${startRow}:${lastCol}${lastRow}`;
 
         const colsXml = meta.columns.map((col, idx) => {
             const name = String(col.header)
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            return `<tableColumn id="${idx + 1}" name="${name}"/>`;
+            // Add totalsRowFunction if provided for this column
+            const totalsFunc = hasTotals && meta.totalsRowFunctions[idx]
+                ? ` totalsRowFunction="${meta.totalsRowFunctions[idx]}"`
+                : (hasTotals ? ' totalsRowFunction="none"' : '');
+            const totalsLabel = hasTotals && meta.totalsRowLabels && meta.totalsRowLabels[idx]
+                ? ` totalsRowLabel="${meta.totalsRowLabels[idx]}"`
+                : '';
+            return `<tableColumn id="${idx + 1}" name="${name}"${totalsFunc}${totalsLabel}/>`;
         }).join('');
 
         const tableXml =
             `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
             `<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"` +
             ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"` +
-            ` id="${tableId}" name="${safeName}" displayName="${safeName}" ref="${ref}" totalsRowShown="0">` +
-                `<autoFilter ref="${ref}"/>` +
+            ` id="${tableId}" name="${safeName}" displayName="${safeName}" ref="${ref}"` +
+            ` totalsRowShown="${hasTotals ? '1' : '0'}"${hasTotals ? ' totalsRowCount="1"' : ''}>` +
+                `<autoFilter ref="A${startRow}:${lastCol}${startRow + meta.dataRowCount}"/>` +
                 `<tableColumns count="${meta.columns.length}">${colsXml}</tableColumns>` +
                 `<tableStyleInfo name="TableStyleMedium16" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>` +
             `</table>`;
@@ -1819,6 +1828,25 @@ function columnIndexToLetter(index) {
         i = Math.floor(i / 26) - 1;
     }
     return letter;
+}
+
+/**
+ * Applies percentage number format (0.00%) to cells in a column range.
+ * Values should be stored as decimals (e.g. 0.85 for 85%).
+ * @param {Object} ws - SheetJS worksheet
+ * @param {number} colIndex - 0-based column index
+ * @param {number} startRow - 1-based start row (inclusive)
+ * @param {number} endRow - 1-based end row (exclusive)
+ */
+function applyPercentageFormat(ws, colIndex, startRow, endRow) {
+    const colLetter = columnIndexToLetter(colIndex);
+    for (let r = startRow; r < endRow; r++) {
+        const cellRef = `${colLetter}${r + 1}`; // +1 because sheet rows are 1-based and row 1 is header
+        const cell = ws[cellRef];
+        if (cell && typeof cell.v === 'number') {
+            cell.z = '0.00%';
+        }
+    }
 }
 
 /**
@@ -1928,8 +1956,8 @@ export async function exportAttendanceOnly() {
         const instructorRows = [...instructorAgg.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([name, agg]) => {
-                const pct = agg.schedMin > 0 ? (agg.attMin / agg.schedMin) * 100 : 0;
-                return [name, agg.attMin, agg.schedMin, Math.round(pct * 100) / 100];
+                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                return [name, agg.attMin, agg.schedMin, pct];
             });
 
         // Student Summary
@@ -1941,27 +1969,37 @@ export async function exportAttendanceOnly() {
                     totalAttMin += row.attMin;
                     totalSchedMin += row.schedMin;
                 }
-                const pct = totalSchedMin > 0 ? (totalAttMin / totalSchedMin) * 100 : 0;
-                return [name, totalAttMin, totalSchedMin, Math.round(pct * 100) / 100];
+                const pct = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
+                return [name, totalAttMin, totalSchedMin, pct];
             })
             .sort((a, b) => a[0].localeCompare(b[0]));
 
-        // Build sheet data
+        // Build sheet data with totals rows
         const attendanceData = [];
         attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
         for (const row of instructorRows) attendanceData.push(row);
+        // Totals row for instructor table (label + formulas handled by Excel table)
+        attendanceData.push(['Total', null, null, null]);
         attendanceData.push([]);
         attendanceData.push(['Student Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
         for (const row of studentRows) attendanceData.push(row);
+        // Totals row for student table
+        attendanceData.push(['Total', null, null, null]);
 
         const wb = XLSX.utils.book_new();
         const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
         wsAttendance['!cols'] = [
             { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 15 }
         ];
+
+        // Apply percentage format to Attendance % cells in both tables
+        applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
+        const studentStartDataRow = instructorRows.length + 4;
+        applyPercentageFormat(wsAttendance, 3, studentStartDataRow, studentStartDataRow + studentRows.length);
+
         XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
-        // Table metadata for the two tables
+        // Table metadata with totals rows
         const attendanceTableColumns = [
             { header: 'Instructor Name' }, { header: 'Total Attended Minutes' },
             { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
@@ -1970,6 +2008,8 @@ export async function exportAttendanceOnly() {
             { header: 'Student Name' }, { header: 'Total Attended Minutes' },
             { header: 'Total Scheduled Minutes' }, { header: 'Attendance %' }
         ];
+        const totalsFunctions = [null, 'sum', 'sum', 'average'];
+        const totalsLabels = ['Total', null, null, null];
 
         const tableMetadata = [];
         if (instructorRows.length > 0) {
@@ -1978,15 +2018,19 @@ export async function exportAttendanceOnly() {
                 displayName: 'InstructorAttendance',
                 columns: attendanceTableColumns,
                 dataRowCount: instructorRows.length,
-                startRow: 1
+                startRow: 1,
+                totalsRowFunctions: totalsFunctions,
+                totalsRowLabels: totalsLabels
             });
-            const studentTableStartRow = instructorRows.length + 3;
+            const studentTableStartRow = instructorRows.length + 4;
             tableMetadata.push({
                 sheetIndex: 0,
                 displayName: 'StudentAttendance',
                 columns: studentTableColumns,
                 dataRowCount: studentRows.length,
-                startRow: studentTableStartRow
+                startRow: studentTableStartRow,
+                totalsRowFunctions: totalsFunctions,
+                totalsRowLabels: totalsLabels
             });
         }
 
@@ -2521,8 +2565,8 @@ export async function exportMasterListCSV() {
             const instructorRows = [...instructorAgg.entries()]
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([name, agg]) => {
-                    const pct = agg.schedMin > 0 ? (agg.attMin / agg.schedMin) * 100 : 0;
-                    return [name, agg.attMin, agg.schedMin, Math.round(pct * 100) / 100];
+                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    return [name, agg.attMin, agg.schedMin, pct];
                 });
 
             // --- Table 2: Student Summary ---
@@ -2535,21 +2579,23 @@ export async function exportMasterListCSV() {
                         totalAttMin += row.attMin;
                         totalSchedMin += row.schedMin;
                     }
-                    const pct = totalSchedMin > 0 ? (totalAttMin / totalSchedMin) * 100 : 0;
-                    return [name, totalAttMin, totalSchedMin, Math.round(pct * 100) / 100];
+                    const pct = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
+                    return [name, totalAttMin, totalSchedMin, pct];
                 })
                 .sort((a, b) => a[0].localeCompare(b[0])); // Sort alphabetically by student name
 
             attendanceInstructorRowCount = instructorRows.length;
             attendanceStudentRowCount = studentRows.length;
 
-            // Build sheet data: Table 1 header, instructor rows, gap, Table 2 header, student rows
+            // Build sheet data: Table 1 header, instructor rows, totals, gap, Table 2 header, student rows, totals
             const attendanceData = [];
             // Instructor table header
             attendanceData.push(['Instructor Name', 'Total Attended Minutes', 'Total Scheduled Minutes', 'Attendance %']);
             for (const row of instructorRows) {
                 attendanceData.push(row);
             }
+            // Totals row for instructor table
+            attendanceData.push(['Total', null, null, null]);
             // Gap row between tables
             attendanceData.push([]);
             // Student table header
@@ -2557,6 +2603,8 @@ export async function exportMasterListCSV() {
             for (const row of studentRows) {
                 attendanceData.push(row);
             }
+            // Totals row for student table
+            attendanceData.push(['Total', null, null, null]);
 
             const wsAttendance = XLSX.utils.aoa_to_sheet(attendanceData);
 
@@ -2568,6 +2616,11 @@ export async function exportMasterListCSV() {
                 { wch: 15 }  // Percentage
             ];
             wsAttendance['!cols'] = attendanceColWidths;
+
+            // Apply percentage format to Attendance % cells
+            applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
+            const attStudentStartDataRow = instructorRows.length + 4;
+            applyPercentageFormat(wsAttendance, 3, attStudentStartDataRow, attStudentStartDataRow + studentRows.length);
 
             XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
@@ -2608,7 +2661,9 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Add On-Ground Attendance table metadata (two tables on one sheet)
+        // Add On-Ground Attendance table metadata (two tables on one sheet) with totals rows
+        const attTotalsFunctions = [null, 'sum', 'sum', 'average'];
+        const attTotalsLabels = ['Total', null, null, null];
         if (attendanceSheetIndex !== -1 && attendanceInstructorRowCount > 0) {
             // Table 1: Instructor Summary — starts at row 1
             tableMetadata.push({
@@ -2616,17 +2671,21 @@ export async function exportMasterListCSV() {
                 displayName: 'InstructorAttendance',
                 columns: attendanceTableColumns,
                 dataRowCount: attendanceInstructorRowCount,
-                startRow: 1
+                startRow: 1,
+                totalsRowFunctions: attTotalsFunctions,
+                totalsRowLabels: attTotalsLabels
             });
-            // Table 2: Student Summary — starts after instructor rows + gap row
-            // Row layout: 1=instructor header, 2..N+1=instructor data, N+2=gap, N+3=student header
-            const studentTableStartRow = attendanceInstructorRowCount + 3;
+            // Table 2: Student Summary — starts after instructor rows + totals + gap row
+            // Row layout: 1=header, 2..N+1=data, N+2=totals, N+3=gap, N+4=student header
+            const studentTableStartRow = attendanceInstructorRowCount + 4;
             tableMetadata.push({
                 sheetIndex: attendanceSheetIndex,
                 displayName: 'StudentAttendance',
                 columns: studentTableColumns,
                 dataRowCount: attendanceStudentRowCount,
-                startRow: studentTableStartRow
+                startRow: studentTableStartRow,
+                totalsRowFunctions: attTotalsFunctions,
+                totalsRowLabels: attTotalsLabels
             });
         }
 
