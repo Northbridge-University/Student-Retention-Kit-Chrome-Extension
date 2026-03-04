@@ -2131,42 +2131,44 @@ export async function exportAttendanceOnly() {
         ];
         const totalsFunctions = [null, 'sum', 'sum', 'custom'];
         const totalsLabels = ['Total', null, null, null];
-        const totalsCustomFormulas = { 3: '[Total Attended Minutes]/[Total Scheduled Minutes]' };
 
         const tableMetadata = [];
         if (instructorRows.length > 0) {
+            const instName = 'InstructorAttendance';
             tableMetadata.push({
                 sheetIndex: 0,
-                displayName: 'InstructorAttendance',
+                displayName: instName,
                 columns: attendanceTableColumns,
                 dataRowCount: instructorRows.length,
                 startRow: 1,
                 totalsRowFunctions: totalsFunctions,
                 totalsRowLabels: totalsLabels,
-                totalsCustomFormulas: totalsCustomFormulas
+                totalsCustomFormulas: { 3: `${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]` }
             });
             const studentTableStartRow = instructorRows.length + 4;
+            const studName = 'StudentAttendance';
             tableMetadata.push({
                 sheetIndex: 0,
-                displayName: 'StudentAttendance',
+                displayName: studName,
                 columns: studentTableColumns,
                 dataRowCount: studentRows.length,
                 startRow: studentTableStartRow,
                 totalsRowFunctions: totalsFunctions,
                 totalsRowLabels: totalsLabels,
-                totalsCustomFormulas: totalsCustomFormulas
+                totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
             });
             if (dailyRows.length > 0) {
                 const dailyTableStartRow = studentTableStartRow + studentRows.length + 3;
+                const dailyName = 'DailyAttendanceTrend';
                 tableMetadata.push({
                     sheetIndex: 0,
-                    displayName: 'DailyAttendanceTrend',
+                    displayName: dailyName,
                     columns: dailyTableColumns,
                     dataRowCount: dailyRows.length,
                     startRow: dailyTableStartRow,
                     totalsRowFunctions: totalsFunctions,
                     totalsRowLabels: totalsLabels,
-                    totalsCustomFormulas: totalsCustomFormulas
+                    totalsCustomFormulas: { 3: `${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]` }
                 });
             }
         }
@@ -2813,31 +2815,32 @@ export async function exportMasterListCSV() {
         // Add On-Ground Attendance table metadata (two tables on one sheet) with totals rows
         const attTotalsFunctions = [null, 'sum', 'sum', 'custom'];
         const attTotalsLabels = ['Total', null, null, null];
-        const attTotalsCustomFormulas = { 3: '[Total Attended Minutes]/[Total Scheduled Minutes]' };
         if (attendanceSheetIndex !== -1 && attendanceInstructorRowCount > 0) {
+            const instName = 'InstructorAttendance';
             // Table 1: Instructor Summary — starts at row 1
             tableMetadata.push({
                 sheetIndex: attendanceSheetIndex,
-                displayName: 'InstructorAttendance',
+                displayName: instName,
                 columns: attendanceTableColumns,
                 dataRowCount: attendanceInstructorRowCount,
                 startRow: 1,
                 totalsRowFunctions: attTotalsFunctions,
                 totalsRowLabels: attTotalsLabels,
-                totalsCustomFormulas: attTotalsCustomFormulas
+                totalsCustomFormulas: { 3: `${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]` }
             });
             // Table 2: Student Summary — starts after instructor rows + totals + gap row
             // Row layout: 1=header, 2..N+1=data, N+2=totals, N+3=gap, N+4=student header
             const studentTableStartRow = attendanceInstructorRowCount + 4;
+            const studName = 'StudentAttendance';
             tableMetadata.push({
                 sheetIndex: attendanceSheetIndex,
-                displayName: 'StudentAttendance',
+                displayName: studName,
                 columns: studentTableColumns,
                 dataRowCount: attendanceStudentRowCount,
                 startRow: studentTableStartRow,
                 totalsRowFunctions: attTotalsFunctions,
                 totalsRowLabels: attTotalsLabels,
-                totalsCustomFormulas: attTotalsCustomFormulas
+                totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
             });
         }
 
