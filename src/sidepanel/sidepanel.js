@@ -33,6 +33,7 @@ import {
     updateDistributionDropdown,
     renderChart,
     setChartType,
+    toggleWhiskerOrientation,
     initChartResizeObserver
 } from './student-renderer.js';
 
@@ -1481,6 +1482,12 @@ function setupEventListeners() {
                 setChartType(btn.dataset.chart);
             }
         });
+    }
+
+    // Rotate box plot button
+    const rotateBtn = document.getElementById('rotateWhiskerBtn');
+    if (rotateBtn) {
+        rotateBtn.addEventListener('click', toggleWhiskerOrientation);
     }
 
     // Real-time chart resize when panel width changes

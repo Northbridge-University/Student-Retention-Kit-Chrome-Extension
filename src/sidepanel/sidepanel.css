@@ -1274,6 +1274,37 @@ input:focus, textarea:focus, select:focus {
     margin-bottom: 0;
 }
 
+.chart-controls-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chart-rotate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border: none;
+    background: rgba(0, 0, 0, 0.05);
+    color: #9ca3af;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.chart-rotate-btn:hover {
+    color: #6b7280;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.chart-rotate-btn.rotated {
+    color: var(--primary);
+    background: rgba(0, 90, 156, 0.1);
+}
+
 .chart-toggle-group {
     display: flex;
     gap: 2px;

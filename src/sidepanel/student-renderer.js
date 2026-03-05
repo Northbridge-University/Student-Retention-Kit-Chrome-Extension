@@ -596,6 +596,9 @@ const BUCKET_CONFIGS = {
 /** Currently selected chart type */
 let currentChartType = 'whisker';
 
+/** Box plot orientation: false = vertical, true = horizontal */
+let _whiskerHorizontal = false;
+
 /** Stored pie chart state for hover detection */
 let _pieSlices = [];
 let _pieCenter = { x: 0, y: 0 };
@@ -675,7 +678,7 @@ export function updateDistributionDropdown() {
 }
 
 /**
- * Renders a vertical box-and-whisker plot on a canvas
+ * Renders a box-and-whisker plot on a canvas (vertical or horizontal based on _whiskerHorizontal)
  * @param {string} [distributionType] - The type of distribution to render (default: current dropdown value)
  */
 export function renderWhiskerPlot(distributionType) {
@@ -696,244 +699,20 @@ export function renderWhiskerPlot(distributionType) {
     const lowerFence = Math.max(min, q1 - 1.5 * iqr);
     const upperFence = Math.min(max, q3 + 1.5 * iqr);
 
-    // Outliers
     const upperOutliers = daysData.filter(v => v > upperFence);
     const lowerOutliers = daysData.filter(v => v < lowerFence);
     const outliers = [...lowerOutliers, ...upperOutliers];
     const hasUpperOutliers = upperOutliers.length > 0;
 
-    // Vertical layout: Y-axis = days out (top = high, bottom = low)
-    const padding = { top: 30, bottom: 40, left: 55, right: 30 };
-    const plotWidth = width - padding.left - padding.right;
-    const plotHeight = height - padding.top - padding.bottom;
-
-    // Box occupies the center horizontal band
-    const boxLeft = padding.left + plotWidth * 0.3;
-    const boxRight = padding.left + plotWidth * 0.7;
-    const boxWidth = boxRight - boxLeft;
-    const midX = (boxLeft + boxRight) / 2;
-
-    // Split-axis scale: give the fence region (where the box lives) most of the space
-    // and compress outliers into a smaller top zone
-    const outlierZoneRatio = hasUpperOutliers ? 0.25 : 0; // top 25% for outliers if they exist
-    const breakGap = hasUpperOutliers ? 12 : 0; // gap for axis break indicator
-    const mainZoneBottom = padding.top + plotHeight;
-    const mainZoneTop = padding.top + plotHeight * outlierZoneRatio + breakGap;
-    const mainZoneHeight = mainZoneBottom - mainZoneTop;
-    const outlierZoneTop = padding.top;
-    const outlierZoneBottom = padding.top + plotHeight * outlierZoneRatio;
-
-    // Main zone maps: lowerFence..upperFence (or min..upperFence if no lower outliers)
-    const mainMin = Math.min(lowerFence, min);
-    const mainMax = upperFence;
-    const mainRange = mainMax - mainMin || 1;
-
-    // Scale for main zone (fence region)
-    const scaleMain = (val) => {
-        const ratio = (val - mainMin) / mainRange;
-        return mainZoneBottom - ratio * mainZoneHeight;
-    };
-
-    // Scale for outlier zone (above upper fence)
-    const outlierMax = max;
-    const outlierRange = outlierMax - upperFence || 1;
-    const scaleOutlier = (val) => {
-        const ratio = (val - upperFence) / outlierRange;
-        return outlierZoneBottom - ratio * (outlierZoneBottom - outlierZoneTop);
-    };
-
-    // Unified scale function
-    const scale = (val) => {
-        if (val <= upperFence || !hasUpperOutliers) {
-            return scaleMain(Math.max(mainMin, Math.min(val, mainMax)));
-        }
-        return scaleOutlier(val);
-    };
-
-    // Draw horizontal grid lines for main zone
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
-    ctx.lineWidth = 1;
-    const mainGridSteps = 4;
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '12px Roboto, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-
-    const fmtGrid = (v) => type === 'gpa' ? v.toFixed(1) : Math.round(v);
-    for (let i = 0; i <= mainGridSteps; i++) {
-        const val = mainMin + (i / mainGridSteps) * mainRange;
-        const displayVal = type === 'gpa' ? val : Math.round(val);
-        const y = scaleMain(displayVal);
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
-        ctx.beginPath();
-        ctx.moveTo(padding.left - 5, y);
-        ctx.lineTo(width - padding.right, y);
-        ctx.stroke();
-        ctx.fillStyle = '#6b7280';
-        ctx.fillText(fmtGrid(val), padding.left - 10, y);
-    }
-
-    // Draw axis break and outlier zone labels if outliers exist
-    if (hasUpperOutliers) {
-        // Axis break indicator (zigzag)
-        const breakY = mainZoneTop - breakGap / 2;
-        ctx.strokeStyle = '#9ca3af';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        const zigW = 6;
-        const zigH = 4;
-        const startX = padding.left - 8;
-        ctx.moveTo(startX, breakY - zigH);
-        for (let x = startX; x < width - padding.right + 8; x += zigW * 2) {
-            ctx.lineTo(x + zigW, breakY + zigH);
-            ctx.lineTo(x + zigW * 2, breakY - zigH);
-        }
-        ctx.stroke();
-
-        // Outlier zone grid lines (fewer, just min/max)
-        const outlierLabels = [upperFence + 1, max];
-        // Remove duplicates and sort
-        const roundOutlier = (v) => type === 'gpa' ? Math.round(v * 10) / 10 : Math.round(v);
-        const uniqueLabels = [...new Set(outlierLabels.map(roundOutlier))].sort((a, b) => a - b);
-        uniqueLabels.forEach(val => {
-            if (val <= upperFence) return;
-            const y = scaleOutlier(val);
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
-            ctx.beginPath();
-            ctx.moveTo(padding.left - 5, y);
-            ctx.lineTo(width - padding.right, y);
-            ctx.stroke();
-            ctx.fillStyle = '#9ca3af';
-            ctx.font = '11px Roboto, sans-serif';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(fmtGrid(val), padding.left - 10, y);
-        });
-    }
-
-    // Y-axis title
-    ctx.save();
-    ctx.translate(14, padding.top + plotHeight / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.font = '12px Roboto, sans-serif';
-    ctx.fillStyle = '#6b7280';
-    ctx.fillText(config.label, 0, 0);
-    ctx.restore();
-
-    // Draw whisker lines (vertical)
-    ctx.strokeStyle = '#6b7280';
-    ctx.lineWidth = 2;
-
-    // Bottom whisker (lower fence to Q1)
-    ctx.beginPath();
-    ctx.moveTo(midX, scale(lowerFence));
-    ctx.lineTo(midX, scale(q1));
-    ctx.stroke();
-    // Bottom whisker cap
-    ctx.beginPath();
-    ctx.moveTo(boxLeft + boxWidth * 0.25, scale(lowerFence));
-    ctx.lineTo(boxRight - boxWidth * 0.25, scale(lowerFence));
-    ctx.stroke();
-
-    // Top whisker (Q3 to upper fence)
-    ctx.beginPath();
-    ctx.moveTo(midX, scale(q3));
-    ctx.lineTo(midX, scale(upperFence));
-    ctx.stroke();
-    // Top whisker cap
-    ctx.beginPath();
-    ctx.moveTo(boxLeft + boxWidth * 0.25, scale(upperFence));
-    ctx.lineTo(boxRight - boxWidth * 0.25, scale(upperFence));
-    ctx.stroke();
-
-    // Draw IQR box (Q1 to Q3)
-    const boxY = scale(q3);
-    const boxH = scale(q1) - scale(q3);
-    // Ensure minimum box height for readability
-    const minBoxH = Math.max(boxH, 30);
-    const boxYAdj = boxH < 30 ? boxY - (30 - boxH) / 2 : boxY;
-    ctx.fillStyle = 'rgba(30, 58, 95, 0.15)';
-    ctx.fillRect(boxLeft, boxYAdj, boxWidth, minBoxH);
-    ctx.strokeStyle = '#1e3a5f';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(boxLeft, boxYAdj, boxWidth, minBoxH);
-
-    // Draw median line (horizontal across the box)
-    ctx.strokeStyle = '#b45309';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(boxLeft, scale(median));
-    ctx.lineTo(boxRight, scale(median));
-    ctx.stroke();
-
-    // Draw mean diamond
-    const meanY = scale(mean);
-    ctx.fillStyle = '#0f766e';
-    ctx.beginPath();
-    ctx.moveTo(midX, meanY - 8);
-    ctx.lineTo(midX + 6, meanY);
-    ctx.lineTo(midX, meanY + 8);
-    ctx.lineTo(midX - 6, meanY);
-    ctx.closePath();
-    ctx.fill();
-
-    // Formatting helpers (used in labels and stats)
     const isDecimal = type === 'gpa';
     const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
+    const fmtGrid = (v) => type === 'gpa' ? v.toFixed(1) : Math.round(v);
 
-    // Labels on the right side — collect all and space them to avoid overlap
-    const rightLabels = [
-        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' },
-        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#b45309', font: 'bold 12px Roboto, sans-serif' },
-        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#0f766e', font: '11px Roboto, sans-serif' },
-        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' }
-    ].sort((a, b) => a.y - b.y);
-
-    // Push labels apart so they don't overlap (minimum 14px spacing)
-    const minSpacing = 14;
-    for (let i = 1; i < rightLabels.length; i++) {
-        if (rightLabels[i].y - rightLabels[i - 1].y < minSpacing) {
-            rightLabels[i].y = rightLabels[i - 1].y + minSpacing;
-        }
+    if (_whiskerHorizontal) {
+        _drawHorizontalWhisker(ctx, width, height, { daysData, type, config, n, min, max, q1, median, q3, mean, iqr, lowerFence, upperFence, upperOutliers, lowerOutliers, hasUpperOutliers, isDecimal, fmtVal, fmtGrid });
+    } else {
+        _drawVerticalWhisker(ctx, width, height, { daysData, type, config, n, min, max, q1, median, q3, mean, iqr, lowerFence, upperFence, upperOutliers, lowerOutliers, hasUpperOutliers, isDecimal, fmtVal, fmtGrid });
     }
-
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    rightLabels.forEach(lbl => {
-        ctx.fillStyle = lbl.color;
-        ctx.font = lbl.font;
-        ctx.fillText(lbl.text, boxRight + 8, lbl.y);
-    });
-
-    // Draw outliers in the outlier zone
-    ctx.fillStyle = '#7c3aed';
-    upperOutliers.forEach(val => {
-        const jitter = (Math.random() - 0.5) * boxWidth * 0.5;
-        ctx.beginPath();
-        ctx.arc(midX + jitter, scale(val), 4, 0, Math.PI * 2);
-        ctx.fill();
-    });
-    lowerOutliers.forEach(val => {
-        const jitter = (Math.random() - 0.5) * boxWidth * 0.5;
-        ctx.beginPath();
-        ctx.arc(midX + jitter, scale(val), 4, 0, Math.PI * 2);
-        ctx.fill();
-    });
-
-    // Draw individual data points (jittered horizontally, to the left of the box)
-    const dotAreaLeft = padding.left;
-    const dotAreaRight = boxLeft - 10;
-    const dotAreaMid = (dotAreaLeft + dotAreaRight) / 2;
-    const dotAreaWidth = dotAreaRight - dotAreaLeft;
-    ctx.fillStyle = 'rgba(30, 58, 95, 0.25)';
-    daysData.forEach((val) => {
-        if (val > upperFence || val < lowerFence) return;
-        const jitter = (Math.random() - 0.5) * dotAreaWidth * 0.7;
-        ctx.beginPath();
-        ctx.arc(dotAreaMid + jitter, scale(val), 2.5, 0, Math.PI * 2);
-        ctx.fill();
-    });
 
     // Summary stats grid above the canvas
     if (elements.whiskerPlotStats) {
@@ -957,13 +736,308 @@ export function renderWhiskerPlot(distributionType) {
         `;
     }
 
-    // Legend as HTML below the canvas
+    // Legend
     legend.innerHTML = `
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#1e3a5f; opacity:0.3;"></div> IQR (Q1–Q3)</div>
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#b45309;"></div> Median</div>
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#0f766e; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#7c3aed; border-radius:50%;"></div> Outliers (${outliers.length})</div>
     `;
+}
+
+/**
+ * Draws the vertical (default) whisker plot layout
+ */
+function _drawVerticalWhisker(ctx, width, height, s) {
+    const { daysData, type, config, q1, median, q3, mean, lowerFence, upperFence, upperOutliers, lowerOutliers, hasUpperOutliers, isDecimal, fmtVal, fmtGrid, min, max } = s;
+
+    const padding = { top: 30, bottom: 40, left: 55, right: 30 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+
+    const boxLeft = padding.left + plotWidth * 0.3;
+    const boxRight = padding.left + plotWidth * 0.7;
+    const boxWidth = boxRight - boxLeft;
+    const midX = (boxLeft + boxRight) / 2;
+
+    const outlierZoneRatio = hasUpperOutliers ? 0.25 : 0;
+    const breakGap = hasUpperOutliers ? 12 : 0;
+    const mainZoneBottom = padding.top + plotHeight;
+    const mainZoneTop = padding.top + plotHeight * outlierZoneRatio + breakGap;
+    const mainZoneHeight = mainZoneBottom - mainZoneTop;
+    const outlierZoneTop = padding.top;
+    const outlierZoneBottom = padding.top + plotHeight * outlierZoneRatio;
+
+    const mainMin = Math.min(lowerFence, min);
+    const mainMax = upperFence;
+    const mainRange = mainMax - mainMin || 1;
+
+    const scaleMain = (val) => mainZoneBottom - ((val - mainMin) / mainRange) * mainZoneHeight;
+    const outlierRange = max - upperFence || 1;
+    const scaleOutlier = (val) => outlierZoneBottom - ((val - upperFence) / outlierRange) * (outlierZoneBottom - outlierZoneTop);
+    const scale = (val) => {
+        if (val <= upperFence || !hasUpperOutliers) return scaleMain(Math.max(mainMin, Math.min(val, mainMax)));
+        return scaleOutlier(val);
+    };
+
+    // Grid lines
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '12px Roboto, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const mainGridSteps = 4;
+    for (let i = 0; i <= mainGridSteps; i++) {
+        const val = mainMin + (i / mainGridSteps) * mainRange;
+        const y = scaleMain(type === 'gpa' ? val : Math.round(val));
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding.left - 5, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText(fmtGrid(val), padding.left - 10, y);
+    }
+
+    // Axis break and outlier labels
+    if (hasUpperOutliers) {
+        const breakY = mainZoneTop - breakGap / 2;
+        ctx.strokeStyle = '#9ca3af';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        const zigW = 6, zigH = 4, startX = padding.left - 8;
+        ctx.moveTo(startX, breakY - zigH);
+        for (let x = startX; x < width - padding.right + 8; x += zigW * 2) {
+            ctx.lineTo(x + zigW, breakY + zigH);
+            ctx.lineTo(x + zigW * 2, breakY - zigH);
+        }
+        ctx.stroke();
+
+        const roundOutlier = (v) => type === 'gpa' ? Math.round(v * 10) / 10 : Math.round(v);
+        const uniqueLabels = [...new Set([upperFence + 1, max].map(roundOutlier))].sort((a, b) => a - b);
+        uniqueLabels.forEach(val => {
+            if (val <= upperFence) return;
+            const y = scaleOutlier(val);
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
+            ctx.beginPath(); ctx.moveTo(padding.left - 5, y); ctx.lineTo(width - padding.right, y); ctx.stroke();
+            ctx.fillStyle = '#9ca3af'; ctx.font = '11px Roboto, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            ctx.fillText(fmtGrid(val), padding.left - 10, y);
+        });
+    }
+
+    // Y-axis title
+    ctx.save();
+    ctx.translate(14, padding.top + plotHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center'; ctx.font = '12px Roboto, sans-serif'; ctx.fillStyle = '#6b7280';
+    ctx.fillText(config.label, 0, 0);
+    ctx.restore();
+
+    // Whiskers
+    ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(midX, scale(lowerFence)); ctx.lineTo(midX, scale(q1)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(boxLeft + boxWidth * 0.25, scale(lowerFence)); ctx.lineTo(boxRight - boxWidth * 0.25, scale(lowerFence)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(midX, scale(q3)); ctx.lineTo(midX, scale(upperFence)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(boxLeft + boxWidth * 0.25, scale(upperFence)); ctx.lineTo(boxRight - boxWidth * 0.25, scale(upperFence)); ctx.stroke();
+
+    // IQR box
+    const boxY = scale(q3);
+    const boxH = scale(q1) - scale(q3);
+    const minBoxH = Math.max(boxH, 30);
+    const boxYAdj = boxH < 30 ? boxY - (30 - boxH) / 2 : boxY;
+    ctx.fillStyle = 'rgba(30, 58, 95, 0.15)';
+    ctx.fillRect(boxLeft, boxYAdj, boxWidth, minBoxH);
+    ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2;
+    ctx.strokeRect(boxLeft, boxYAdj, boxWidth, minBoxH);
+
+    // Median
+    ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(boxLeft, scale(median)); ctx.lineTo(boxRight, scale(median)); ctx.stroke();
+
+    // Mean diamond
+    const meanY = scale(mean);
+    ctx.fillStyle = '#0f766e';
+    ctx.beginPath(); ctx.moveTo(midX, meanY - 8); ctx.lineTo(midX + 6, meanY); ctx.lineTo(midX, meanY + 8); ctx.lineTo(midX - 6, meanY); ctx.closePath(); ctx.fill();
+
+    // Right-side labels
+    const rightLabels = [
+        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' },
+        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#b45309', font: 'bold 12px Roboto, sans-serif' },
+        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#0f766e', font: '11px Roboto, sans-serif' },
+        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' }
+    ].sort((a, b) => a.y - b.y);
+    for (let i = 1; i < rightLabels.length; i++) {
+        if (rightLabels[i].y - rightLabels[i - 1].y < 14) rightLabels[i].y = rightLabels[i - 1].y + 14;
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    rightLabels.forEach(lbl => { ctx.fillStyle = lbl.color; ctx.font = lbl.font; ctx.fillText(lbl.text, boxRight + 8, lbl.y); });
+
+    // Outliers
+    ctx.fillStyle = '#7c3aed';
+    upperOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxWidth * 0.5; ctx.beginPath(); ctx.arc(midX + j, scale(val), 4, 0, Math.PI * 2); ctx.fill(); });
+    lowerOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxWidth * 0.5; ctx.beginPath(); ctx.arc(midX + j, scale(val), 4, 0, Math.PI * 2); ctx.fill(); });
+
+    // Data points
+    const dotAreaLeft = padding.left, dotAreaRight = boxLeft - 10;
+    const dotAreaMid = (dotAreaLeft + dotAreaRight) / 2, dotAreaWidth = dotAreaRight - dotAreaLeft;
+    ctx.fillStyle = 'rgba(30, 58, 95, 0.25)';
+    daysData.forEach(val => {
+        if (val > upperFence || val < lowerFence) return;
+        const j = (Math.random() - 0.5) * dotAreaWidth * 0.7;
+        ctx.beginPath(); ctx.arc(dotAreaMid + j, scale(val), 2.5, 0, Math.PI * 2); ctx.fill();
+    });
+}
+
+/**
+ * Draws the horizontal whisker plot layout (value axis = X, left to right)
+ */
+function _drawHorizontalWhisker(ctx, width, height, s) {
+    const { daysData, type, config, q1, median, q3, mean, lowerFence, upperFence, upperOutliers, lowerOutliers, hasUpperOutliers, isDecimal, fmtVal, fmtGrid, min, max } = s;
+
+    const padding = { top: 30, bottom: 55, left: 30, right: 30 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+
+    // Box occupies the center vertical band
+    const boxTop = padding.top + plotHeight * 0.3;
+    const boxBottom = padding.top + plotHeight * 0.7;
+    const boxHeight = boxBottom - boxTop;
+    const midY = (boxTop + boxBottom) / 2;
+
+    // Split-axis scale: main zone on left, outlier zone on right
+    const outlierZoneRatio = hasUpperOutliers ? 0.25 : 0;
+    const breakGap = hasUpperOutliers ? 12 : 0;
+    const mainZoneLeft = padding.left;
+    const mainZoneRight = padding.left + plotWidth * (1 - outlierZoneRatio) - breakGap;
+    const mainZoneWidth = mainZoneRight - mainZoneLeft;
+    const outlierZoneLeft = padding.left + plotWidth * (1 - outlierZoneRatio);
+    const outlierZoneRight = padding.left + plotWidth;
+
+    const mainMin = Math.min(lowerFence, min);
+    const mainMax = upperFence;
+    const mainRange = mainMax - mainMin || 1;
+
+    const scaleMain = (val) => mainZoneLeft + ((val - mainMin) / mainRange) * mainZoneWidth;
+    const outlierRange = max - upperFence || 1;
+    const scaleOutlier = (val) => outlierZoneLeft + ((val - upperFence) / outlierRange) * (outlierZoneRight - outlierZoneLeft);
+    const scale = (val) => {
+        if (val <= upperFence || !hasUpperOutliers) return scaleMain(Math.max(mainMin, Math.min(val, mainMax)));
+        return scaleOutlier(val);
+    };
+
+    // Vertical grid lines
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '12px Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const mainGridSteps = 4;
+    for (let i = 0; i <= mainGridSteps; i++) {
+        const val = mainMin + (i / mainGridSteps) * mainRange;
+        const x = scaleMain(type === 'gpa' ? val : Math.round(val));
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, padding.top);
+        ctx.lineTo(x, padding.top + plotHeight + 5);
+        ctx.stroke();
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText(fmtGrid(val), x, padding.top + plotHeight + 10);
+    }
+
+    // Axis break and outlier labels
+    if (hasUpperOutliers) {
+        const breakX = outlierZoneLeft - breakGap / 2;
+        ctx.strokeStyle = '#9ca3af';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        const zigW = 4, zigH = 6, startY = padding.top - 8;
+        ctx.moveTo(breakX - zigW, startY);
+        for (let y = startY; y < padding.top + plotHeight + 8; y += zigH * 2) {
+            ctx.lineTo(breakX + zigW, y + zigH);
+            ctx.lineTo(breakX - zigW, y + zigH * 2);
+        }
+        ctx.stroke();
+
+        const roundOutlier = (v) => type === 'gpa' ? Math.round(v * 10) / 10 : Math.round(v);
+        const uniqueLabels = [...new Set([upperFence + 1, max].map(roundOutlier))].sort((a, b) => a - b);
+        uniqueLabels.forEach(val => {
+            if (val <= upperFence) return;
+            const x = scaleOutlier(val);
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
+            ctx.beginPath(); ctx.moveTo(x, padding.top); ctx.lineTo(x, padding.top + plotHeight + 5); ctx.stroke();
+            ctx.fillStyle = '#9ca3af'; ctx.font = '11px Roboto, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.fillText(fmtGrid(val), x, padding.top + plotHeight + 10);
+        });
+    }
+
+    // X-axis title
+    ctx.textAlign = 'center'; ctx.font = '12px Roboto, sans-serif'; ctx.fillStyle = '#6b7280';
+    ctx.fillText(config.label, padding.left + plotWidth / 2, height - 8);
+
+    // Whiskers (horizontal)
+    ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 2;
+    // Left whisker (lower fence to Q1)
+    ctx.beginPath(); ctx.moveTo(scale(lowerFence), midY); ctx.lineTo(scale(q1), midY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(scale(lowerFence), boxTop + boxHeight * 0.25); ctx.lineTo(scale(lowerFence), boxBottom - boxHeight * 0.25); ctx.stroke();
+    // Right whisker (Q3 to upper fence)
+    ctx.beginPath(); ctx.moveTo(scale(q3), midY); ctx.lineTo(scale(upperFence), midY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(scale(upperFence), boxTop + boxHeight * 0.25); ctx.lineTo(scale(upperFence), boxBottom - boxHeight * 0.25); ctx.stroke();
+
+    // IQR box
+    const boxX = scale(q1);
+    const boxW = scale(q3) - scale(q1);
+    const minBoxW = Math.max(boxW, 30);
+    const boxXAdj = boxW < 30 ? boxX - (30 - boxW) / 2 : boxX;
+    ctx.fillStyle = 'rgba(30, 58, 95, 0.15)';
+    ctx.fillRect(boxXAdj, boxTop, minBoxW, boxHeight);
+    ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2;
+    ctx.strokeRect(boxXAdj, boxTop, minBoxW, boxHeight);
+
+    // Median (vertical line)
+    ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(scale(median), boxTop); ctx.lineTo(scale(median), boxBottom); ctx.stroke();
+
+    // Mean diamond
+    const meanX = scale(mean);
+    ctx.fillStyle = '#0f766e';
+    ctx.beginPath(); ctx.moveTo(meanX, midY - 8); ctx.lineTo(meanX + 6, midY); ctx.lineTo(meanX, midY + 8); ctx.lineTo(meanX - 6, midY); ctx.closePath(); ctx.fill();
+
+    // Labels below the box — collect all and space them
+    const bottomLabels = [
+        { x: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' },
+        { x: scale(median), text: `Median: ${fmtVal(median)}`, color: '#b45309', font: 'bold 12px Roboto, sans-serif' },
+        { x: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#0f766e', font: '11px Roboto, sans-serif' },
+        { x: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' }
+    ].sort((a, b) => a.x - b.x);
+    // Measure text widths and push apart
+    for (let i = 1; i < bottomLabels.length; i++) {
+        ctx.font = bottomLabels[i].font;
+        const prevWidth = ctx.measureText(bottomLabels[i - 1].text).width;
+        const minGap = prevWidth / 2 + 8;
+        if (bottomLabels[i].x - bottomLabels[i - 1].x < minGap) {
+            bottomLabels[i].x = bottomLabels[i - 1].x + minGap;
+        }
+    }
+    ctx.textBaseline = 'top';
+    bottomLabels.forEach(lbl => {
+        ctx.fillStyle = lbl.color; ctx.font = lbl.font; ctx.textAlign = 'center';
+        ctx.fillText(lbl.text, lbl.x, boxBottom + 8);
+    });
+
+    // Outliers
+    ctx.fillStyle = '#7c3aed';
+    upperOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxHeight * 0.5; ctx.beginPath(); ctx.arc(scale(val), midY + j, 4, 0, Math.PI * 2); ctx.fill(); });
+    lowerOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxHeight * 0.5; ctx.beginPath(); ctx.arc(scale(val), midY + j, 4, 0, Math.PI * 2); ctx.fill(); });
+
+    // Data points (jittered vertically, above the box)
+    const dotAreaTop = padding.top, dotAreaBottom = boxTop - 10;
+    const dotAreaMid = (dotAreaTop + dotAreaBottom) / 2, dotAreaHeight = dotAreaBottom - dotAreaTop;
+    ctx.fillStyle = 'rgba(30, 58, 95, 0.25)';
+    daysData.forEach(val => {
+        if (val > upperFence || val < lowerFence) return;
+        const j = (Math.random() - 0.5) * dotAreaHeight * 0.7;
+        ctx.beginPath(); ctx.arc(scale(val), dotAreaMid + j, 2.5, 0, Math.PI * 2); ctx.fill();
+    });
 }
 
 /**
@@ -1334,6 +1408,13 @@ export function renderChart(distributionType) {
             break;
     }
     updateChartToggleState();
+
+    // Show rotate button only for box plot
+    const rotateBtn = document.getElementById('rotateWhiskerBtn');
+    if (rotateBtn) {
+        rotateBtn.style.display = currentChartType === 'whisker' ? '' : 'none';
+        rotateBtn.classList.toggle('rotated', _whiskerHorizontal);
+    }
 }
 
 /**
@@ -1341,6 +1422,14 @@ export function renderChart(distributionType) {
  */
 export function setChartType(chartType) {
     currentChartType = chartType;
+    renderChart();
+}
+
+/**
+ * Toggles the box plot between vertical and horizontal orientation
+ */
+export function toggleWhiskerOrientation() {
+    _whiskerHorizontal = !_whiskerHorizontal;
     renderChart();
 }
 

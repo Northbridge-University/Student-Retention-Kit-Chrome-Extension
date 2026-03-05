@@ -236,15 +236,20 @@
                     <option value="gpa">GPA Distribution</option>
                     <option value="attendance">On-Ground Attendance Distribution</option>
                 </select>
-                <div id="chartTypeToggle" class="chart-toggle-group">
-                    <button class="chart-toggle-btn active" data-chart="whisker" title="Box Plot">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="0" x2="8" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="13" x2="8" y2="16" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>
-                    </button>
-                    <button class="chart-toggle-btn" data-chart="histogram" title="Histogram">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="9" width="3" height="7" rx="0.5"/><rect x="5" y="5" width="3" height="11" rx="0.5"/><rect x="9" y="2" width="3" height="14" rx="0.5"/><rect x="13" y="7" width="3" height="9" rx="0.5"/></svg>
-                    </button>
-                    <button class="chart-toggle-btn" data-chart="pie" title="Donut Chart">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" fill-rule="evenodd"/><path d="M8 1v3a4 4 0 0 1 4 4h3A7 7 0 0 0 8 1z" opacity="0.5"/></svg>
+                <div class="chart-controls-right">
+                    <div id="chartTypeToggle" class="chart-toggle-group">
+                        <button class="chart-toggle-btn active" data-chart="whisker" title="Box Plot">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="0" x2="8" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="13" x2="8" y2="16" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>
+                        </button>
+                        <button class="chart-toggle-btn" data-chart="histogram" title="Histogram">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="9" width="3" height="7" rx="0.5"/><rect x="5" y="5" width="3" height="11" rx="0.5"/><rect x="9" y="2" width="3" height="14" rx="0.5"/><rect x="13" y="7" width="3" height="9" rx="0.5"/></svg>
+                        </button>
+                        <button class="chart-toggle-btn" data-chart="pie" title="Donut Chart">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" fill-rule="evenodd"/><path d="M8 1v3a4 4 0 0 1 4 4h3A7 7 0 0 0 8 1z" opacity="0.5"/></svg>
+                        </button>
+                    </div>
+                    <button id="rotateWhiskerBtn" class="chart-rotate-btn" title="Rotate Box Plot" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.3-4.2"/><path d="M14 8a6 6 0 0 1-10.3 4.2"/><polyline points="12 1 12.3 3.8 9.5 4"/><polyline points="4 12 3.7 12.2 6.5 12"/></svg>
                     </button>
                 </div>
             </div>
