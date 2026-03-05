@@ -1149,6 +1149,15 @@ input:focus, textarea:focus, select:focus {
     }
 }
 
+/* SORT FILTER BUTTON - no rotation on hover */
+#sortFilterBtn:hover {
+    transform: none;
+}
+
+#sortFilterWrapper {
+    flex-shrink: 0;
+}
+
 /* SORT FILTER DROPDOWN */
 .sort-dropdown-menu {
     position: absolute;
@@ -1185,6 +1194,7 @@ input:focus, textarea:focus, select:focus {
 /* VIEW TOGGLE */
 .view-toggle {
     display: flex;
+    flex-shrink: 0;
     border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: 0.75rem;
     overflow: hidden;
