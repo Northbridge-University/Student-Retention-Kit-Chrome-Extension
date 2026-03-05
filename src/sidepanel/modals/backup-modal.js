@@ -161,7 +161,7 @@ async function renderBackupList() {
                         <i class="fas fa-clock" style="color:var(--primary-color); font-size:0.85em;"></i>
                         <span style="font-weight:600; font-size:0.9em; color:var(--text-main);">${timeDisplay}</span>
                         ${isLatest ? '<span style="font-size:0.7em; background:#10b981; color:white; padding:1px 6px; border-radius:8px; font-weight:600;">Latest</span>' : ''}
-                        ${multiFile ? '<span title="Created from 2 files" style="font-size:0.7em; background:#6366f1; color:white; padding:1px 6px; border-radius:8px; font-weight:600;"><i class="fas fa-copy" style="margin-right:2px;"></i>2 Files</span>' : ''}
+                        ${multiFile ? `<span title="Created from ${backup.fileCount} files" style="font-size:0.7em; background:#6366f1; color:white; padding:1px 6px; border-radius:8px; font-weight:600;"><i class="fas fa-copy" style="margin-right:2px;"></i>${backup.fileCount} Files</span>` : ''}
                     </div>
                     <div style="display:flex; gap:12px; font-size:0.8em; color:var(--text-secondary); margin-top:2px;">
                         <span><i class="fas fa-users" style="margin-right:3px;"></i>${backup.studentCount} students</span>
@@ -207,7 +207,7 @@ function showConfirmation(backup, index) {
                 <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
                     <i class="fas fa-clock" style="color:var(--primary-color); font-size:0.85em;"></i>
                     <span style="font-weight:600; font-size:0.9em;">${timeDisplay}</span>
-                    ${multiFile ? '<span style="font-size:0.7em; background:#6366f1; color:white; padding:1px 6px; border-radius:8px; font-weight:600;"><i class="fas fa-copy" style="margin-right:2px;"></i>2 Files</span>' : ''}
+                    ${multiFile ? `<span style="font-size:0.7em; background:#6366f1; color:white; padding:1px 6px; border-radius:8px; font-weight:600;"><i class="fas fa-copy" style="margin-right:2px;"></i>${backup.fileCount} Files</span>` : ''}
                 </div>
                 <div style="display:flex; gap:12px; font-size:0.8em; color:var(--text-secondary);">
                     <span><i class="fas fa-users" style="margin-right:3px;"></i>${backup.studentCount} students</span>
