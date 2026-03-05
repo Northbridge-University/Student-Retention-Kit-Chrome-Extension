@@ -30,8 +30,9 @@ import {
     filterByCampus,
     sortMasterList,
     setSortCriteria,
-    renderWhiskerPlot,
-    updateDistributionDropdown
+    updateDistributionDropdown,
+    renderChart,
+    setChartType
 } from './student-renderer.js';
 
 import {
@@ -1460,13 +1461,24 @@ function setupEventListeners() {
             if (elements.listViewSection) elements.listViewSection.style.display = 'none';
             if (elements.statsViewSection) elements.statsViewSection.style.display = '';
             updateDistributionDropdown();
-            renderWhiskerPlot();
+            renderChart();
         });
     }
 
     if (elements.distributionSelect) {
         elements.distributionSelect.addEventListener('change', () => {
-            renderWhiskerPlot(elements.distributionSelect.value);
+            renderChart(elements.distributionSelect.value);
+        });
+    }
+
+    // Chart type toggle buttons
+    const chartToggle = document.getElementById('chartTypeToggle');
+    if (chartToggle) {
+        chartToggle.addEventListener('click', (e) => {
+            const btn = e.target.closest('.chart-toggle-btn');
+            if (btn && btn.dataset.chart) {
+                setChartType(btn.dataset.chart);
+            }
         });
     }
 
