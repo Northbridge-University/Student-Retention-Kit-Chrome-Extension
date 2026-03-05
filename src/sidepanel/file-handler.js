@@ -759,6 +759,12 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         // Attach raw attendance rows to deduplicated students
         // These rows are preserved un-aggregated for the On-Ground Attendance export sheet
         if (isAttendanceReport && attendanceRowsBySyId && attendanceRowsBySyId.size > 0) {
+            // Clear any imported attendancePercent values first so only students
+            // with actual on-ground attendance data receive a computed value.
+            // Online students (Canvas-only rows) will have no attendance %.
+            for (const student of students) {
+                delete student.attendancePercent;
+            }
             for (const student of students) {
                 if (student.SyStudentId && attendanceRowsBySyId.has(student.SyStudentId)) {
                     student._attendanceRows = attendanceRowsBySyId.get(student.SyStudentId);
@@ -1446,8 +1452,8 @@ function getFieldValue(obj, field, fallback) {
  * @param {Array} cellValueFmts - Array of {sheetIndex, colIndex, rowCount, value, fillColor} for cell-value conditional formatting
  * @param {Array} tableMetadata - Array of {sheetIndex, displayName, columns, dataRowCount} for Excel tables
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = [], tableMetadata = []) {
-    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0 && tableMetadata.length === 0) {
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = [], tableMetadata = [], percentageCols = []) {
+    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0 && tableMetadata.length === 0 && percentageCols.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
         return;
@@ -1475,6 +1481,11 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
     // --- Inject dxf entries into styles.xml for cell-value conditional formatting ---
     if (cellValueFmts.length > 0) {
         await injectDxfStyles(zip, cellValueFmts);
+    }
+
+    // --- Inject percentage number format (0%) for attendance columns ---
+    if (percentageCols.length > 0) {
+        await injectPercentageFormat(zip, percentageCols);
     }
 
     // Collect all sheet indices that need modification
@@ -1650,6 +1661,74 @@ async function injectFillStyles(zip, colors, fillStyleMap) {
     stylesXml = stylesXml.replace('</cellXfs>', newXfsXml + '</cellXfs>');
 
     zip.file(stylesPath, stylesXml);
+}
+
+/**
+ * Injects a percentage (0%) numFmt cellXf into styles.xml and returns the xf index (s value).
+ * Uses built-in numFmtId=9 which is the Excel standard "0%" format.
+ * Then applies that style to the specified cells in each sheet.
+ *
+ * @param {JSZip} zip - The JSZip instance
+ * @param {Array} percentageCols - Array of {sheetIndex, colIndex, startRow, endRow}
+ */
+async function injectPercentageFormat(zip, percentageCols) {
+    if (!percentageCols || percentageCols.length === 0) return;
+
+    // Add a cellXf entry using built-in numFmtId=9 (0%) to styles.xml
+    const stylesPath = 'xl/styles.xml';
+    let stylesXml = await zip.file(stylesPath)?.async('string');
+    if (!stylesXml) return;
+
+    const xfCountMatch = stylesXml.match(/<cellXfs count="(\d+)">/);
+    if (!xfCountMatch) return;
+    const xfCount = parseInt(xfCountMatch[1]);
+    const pctXfIndex = xfCount; // The new xf entry's index
+
+    // numFmtId="9" is the built-in Excel "0%" format
+    const newXf = `<xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`;
+    stylesXml = stylesXml.replace(
+        /<cellXfs count="\d+">/,
+        `<cellXfs count="${xfCount + 1}">`
+    );
+    stylesXml = stylesXml.replace('</cellXfs>', newXf + '</cellXfs>');
+    zip.file(stylesPath, stylesXml);
+
+    // Apply the percentage style to cells in each sheet
+    const sheetGroups = new Map();
+    for (const pc of percentageCols) {
+        if (!sheetGroups.has(pc.sheetIndex)) sheetGroups.set(pc.sheetIndex, []);
+        sheetGroups.get(pc.sheetIndex).push(pc);
+    }
+
+    for (const [sheetIndex, cols] of sheetGroups) {
+        const sheetPath = `xl/worksheets/sheet${sheetIndex + 1}.xml`;
+        let xml = await zip.file(sheetPath)?.async('string');
+        if (!xml) continue;
+
+        for (const { colIndex, startRow, endRow } of cols) {
+            const colLetter = columnIndexToLetter(colIndex);
+
+            // Match cells in this column and apply the percentage style
+            // startRow/endRow are 1-based Excel row numbers (row 1 = header, row 2 = first data)
+            for (let r = startRow; r < endRow; r++) {
+                const cellRef = `${colLetter}${r}`;
+                const cellRegex = new RegExp(`<c r="${cellRef}"([^>]*?)(\\/?>)`);
+                const match = xml.match(cellRegex);
+                if (match) {
+                    let attrs = match[1];
+                    // Replace or add s attribute
+                    if (/\ss="[^"]*"/.test(attrs)) {
+                        attrs = attrs.replace(/\ss="[^"]*"/, ` s="${pctXfIndex}"`);
+                    } else {
+                        attrs = ` s="${pctXfIndex}"` + attrs;
+                    }
+                    xml = xml.replace(cellRegex, `<c r="${cellRef}"${attrs}${match[2]}`);
+                }
+            }
+        }
+
+        zip.file(sheetPath, xml);
+    }
 }
 
 /**
@@ -2254,25 +2333,21 @@ export async function exportAttendanceOnly() {
             { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 15 } // F-J
         ];
 
-        // Apply percentage format to Attendance % cells in left-side tables
-        // Instructor table (col D, 0-indexed col 3)
-        applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
-        // Daily Timeline table (col D)
+        // Track percentage columns for XML-level injection (sheetIndex 0 since only one sheet)
+        const percentageCols = [];
+        // Left tables (col D = index 3)
+        percentageCols.push({ sheetIndex: 0, colIndex: 3, startRow: 2, endRow: instructorRows.length + 2 });
         if (dailyRows.length > 0) {
-            const dailyDataStart = dailyTableLeftStartRow + 1; // skip header
-            applyPercentageFormat(wsAttendance, 3, dailyDataStart, dailyDataStart + dailyRows.length);
+            const dailyDataStart = dailyTableLeftStartRow + 2; // +2: skip header, 1-based to Excel row
+            percentageCols.push({ sheetIndex: 0, colIndex: 3, startRow: dailyDataStart, endRow: dailyDataStart + dailyRows.length });
         }
-        // Student table (col D)
-        const studentDataStart = studentTableStartRow + 1; // skip header
-        applyPercentageFormat(wsAttendance, 3, studentDataStart, studentDataStart + studentRows.length);
-
-        // Apply percentage format to right-side tables (col J = index 9)
-        // Instructor by Shift table
-        applyPercentageFormat(wsAttendance, RIGHT_START_COL + 4, 1, instructorShiftRows.length + 1);
-        // Daily Timeline by Shift table
+        const studentDataStart = studentTableStartRow + 2;
+        percentageCols.push({ sheetIndex: 0, colIndex: 3, startRow: studentDataStart, endRow: studentDataStart + studentRows.length });
+        // Right tables (col J = RIGHT_START_COL + 4)
+        percentageCols.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, startRow: 2, endRow: instructorShiftRows.length + 2 });
         if (dailyShiftRows.length > 0) {
-            const dailyShiftDataStart = dailyShiftStartRow + 1;
-            applyPercentageFormat(wsAttendance, RIGHT_START_COL + 4, dailyShiftDataStart, dailyShiftDataStart + dailyShiftRows.length);
+            const dailyShiftDataStart = dailyShiftStartRow + 2;
+            percentageCols.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, startRow: dailyShiftDataStart, endRow: dailyShiftDataStart + dailyShiftRows.length });
         }
 
         XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
@@ -2386,7 +2461,7 @@ export async function exportAttendanceOnly() {
         const filename = `attendance_report_${timestamp}.xlsx`;
 
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, [], {}, [], [], tableMetadata);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, [], {}, [], [], tableMetadata, percentageCols);
 
         console.log(`Exported attendance-only report: ${instructorRows.length} instructors, ${studentRows.length} students, ${dailyRows.length} daily entries`);
 
@@ -2638,10 +2713,11 @@ export async function exportMasterListCSV() {
         // Set column widths for Master List (custom or auto-fit)
         ws1['!cols'] = calculateColumnWidths(activeColumns, masterListData);
 
-        // Apply percentage format to attendance column in Master List
+        // Track attendance columns for percentage formatting injection (XML-level)
+        const percentageCols = [];
         const masterAttendanceColIndex = activeColumns.findIndex(col => col.field === 'attendancePercent');
-        if (masterAttendanceColIndex !== -1) {
-            applyPercentageFormat(ws1, masterAttendanceColIndex, 1, students.length + 1);
+        if (masterAttendanceColIndex !== -1 && students.length > 0) {
+            percentageCols.push({ sheetIndex: 0, colIndex: masterAttendanceColIndex, startRow: 2, endRow: students.length + 2 });
         }
 
         // Set column widths for Missing Assignments (custom or auto-fit)
@@ -2854,10 +2930,10 @@ export async function exportMasterListCSV() {
             // Set column widths
             ws['!cols'] = calculateColumnWidths(ldaColumns, ldaData);
 
-            // Apply percentage format to attendance column in LDA sheet
+            // Track attendance column for percentage formatting injection (XML-level)
             const ldaAttendanceColIndex = ldaColumns.findIndex(col => col.field === 'attendancePercent');
-            if (ldaAttendanceColIndex !== -1) {
-                applyPercentageFormat(ws, ldaAttendanceColIndex, 1, group.students.length + 1);
+            if (ldaAttendanceColIndex !== -1 && group.students.length > 0) {
+                percentageCols.push({ sheetIndex: sheetIndex, colIndex: ldaAttendanceColIndex, startRow: 2, endRow: group.students.length + 2 });
             }
 
             // Hide columns not in LDA_VISIBLE_COLUMNS whitelist
@@ -3110,16 +3186,16 @@ export async function exportMasterListCSV() {
                 { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 15 } // F-J
             ];
 
-            // Percentage format — left tables (col D = index 3)
-            applyPercentageFormat(wsAttendance, 3, 1, instructorRows.length + 1);
+            // Percentage format — left tables (col D = index 3) — tracked for XML injection
+            percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, startRow: 2, endRow: instructorRows.length + 2 });
             if (dailyRows.length > 0) {
-                applyPercentageFormat(wsAttendance, 3, attDailyStartRow + 1, attDailyStartRow + 1 + dailyRows.length);
+                percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, startRow: attDailyStartRow + 2, endRow: attDailyStartRow + 2 + dailyRows.length });
             }
-            applyPercentageFormat(wsAttendance, 3, attStudentStartRow + 1, attStudentStartRow + 1 + studentRows.length);
-            // Percentage format — right tables (col J = index 9)
-            applyPercentageFormat(wsAttendance, RIGHT_COL + 4, 1, instructorShiftRows.length + 1);
+            percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, startRow: attStudentStartRow + 2, endRow: attStudentStartRow + 2 + studentRows.length });
+            // Percentage format — right tables (col J = index RIGHT_COL+4) — tracked for XML injection
+            percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: RIGHT_COL + 4, startRow: 2, endRow: instructorShiftRows.length + 2 });
             if (dailyShiftRows.length > 0) {
-                applyPercentageFormat(wsAttendance, RIGHT_COL + 4, attDailyShiftStartRow + 1, attDailyShiftStartRow + 1 + dailyShiftRows.length);
+                percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: RIGHT_COL + 4, startRow: attDailyShiftStartRow + 2, endRow: attDailyShiftStartRow + 2 + dailyShiftRows.length });
             }
 
             XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
@@ -3241,7 +3317,7 @@ export async function exportMasterListCSV() {
 
         // Write workbook to buffer, then inject conditional formatting, tab colors, row highlights, and tables via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts, tableMetadata);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts, tableMetadata, percentageCols);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);
