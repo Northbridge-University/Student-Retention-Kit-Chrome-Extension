@@ -145,6 +145,18 @@ document.getElementById('clearBtn').addEventListener('click', () => {
     updateCount();
 });
 
+document.getElementById('exportBtn').addEventListener('click', () => {
+    const lines = allEntries.map(e => `[${e.timestamp}] ${e.type.toUpperCase().padEnd(10)} ${e.message}`);
+    const text = lines.join('\n') || '(no log entries)';
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `srk-console-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
 document.getElementById('scrollBottomBtn').addEventListener('click', () => {
     scrollToBottom();
 });
