@@ -2391,6 +2391,35 @@ export async function exportAttendanceOnly() {
 }
 
 /**
+ * Smart export: inspects stored data and picks the right report format.
+ * - If students only have attendance data (no daysOut, grades, or missing assignments) → attendance report
+ * - Otherwise → full master list report
+ */
+export async function exportReport() {
+    const result = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+    const students = result[STORAGE_KEYS.MASTER_ENTRIES] || [];
+
+    if (students.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+
+    // Check if any student has data beyond attendance (daysOut, grade, gpa, or missingAssignments)
+    const hasFullData = students.some(s =>
+        (s.daysOut !== undefined && s.daysOut !== null && s.daysOut !== '') ||
+        (s.grade !== undefined && s.grade !== null && s.grade !== '') ||
+        (s.gpa !== undefined && s.gpa !== null && s.gpa !== '') ||
+        (s.missingAssignments && s.missingAssignments.length > 0)
+    );
+
+    if (hasFullData) {
+        return exportMasterListCSV();
+    } else {
+        return exportAttendanceOnly();
+    }
+}
+
+/**
  * Exports master list to Excel file with three sheets
  */
 export async function exportMasterListCSV() {

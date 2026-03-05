@@ -41,8 +41,7 @@ import {
     handleFileImport,
     resetQueueUI,
     restoreDefaultQueueUI,
-    exportMasterListCSV,
-    exportAttendanceOnly,
+    exportReport,
     sendMasterListToExcel,
     sendMasterListWithMissingAssignmentsToExcel,
     updateCampusFilter,
@@ -1378,7 +1377,7 @@ function setupEventListeners() {
                         await chrome.storage.local.set({ [STORAGE_KEYS.IS_ATTENDANCE_MODE]: true });
 
                         // Auto-download the attendance report
-                        await exportAttendanceOnly();
+                        await exportReport();
                         return;
                     }
 
@@ -1498,14 +1497,15 @@ function setupEventListeners() {
     }
 
     if (elements.downloadMasterBtn) {
-        elements.downloadMasterBtn.addEventListener('click', exportMasterListCSV);
+        elements.downloadMasterBtn.addEventListener('click', exportReport);
     }
 }
 
 // --- HELPER FUNCTIONS ---
 
 /**
- * Enters attendance-only mode: hides steps 2-4 and switches the download button.
+ * Enters attendance-only mode: hides steps 2-4.
+ * Download button no longer needs swapping — exportReport auto-detects the report type.
  */
 function enterAttendanceMode() {
     const s2 = document.getElementById('step2');
@@ -1514,17 +1514,10 @@ function enterAttendanceMode() {
     if (s2) s2.style.display = 'none';
     if (s3) s3.style.display = 'none';
     if (s4) s4.style.display = 'none';
-
-    if (elements.downloadMasterBtn) {
-        const downloadSpan = elements.downloadMasterBtn.querySelector('span');
-        if (downloadSpan) downloadSpan.textContent = 'Attendance';
-        elements.downloadMasterBtn.removeEventListener('click', exportMasterListCSV);
-        elements.downloadMasterBtn.addEventListener('click', exportAttendanceOnly);
-    }
 }
 
 /**
- * Exits attendance-only mode: restores steps 2-4 visibility and resets the download button.
+ * Exits attendance-only mode: restores steps 2-4 visibility.
  */
 function exitAttendanceMode() {
     const s2 = document.getElementById('step2');
@@ -1533,13 +1526,6 @@ function exitAttendanceMode() {
     if (s2) s2.style.display = '';
     if (s3) s3.style.display = '';
     if (s4) s4.style.display = '';
-
-    if (elements.downloadMasterBtn) {
-        const downloadSpan = elements.downloadMasterBtn.querySelector('span');
-        if (downloadSpan) downloadSpan.textContent = 'Download';
-        elements.downloadMasterBtn.removeEventListener('click', exportAttendanceOnly);
-        elements.downloadMasterBtn.addEventListener('click', exportMasterListCSV);
-    }
 }
 
 /**
