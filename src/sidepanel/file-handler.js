@@ -561,9 +561,9 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
             }
         });
 
-        // Guard: if the mapped "grade" column only contains small integers (0-4),
-        // it's a year-level classification (freshman/sophomore/etc.), not a course grade.
-        // Remove it so it doesn't overwrite Canvas API grades.
+        // Guard: if the mapped "grade" column contains year-level classification values
+        // (0-4, possibly with descriptive text like "3 - 3rd year/junior"), skip it
+        // so it doesn't overwrite Canvas API course grades.
         if (columnMapping.grade !== undefined) {
             const gradeColIdx = columnMapping.grade;
             let isYearLevel = true;
@@ -574,8 +574,9 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 const val = row[gradeColIdx];
                 if (val === null || val === undefined || val === '') continue;
                 sampledCount++;
-                const num = Number(val);
-                if (isNaN(num) || num < 0 || num > 4 || !Number.isInteger(num)) {
+                // Use parseInt to extract leading integer from values like "3 - junior"
+                const num = parseInt(val, 10);
+                if (isNaN(num) || num < 0 || num > 4) {
                     isYearLevel = false;
                     break;
                 }
@@ -1014,8 +1015,8 @@ function mergeSupplementaryFile(students, data, isCSV) {
         }
     });
 
-    // Guard: if the supplementary "grade" column only contains small integers (0-4),
-    // it's a year-level classification, not a course grade — remove it.
+    // Guard: if the supplementary "grade" column contains year-level classification
+    // values (0-4, possibly with descriptive text like "3 - 3rd year/junior"), skip it.
     if (extraColumnMapping.grade !== undefined) {
         const gradeColIdx = extraColumnMapping.grade;
         let isYearLevel = true;
@@ -1026,8 +1027,8 @@ function mergeSupplementaryFile(students, data, isCSV) {
             const val = row[gradeColIdx];
             if (val === null || val === undefined || val === '') continue;
             sampledCount++;
-            const num = Number(val);
-            if (isNaN(num) || num < 0 || num > 4 || !Number.isInteger(num)) {
+            const num = parseInt(val, 10);
+            if (isNaN(num) || num < 0 || num > 4) {
                 isYearLevel = false;
                 break;
             }
@@ -1137,6 +1138,11 @@ function mergeSupplementaryFile(students, data, isCSV) {
                 if (colIndex < row.length) {
                     let value = row[colIndex];
                     if (value !== null && value !== undefined) {
+                        // Validate grade values: reject non-numeric values (e.g. year-level text)
+                        if (field === 'grade') {
+                            const gradeNum = Number(value);
+                            if (isNaN(gradeNum) || !Number.isInteger(gradeNum)) continue;
+                        }
                         tempEntry[field] = isDateField(field) ? convertDateValue(value) : value;
                     }
                 }
@@ -1205,6 +1211,11 @@ function mergeSupplementaryFile(students, data, isCSV) {
                 if (colIndex < row.length) {
                     let value = row[colIndex];
                     if (value !== null && value !== undefined) {
+                        // Validate grade values: reject non-numeric values (e.g. year-level text)
+                        if (field === 'grade') {
+                            const gradeNum = Number(value);
+                            if (isNaN(gradeNum) || !Number.isInteger(gradeNum)) continue;
+                        }
                         student[field] = isDateField(field) ? convertDateValue(value) : value;
                     }
                 }
