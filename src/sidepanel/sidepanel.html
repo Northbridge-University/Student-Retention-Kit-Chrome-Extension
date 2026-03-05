@@ -185,14 +185,27 @@
             </div>
         </div>
 
-        <div style="display:flex; gap:8px; margin-bottom:4px;">
+        <div style="display:flex; gap:8px; margin-bottom:4px; align-items:center;">
              <input type="text" id="masterSearch" placeholder="Search Master List..." style="flex-grow:1;">
-             <select id="sortSelect" style="width:auto; cursor:pointer;">
-                <option value="name">Name (A-Z)</option>
-                <option value="missing">Missing (High-Low)</option>
-                <option value="days">Days Out (High-Low)</option>
-				<option value="newest">Newest Students</option>
-             </select>
+             <div id="sortFilterWrapper" style="position:relative;">
+                 <button id="sortFilterBtn" class="icon-btn" title="Sort & Filter" style="font-size:1em; width:36px; height:36px;">
+                     <i class="fas fa-filter"></i>
+                 </button>
+                 <div id="sortDropdownMenu" class="sort-dropdown-menu" style="display:none;">
+                     <div class="sort-dropdown-item active" data-sort="name">Name (A-Z)</div>
+                     <div class="sort-dropdown-item" data-sort="missing">Missing (High-Low)</div>
+                     <div class="sort-dropdown-item" data-sort="days">Days Out (High-Low)</div>
+                     <div class="sort-dropdown-item" data-sort="newest">Newest Students</div>
+                 </div>
+             </div>
+             <div id="viewToggle" class="view-toggle">
+                 <button id="viewListBtn" class="view-toggle-btn active" title="List View">
+                     <i class="fas fa-list"></i>
+                 </button>
+                 <button id="viewStatsBtn" class="view-toggle-btn" title="Stats View">
+                     <i class="fas fa-chart-bar"></i>
+                 </button>
+             </div>
         </div>
 
         <div id="campusFilterContainer" style="display:none; margin-bottom:4px;">
@@ -208,9 +221,17 @@
 
       </div>
 
-      <div class="section">
+      <div id="listViewSection" class="section">
         <ul id="masterList" class="glass-list">
              </ul>
+      </div>
+
+      <div id="statsViewSection" class="section" style="display:none;">
+        <div class="stats-container">
+            <h3 style="margin:0 0 12px 0; font-size:1em; font-weight:600; color:var(--text-main);">Days Out Distribution</h3>
+            <canvas id="whiskerPlotCanvas" style="width:100%; height:300px;"></canvas>
+            <div id="whiskerPlotLegend" class="whisker-legend"></div>
+        </div>
       </div>
       
       <div style="display:flex; gap:10px; margin-top:10px; flex-shrink: 0;">

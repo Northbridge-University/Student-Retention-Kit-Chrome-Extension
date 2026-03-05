@@ -28,7 +28,9 @@ import {
     renderMasterList,
     filterMasterList,
     filterByCampus,
-    sortMasterList
+    sortMasterList,
+    setSortCriteria,
+    renderWhiskerPlot
 } from './student-renderer.js';
 
 import {
@@ -1415,8 +1417,49 @@ function setupEventListeners() {
         elements.masterSearch.addEventListener('input', filterMasterList);
     }
 
-    if (elements.sortSelect) {
-        elements.sortSelect.addEventListener('change', sortMasterList);
+    // Sort filter dropdown menu
+    if (elements.sortFilterBtn && elements.sortDropdownMenu) {
+        elements.sortFilterBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = elements.sortDropdownMenu;
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+
+        elements.sortDropdownMenu.querySelectorAll('.sort-dropdown-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const sortValue = item.getAttribute('data-sort');
+                // Update active state
+                elements.sortDropdownMenu.querySelectorAll('.sort-dropdown-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+                // Sort and close menu
+                setSortCriteria(sortValue);
+                elements.sortDropdownMenu.style.display = 'none';
+            });
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            elements.sortDropdownMenu.style.display = 'none';
+        });
+    }
+
+    // View toggle (List / Stats)
+    if (elements.viewListBtn && elements.viewStatsBtn) {
+        elements.viewListBtn.addEventListener('click', () => {
+            elements.viewListBtn.classList.add('active');
+            elements.viewStatsBtn.classList.remove('active');
+            if (elements.listViewSection) elements.listViewSection.style.display = '';
+            if (elements.statsViewSection) elements.statsViewSection.style.display = 'none';
+        });
+
+        elements.viewStatsBtn.addEventListener('click', () => {
+            elements.viewStatsBtn.classList.add('active');
+            elements.viewListBtn.classList.remove('active');
+            if (elements.listViewSection) elements.listViewSection.style.display = 'none';
+            if (elements.statsViewSection) elements.statsViewSection.style.display = '';
+            renderWhiskerPlot();
+        });
     }
 
     if (elements.campusFilter) {
