@@ -333,7 +333,17 @@ function addConsoleMessage(type, args) {
 
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const argsArray = args ? (Array.isArray(args) ? args : [args]) : [];
-    const message = argsArray.map(arg => {
+
+    // Extract %c CSS directives before joining args
+    let cssStyle = null;
+    const cleanArgs = [...argsArray];
+    if (cleanArgs.length >= 2 && typeof cleanArgs[0] === 'string' && cleanArgs[0].includes('%c')) {
+        cssStyle = String(cleanArgs[1]);
+        cleanArgs[0] = cleanArgs[0].replace(/%c/g, '');
+        cleanArgs.splice(1, 1); // remove the CSS arg
+    }
+
+    const message = cleanArgs.map(arg => {
         if (typeof arg === 'object') {
             try {
                 return JSON.stringify(arg, null, 2);
@@ -355,6 +365,7 @@ function addConsoleMessage(type, args) {
     const logEntry = document.createElement('div');
     logEntry.className = `console-log ${customType}`;
     logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
+    if (cssStyle && customType === type) logEntry.style.cssText += cssStyle;
 
     elements.consoleContent.appendChild(logEntry);
     elements.consoleContent.scrollTop = elements.consoleContent.scrollHeight;
@@ -367,6 +378,7 @@ function addConsoleMessage(type, args) {
 
     // Forward to standalone console tab via storage + runtime message
     const consoleEntry = { type: customType, message, timestamp };
+    if (cssStyle) consoleEntry.css = cssStyle;
     try {
         chrome.storage.local.get('srk_console_logs', (data) => {
             const logs = data.srk_console_logs || [];

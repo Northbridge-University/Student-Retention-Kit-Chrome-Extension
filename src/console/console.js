@@ -43,6 +43,13 @@ function renderEntry(entry) {
     div.appendChild(lvl);
     div.appendChild(msg);
 
+    // Apply custom CSS from %c directives
+    if (entry.css) {
+        msg.style.cssText += entry.css;
+        const colorMatch = entry.css.match(/(?:^|;)\s*color:\s*([^;]+)/);
+        if (colorMatch) lvl.style.color = colorMatch[1].trim();
+    }
+
     return div;
 }
 
