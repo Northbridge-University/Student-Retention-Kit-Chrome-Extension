@@ -109,6 +109,9 @@ function detectCustomType(type, message) {
     if (message.includes('onSubmissionFound triggered') || message.includes('Submission Found')) {
         return 'submission';
     }
+    if (type !== 'error' && /\berror\b/i.test(message)) {
+        return 'error';
+    }
     return type;
 }
 
