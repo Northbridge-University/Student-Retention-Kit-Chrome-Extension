@@ -99,6 +99,7 @@ export function cacheDomElements() {
     elements.statsViewSection = document.getElementById('statsViewSection');
     elements.whiskerPlotCanvas = document.getElementById('whiskerPlotCanvas');
     elements.whiskerPlotLegend = document.getElementById('whiskerPlotLegend');
+    elements.whiskerPlotStats = document.getElementById('whiskerPlotStats');
     elements.campusFilter = document.getElementById('campusFilter');
     elements.campusFilterContainer = document.getElementById('campusFilterContainer');
     elements.updateMasterBtn = document.getElementById('updateMasterBtn');
