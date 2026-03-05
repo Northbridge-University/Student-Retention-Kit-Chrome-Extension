@@ -364,6 +364,19 @@ function addConsoleMessage(type, args) {
     if (entries.length > 100) {
         entries[0].remove();
     }
+
+    // Forward to standalone console tab via storage + runtime message
+    const consoleEntry = { type: customType, message, timestamp };
+    try {
+        chrome.storage.local.get('srk_console_logs', (data) => {
+            const logs = data.srk_console_logs || [];
+            logs.push(consoleEntry);
+            // Cap stored logs at 500
+            const trimmed = logs.length > 500 ? logs.slice(-500) : logs;
+            chrome.storage.local.set({ srk_console_logs: trimmed });
+        });
+        chrome.runtime.sendMessage({ type: 'SRK_CONSOLE_LOG', entry: consoleEntry }).catch(() => {});
+    } catch (_) { /* console tab may not be open */ }
 }
 
 /**
@@ -1186,6 +1199,28 @@ function setupEventListeners() {
     // Initialize backup modal event listeners
     initBackupModal();
 
+    // Right-click context menu on the tab bar and header area
+    const tabBar = document.querySelector('.tabs');
+    const headerArea = document.querySelector('.header');
+    [tabBar, headerArea].forEach(el => {
+        if (el && elements.tabBarContextMenu) {
+            el.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                positionContextMenu(elements.tabBarContextMenu, e.pageX, e.pageY);
+            });
+        }
+    });
+
+    // "Open Console" menu item opens the console in a new tab
+    if (elements.openConsoleMenuItem) {
+        elements.openConsoleMenuItem.addEventListener('click', () => {
+            if (elements.tabBarContextMenu) {
+                elements.tabBarContextMenu.style.display = 'none';
+            }
+            chrome.tabs.create({ url: chrome.runtime.getURL('src/console/console.html') });
+        });
+    }
+
     // Hide context menu when clicking elsewhere
     document.addEventListener('click', hideAllContextMenus);
 
@@ -1201,6 +1236,7 @@ function setupEventListeners() {
         if (elements.checkerContextMenu) elements.checkerContextMenu.style.display = 'none';
         if (elements.settingsContextMenu) elements.settingsContextMenu.style.display = 'none';
         if (elements.dataTabContextMenu) elements.dataTabContextMenu.style.display = 'none';
+        if (elements.tabBarContextMenu) elements.tabBarContextMenu.style.display = 'none';
     }
 
     /**
