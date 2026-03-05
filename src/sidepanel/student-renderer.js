@@ -495,11 +495,30 @@ export function filterByCampus() {
     applyMasterListFilters();
 }
 
+/** Current sort criteria (used by dropdown menu) */
+let currentSortCriteria = 'name';
+
+/**
+ * Gets the current sort criteria
+ */
+export function getCurrentSortCriteria() {
+    return currentSortCriteria;
+}
+
+/**
+ * Sets the sort criteria and re-sorts the list
+ * @param {string} criteria - Sort criteria key
+ */
+export function setSortCriteria(criteria) {
+    currentSortCriteria = criteria;
+    sortMasterList();
+}
+
 /**
  * Sorts the master list based on selected criteria
  */
 export function sortMasterList() {
-    const criteria = elements.sortSelect.value;
+    const criteria = elements.sortSelect?.value || currentSortCriteria;
     const listItems = Array.from(elements.masterList.querySelectorAll('li.expandable'));
 
     listItems.sort((a, b) => {
@@ -516,4 +535,170 @@ export function sortMasterList() {
         }
     });
     listItems.forEach(item => elements.masterList.appendChild(item));
+}
+
+/**
+ * Renders a box-and-whisker plot of student Days Out on a canvas
+ */
+export function renderWhiskerPlot() {
+    const canvas = elements.whiskerPlotCanvas;
+    const legend = elements.whiskerPlotLegend;
+    if (!canvas || !legend) return;
+
+    const listItems = Array.from(elements.masterList?.querySelectorAll('li.expandable') || []);
+    const daysData = listItems.map(li => parseInt(li.getAttribute('data-days') || '0')).sort((a, b) => a - b);
+
+    // Set canvas size for crisp rendering
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const width = rect.width - 32;
+    const height = 300;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    if (daysData.length === 0) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No student data available', width / 2, height / 2);
+        legend.innerHTML = '';
+        return;
+    }
+
+    // Calculate statistics
+    const n = daysData.length;
+    const min = daysData[0];
+    const max = daysData[n - 1];
+    const q1 = daysData[Math.floor(n * 0.25)];
+    const median = daysData[Math.floor(n * 0.5)];
+    const q3 = daysData[Math.floor(n * 0.75)];
+    const mean = daysData.reduce((s, v) => s + v, 0) / n;
+    const iqr = q3 - q1;
+    const lowerFence = Math.max(min, q1 - 1.5 * iqr);
+    const upperFence = Math.min(max, q3 + 1.5 * iqr);
+
+    // Outliers
+    const outliers = daysData.filter(v => v < lowerFence || v > upperFence);
+
+    // Drawing parameters
+    const padding = { top: 50, bottom: 60, left: 50, right: 30 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const boxTop = padding.top + plotHeight * 0.2;
+    const boxBottom = padding.top + plotHeight * 0.8;
+    const boxHeight = boxBottom - boxTop;
+
+    const dataMax = max || 1;
+    const scale = (val) => padding.left + (val / dataMax) * plotWidth;
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
+    ctx.lineWidth = 1;
+    const gridSteps = 5;
+    for (let i = 0; i <= gridSteps; i++) {
+        const x = padding.left + (i / gridSteps) * plotWidth;
+        ctx.beginPath();
+        ctx.moveTo(x, padding.top - 10);
+        ctx.lineTo(x, padding.top + plotHeight + 10);
+        ctx.stroke();
+    }
+
+    // Draw axis labels
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '11px Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    for (let i = 0; i <= gridSteps; i++) {
+        const val = Math.round((i / gridSteps) * dataMax);
+        const x = padding.left + (i / gridSteps) * plotWidth;
+        ctx.fillText(val, x, padding.top + plotHeight + 25);
+    }
+    ctx.fillText('Days Out', width / 2, height - 8);
+
+    // Draw whisker lines (min to Q1, Q3 to max)
+    ctx.strokeStyle = '#6b7280';
+    ctx.lineWidth = 2;
+    const midY = (boxTop + boxBottom) / 2;
+
+    // Left whisker
+    ctx.beginPath();
+    ctx.moveTo(scale(lowerFence), midY);
+    ctx.lineTo(scale(q1), midY);
+    ctx.stroke();
+    // Left whisker cap
+    ctx.beginPath();
+    ctx.moveTo(scale(lowerFence), boxTop + boxHeight * 0.3);
+    ctx.lineTo(scale(lowerFence), boxBottom - boxHeight * 0.3);
+    ctx.stroke();
+
+    // Right whisker
+    ctx.beginPath();
+    ctx.moveTo(scale(q3), midY);
+    ctx.lineTo(scale(upperFence), midY);
+    ctx.stroke();
+    // Right whisker cap
+    ctx.beginPath();
+    ctx.moveTo(scale(upperFence), boxTop + boxHeight * 0.3);
+    ctx.lineTo(scale(upperFence), boxBottom - boxHeight * 0.3);
+    ctx.stroke();
+
+    // Draw IQR box (Q1 to Q3)
+    const boxX = scale(q1);
+    const boxW = scale(q3) - scale(q1);
+    ctx.fillStyle = 'rgba(0, 90, 156, 0.15)';
+    ctx.fillRect(boxX, boxTop, boxW, boxHeight);
+    ctx.strokeStyle = 'var(--primary-color, #005A9C)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxX, boxTop, boxW, boxHeight);
+
+    // Draw median line
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(scale(median), boxTop);
+    ctx.lineTo(scale(median), boxBottom);
+    ctx.stroke();
+
+    // Draw mean diamond
+    const meanX = scale(mean);
+    ctx.fillStyle = '#10b981';
+    ctx.beginPath();
+    ctx.moveTo(meanX, midY - 7);
+    ctx.lineTo(meanX + 5, midY);
+    ctx.lineTo(meanX, midY + 7);
+    ctx.lineTo(meanX - 5, midY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw outliers
+    ctx.fillStyle = '#f97316';
+    outliers.forEach(val => {
+        ctx.beginPath();
+        ctx.arc(scale(val), midY, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Draw individual data points (jittered)
+    ctx.fillStyle = 'rgba(0, 90, 156, 0.3)';
+    daysData.forEach((val, i) => {
+        if (outliers.includes(val)) return;
+        const jitter = (Math.random() - 0.5) * boxHeight * 0.6;
+        ctx.beginPath();
+        ctx.arc(scale(val), midY + jitter, 2, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Legend
+    legend.innerHTML = `
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:rgba(0,90,156,0.3);"></div> IQR Box (Q1–Q3)</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#ef4444;"></div> Median: ${median}</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#10b981;"></div> Mean: ${mean.toFixed(1)}</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#f97316; border-radius:50%;"></div> Outliers (${outliers.length})</div>
+        <div class="whisker-legend-item" style="margin-left:auto; font-weight:500;">n = ${n} students</div>
+    `;
 }

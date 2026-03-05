@@ -91,6 +91,14 @@ export function cacheDomElements() {
     elements.masterList = document.getElementById('masterList');
     elements.masterSearch = document.getElementById('masterSearch');
     elements.sortSelect = document.getElementById('sortSelect');
+    elements.sortFilterBtn = document.getElementById('sortFilterBtn');
+    elements.sortDropdownMenu = document.getElementById('sortDropdownMenu');
+    elements.viewListBtn = document.getElementById('viewListBtn');
+    elements.viewStatsBtn = document.getElementById('viewStatsBtn');
+    elements.listViewSection = document.getElementById('listViewSection');
+    elements.statsViewSection = document.getElementById('statsViewSection');
+    elements.whiskerPlotCanvas = document.getElementById('whiskerPlotCanvas');
+    elements.whiskerPlotLegend = document.getElementById('whiskerPlotLegend');
     elements.campusFilter = document.getElementById('campusFilter');
     elements.campusFilterContainer = document.getElementById('campusFilterContainer');
     elements.updateMasterBtn = document.getElementById('updateMasterBtn');
