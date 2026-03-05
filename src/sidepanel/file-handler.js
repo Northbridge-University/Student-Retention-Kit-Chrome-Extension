@@ -762,6 +762,15 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
             for (const student of students) {
                 if (student.SyStudentId && attendanceRowsBySyId.has(student.SyStudentId)) {
                     student._attendanceRows = attendanceRowsBySyId.get(student.SyStudentId);
+
+                    // Compute overall attendance percentage for this student
+                    let totalAttMin = 0;
+                    let totalSchedMin = 0;
+                    for (const row of student._attendanceRows) {
+                        totalAttMin += row.attMin;
+                        totalSchedMin += row.schedMin;
+                    }
+                    student.attendancePercent = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
                 }
             }
             console.log(`Attendance report: ${attendanceRowsBySyId.size} students with attendance data`);
@@ -2569,8 +2578,8 @@ export async function exportMasterListCSV() {
             });
         });
 
-        // Find all color-scale column indices for conditional formatting (grade + gpa)
-        const colorScaleTypes = ['grade', 'gpa'];
+        // Find all color-scale column indices for conditional formatting (grade + gpa + attendance)
+        const colorScaleTypes = ['grade', 'gpa', 'attendance'];
         const findColorScaleCols = (columns) => columns
             .map((col, i) => colorScaleTypes.includes(col.conditionalFormatting) ? { index: i, type: col.conditionalFormatting } : null)
             .filter(Boolean);
@@ -2593,6 +2602,12 @@ export async function exportMasterListCSV() {
 
         // Set column widths for Master List (custom or auto-fit)
         ws1['!cols'] = calculateColumnWidths(activeColumns, masterListData);
+
+        // Apply percentage format to attendance column in Master List
+        const masterAttendanceColIndex = activeColumns.findIndex(col => col.field === 'attendancePercent');
+        if (masterAttendanceColIndex !== -1) {
+            applyPercentageFormat(ws1, masterAttendanceColIndex, 1, students.length + 1);
+        }
 
         // Set column widths for Missing Assignments (custom or auto-fit)
         ws2['!cols'] = calculateColumnWidths(EXPORT_MISSING_ASSIGNMENTS_COLUMNS, missingAssignmentsData);
@@ -2803,6 +2818,12 @@ export async function exportMasterListCSV() {
 
             // Set column widths
             ws['!cols'] = calculateColumnWidths(ldaColumns, ldaData);
+
+            // Apply percentage format to attendance column in LDA sheet
+            const ldaAttendanceColIndex = ldaColumns.findIndex(col => col.field === 'attendancePercent');
+            if (ldaAttendanceColIndex !== -1) {
+                applyPercentageFormat(ws, ldaAttendanceColIndex, 1, group.students.length + 1);
+            }
 
             // Hide columns not in LDA_VISIBLE_COLUMNS whitelist
             ldaColumns.forEach((col, i) => {
