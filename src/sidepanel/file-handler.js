@@ -561,6 +561,31 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
             }
         });
 
+        // Guard: if the mapped "grade" column only contains small integers (0-4),
+        // it's a year-level classification (freshman/sophomore/etc.), not a course grade.
+        // Remove it so it doesn't overwrite Canvas API grades.
+        if (columnMapping.grade !== undefined) {
+            const gradeColIdx = columnMapping.grade;
+            let isYearLevel = true;
+            let sampledCount = 0;
+            for (let i = headerRowIndex + 1; i < rows.length && sampledCount < 50; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+                const val = row[gradeColIdx];
+                if (val === null || val === undefined || val === '') continue;
+                sampledCount++;
+                const num = Number(val);
+                if (isNaN(num) || num < 0 || num > 4 || !Number.isInteger(num)) {
+                    isYearLevel = false;
+                    break;
+                }
+            }
+            if (isYearLevel && sampledCount > 0) {
+                console.log(`Grade column detected as year-level classification (all values 0-4), skipping import as course grade`);
+                delete columnMapping.grade;
+            }
+        }
+
         // Ensure we have at least a name column
         if (!columnMapping.name) {
             return { students: [], referenceDate: null };
@@ -988,6 +1013,30 @@ function mergeSupplementaryFile(students, data, isCSV) {
             }
         }
     });
+
+    // Guard: if the supplementary "grade" column only contains small integers (0-4),
+    // it's a year-level classification, not a course grade — remove it.
+    if (extraColumnMapping.grade !== undefined) {
+        const gradeColIdx = extraColumnMapping.grade;
+        let isYearLevel = true;
+        let sampledCount = 0;
+        for (let i = headerRowIndex + 1; i < rows.length && sampledCount < 50; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+            const val = row[gradeColIdx];
+            if (val === null || val === undefined || val === '') continue;
+            sampledCount++;
+            const num = Number(val);
+            if (isNaN(num) || num < 0 || num > 4 || !Number.isInteger(num)) {
+                isYearLevel = false;
+                break;
+            }
+        }
+        if (isYearLevel && sampledCount > 0) {
+            console.log(`Supplementary grade column detected as year-level classification (all values 0-4), skipping`);
+            delete extraColumnMapping.grade;
+        }
+    }
 
     // Check if supplementary is an academic report and primary lacks derived grade fields
     const isAcademic = detectAcademicReport(normalizedHeaders);
