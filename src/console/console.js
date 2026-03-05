@@ -103,14 +103,15 @@ function scrollToBottom() {
 // ── Detect custom types (same logic as sidepanel) ──────────
 
 function detectCustomType(type, message) {
-    if (message.includes('Sending payload to Office Add-in') || message.includes('SRK_HIGHLIGHT_STUDENT_ROW')) {
+    // Error detection first — takes priority even over ping/submission patterns
+    if (type !== 'error' && /\berror\b/i.test(message)) {
+        return 'error';
+    }
+    if (/SRK_PING|SRK_HIGHLIGHT_STUDENT_ROW|🏓|highlight.?ping|Sending payload to Office Add-in|Ping Received|Ponging|Forwarding.*PING|highlight student row|Ignoring ping|Highlight Confirmation/i.test(message)) {
         return 'ping';
     }
     if (message.includes('onSubmissionFound triggered') || message.includes('Submission Found')) {
         return 'submission';
-    }
-    if (type !== 'error' && /\berror\b/i.test(message)) {
-        return 'error';
     }
     return type;
 }
