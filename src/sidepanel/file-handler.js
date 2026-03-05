@@ -1205,6 +1205,22 @@ function mergeSupplementaryFile(students, data, isCSV) {
                 startTime: startTimeVal
             });
         }
+        // Compute attendancePercent from merged attendance rows (same logic as primary path)
+        for (const student of students) {
+            if (!student._attendanceRows) continue;
+            let totalAttMin = 0;
+            let totalSchedMin = 0;
+            for (const row of student._attendanceRows) {
+                const isCanvas = row.attComment && String(row.attComment).toLowerCase().includes('canvas');
+                if (!isCanvas) {
+                    totalAttMin += row.attMin;
+                    totalSchedMin += row.schedMin;
+                }
+            }
+            if (totalSchedMin > 0) {
+                student.attendancePercent = totalAttMin / totalSchedMin;
+            }
+        }
         console.log(`Supplementary attendance report: merged attendance rows for ${students.filter(s => s._attendanceRows).length} students`);
     }
 }
