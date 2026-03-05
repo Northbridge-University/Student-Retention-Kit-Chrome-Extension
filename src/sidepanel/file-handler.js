@@ -1215,14 +1215,26 @@ function mergeSupplementaryFile(students, data, isCSV) {
  * @param {Function} onSuccess - Callback after successful import
  */
 export function handleFileImport(files, onSuccess) {
-    // Support both single File and FileList/Array
+    // Support both single File and FileList/Array (up to 3 files)
     const fileList = files instanceof FileList ? Array.from(files) : (Array.isArray(files) ? files : [files]);
     const file = fileList[0];
-    const supplementaryFile = fileList.length > 1 ? fileList[1] : null;
+    const supplementaryFiles = fileList.slice(1, 3);
 
     if (!file) {
         resetQueueUI();
         return;
+    }
+
+    // Show file count pill next to "Update Progress" header
+    const fileCountPill = document.getElementById('queueFileCountPill');
+    const fileCountText = document.getElementById('queueFileCountText');
+    if (fileCountPill && fileCountText) {
+        if (fileList.length > 1) {
+            fileCountText.textContent = `${fileList.length} Files`;
+            fileCountPill.style.display = '';
+        } else {
+            fileCountPill.style.display = 'none';
+        }
     }
 
     const step1 = document.getElementById('step1');
@@ -1260,12 +1272,12 @@ export function handleFileImport(files, onSuccess) {
                 throw new Error("No valid student data found (Check header row).");
             }
 
-            // If a supplementary file was selected, merge its extra columns
-            if (supplementaryFile) {
-                const suppName = supplementaryFile.name.toLowerCase();
+            // If supplementary files were selected, merge their extra columns
+            for (const suppFile of supplementaryFiles) {
+                const suppName = suppFile.name.toLowerCase();
                 const suppIsValid = suppName.endsWith('.csv') || suppName.endsWith('.xlsx') || suppName.endsWith('.xls');
                 if (suppIsValid) {
-                    const { content: suppContent, isCSV: suppIsCSV } = await readFileContent(supplementaryFile);
+                    const { content: suppContent, isCSV: suppIsCSV } = await readFileContent(suppFile);
                     mergeSupplementaryFile(students, suppContent, suppIsCSV);
 
                     // Recalculate daysOut for students whose lda came from the supplementary file
@@ -1347,6 +1359,8 @@ export function resetQueueUI() {
         totalTimeDisplay.textContent = 'Total Time: 0.0s';
         delete totalTimeDisplay.dataset.processStartTime;
     }
+    const fileCountPill = document.getElementById('queueFileCountPill');
+    if (fileCountPill) fileCountPill.style.display = 'none';
 }
 
 /**
