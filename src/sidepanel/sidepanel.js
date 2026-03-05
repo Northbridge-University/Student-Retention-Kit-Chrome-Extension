@@ -30,7 +30,8 @@ import {
     filterByCampus,
     sortMasterList,
     setSortCriteria,
-    renderWhiskerPlot
+    renderWhiskerPlot,
+    updateDistributionDropdown
 } from './student-renderer.js';
 
 import {
@@ -1458,7 +1459,14 @@ function setupEventListeners() {
             elements.viewListBtn.classList.remove('active');
             if (elements.listViewSection) elements.listViewSection.style.display = 'none';
             if (elements.statsViewSection) elements.statsViewSection.style.display = '';
+            updateDistributionDropdown();
             renderWhiskerPlot();
+        });
+    }
+
+    if (elements.distributionSelect) {
+        elements.distributionSelect.addEventListener('change', () => {
+            renderWhiskerPlot(elements.distributionSelect.value);
         });
     }
 

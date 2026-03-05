@@ -61,6 +61,8 @@ export function resolveStudentData(entry, reformatEnabled = true) {
         StudentNumber: entry.StudentNumber || null,
         SyStudentId: entry.SyStudentId || null,
         url: entry.url || entry.Gradebook || null, // Fallback to Gradebook for legacy data
+        grade: entry.grade || entry.currentGrade || null,
+        enrollGpa: entry.enrollGpa || null,
         Photo: entry.Photo || null,
         isNew: entry.isNew || false,
         created_at: entry.created_at || null,
@@ -377,6 +379,8 @@ export async function renderMasterList(rawEntries, onStudentClick) {
         li.setAttribute('data-name', data.name);
         li.setAttribute('data-missing', data.missing);
         li.setAttribute('data-days', data.daysOut);
+        li.setAttribute('data-grade', data.grade || '');
+        li.setAttribute('data-gpa', data.enrollGpa || '');
         li.setAttribute('data-created', data.created_at || '');
         li.setAttribute('data-campus', rawEntry.campus || '');
 
@@ -538,16 +542,51 @@ export function sortMasterList() {
 }
 
 /**
- * Renders a vertical box-and-whisker plot of student Days Out on a canvas
- * Designed to be readable in a narrow sidepanel
+ * Distribution type configurations for the whisker plot
  */
-export function renderWhiskerPlot() {
+const DISTRIBUTION_TYPES = {
+    daysOut: { attr: 'data-days', label: 'Days Out', unit: 'days', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
+    grade: { attr: 'data-grade', label: 'Grade', unit: '%', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
+    missing: { attr: 'data-missing', label: 'Missing Assignments', unit: '', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
+    gpa: { attr: 'data-gpa', label: 'GPA', unit: '', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) }
+};
+
+/**
+ * Updates the distribution dropdown, greying out options with no data
+ */
+export function updateDistributionDropdown() {
+    const select = elements.distributionSelect;
+    if (!select) return;
+
+    const listItems = Array.from(elements.masterList?.querySelectorAll('li.expandable') || []);
+
+    Array.from(select.options).forEach(option => {
+        const type = DISTRIBUTION_TYPES[option.value];
+        if (!type) return;
+        const hasData = listItems.some(li => type.isValid(li.getAttribute(type.attr) || ''));
+        option.disabled = !hasData;
+        option.title = hasData ? '' : 'No data available';
+    });
+}
+
+/**
+ * Renders a vertical box-and-whisker plot on a canvas
+ * @param {string} [distributionType] - The type of distribution to render (default: current dropdown value)
+ */
+export function renderWhiskerPlot(distributionType) {
     const canvas = elements.whiskerPlotCanvas;
     const legend = elements.whiskerPlotLegend;
     if (!canvas || !legend) return;
 
+    const type = distributionType || elements.distributionSelect?.value || 'daysOut';
+    const config = DISTRIBUTION_TYPES[type] || DISTRIBUTION_TYPES.daysOut;
+
     const listItems = Array.from(elements.masterList?.querySelectorAll('li.expandable') || []);
-    const daysData = listItems.map(li => parseInt(li.getAttribute('data-days') || '0')).sort((a, b) => a - b);
+    const daysData = listItems
+        .map(li => li.getAttribute(config.attr) || '')
+        .filter(v => config.isValid(v))
+        .map(v => config.parse(v))
+        .sort((a, b) => a - b);
 
     // Set canvas size for crisp rendering
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -567,8 +606,9 @@ export function renderWhiskerPlot() {
         ctx.fillStyle = '#6b7280';
         ctx.font = '14px Roboto, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('No student data available', width / 2, height / 2);
+        ctx.fillText(`No ${config.label.toLowerCase()} data available`, width / 2, height / 2);
         legend.innerHTML = '';
+        if (elements.whiskerPlotStats) elements.whiskerPlotStats.innerHTML = '';
         return;
     }
 
@@ -647,17 +687,18 @@ export function renderWhiskerPlot() {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
 
+    const fmtGrid = (v) => type === 'gpa' ? v.toFixed(1) : Math.round(v);
     for (let i = 0; i <= mainGridSteps; i++) {
         const val = mainMin + (i / mainGridSteps) * mainRange;
-        const roundVal = Math.round(val);
-        const y = scaleMain(roundVal);
+        const displayVal = type === 'gpa' ? val : Math.round(val);
+        const y = scaleMain(displayVal);
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
         ctx.beginPath();
         ctx.moveTo(padding.left - 5, y);
         ctx.lineTo(width - padding.right, y);
         ctx.stroke();
         ctx.fillStyle = '#6b7280';
-        ctx.fillText(roundVal, padding.left - 10, y);
+        ctx.fillText(fmtGrid(val), padding.left - 10, y);
     }
 
     // Draw axis break and outlier zone labels if outliers exist
@@ -680,7 +721,8 @@ export function renderWhiskerPlot() {
         // Outlier zone grid lines (fewer, just min/max)
         const outlierLabels = [upperFence + 1, max];
         // Remove duplicates and sort
-        const uniqueLabels = [...new Set(outlierLabels.map(v => Math.round(v)))].sort((a, b) => a - b);
+        const roundOutlier = (v) => type === 'gpa' ? Math.round(v * 10) / 10 : Math.round(v);
+        const uniqueLabels = [...new Set(outlierLabels.map(roundOutlier))].sort((a, b) => a - b);
         uniqueLabels.forEach(val => {
             if (val <= upperFence) return;
             const y = scaleOutlier(val);
@@ -693,7 +735,7 @@ export function renderWhiskerPlot() {
             ctx.font = '11px Roboto, sans-serif';
             ctx.textAlign = 'right';
             ctx.textBaseline = 'middle';
-            ctx.fillText(val, padding.left - 10, y);
+            ctx.fillText(fmtGrid(val), padding.left - 10, y);
         });
     }
 
@@ -704,7 +746,7 @@ export function renderWhiskerPlot() {
     ctx.textAlign = 'center';
     ctx.font = '12px Roboto, sans-serif';
     ctx.fillStyle = '#6b7280';
-    ctx.fillText('Days Out', 0, 0);
+    ctx.fillText(config.label, 0, 0);
     ctx.restore();
 
     // Draw whisker lines (vertical)
@@ -766,10 +808,10 @@ export function renderWhiskerPlot() {
 
     // Labels on the right side — collect all and space them to avoid overlap
     const rightLabels = [
-        { y: scale(q3), text: `Q3: ${q3}`, color: '#005A9C', font: '11px Roboto, sans-serif' },
-        { y: scale(median), text: `Median: ${median}`, color: '#ef4444', font: 'bold 12px Roboto, sans-serif' },
-        { y: scale(mean), text: `Mean: ${mean.toFixed(1)}`, color: '#10b981', font: '11px Roboto, sans-serif' },
-        { y: scale(q1), text: `Q1: ${q1}`, color: '#005A9C', font: '11px Roboto, sans-serif' }
+        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#005A9C', font: '11px Roboto, sans-serif' },
+        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#ef4444', font: 'bold 12px Roboto, sans-serif' },
+        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#10b981', font: '11px Roboto, sans-serif' },
+        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#005A9C', font: '11px Roboto, sans-serif' }
     ].sort((a, b) => a.y - b.y);
 
     // Push labels apart so they don't overlap (minimum 14px spacing)
@@ -818,6 +860,8 @@ export function renderWhiskerPlot() {
     });
 
     // Summary stats grid above the canvas
+    const isDecimal = type === 'gpa';
+    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
     if (elements.whiskerPlotStats) {
         elements.whiskerPlotStats.innerHTML = `
             <div class="whisker-stat-card">
@@ -825,15 +869,15 @@ export function renderWhiskerPlot() {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#ef4444;">${median}</div>
+                <div class="whisker-stat-value" style="color:#ef4444;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#10b981;">${mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#10b981;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value">${min}–${max}</div>
+                <div class="whisker-stat-value">${fmtVal(min)}–${fmtVal(max)}</div>
                 <div class="whisker-stat-label">Range</div>
             </div>
         `;

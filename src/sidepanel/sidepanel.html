@@ -228,7 +228,12 @@
 
       <div id="statsViewSection" class="section" style="display:none;">
         <div class="stats-container">
-            <h3 style="margin:0 0 12px 0; font-size:1em; font-weight:600; color:var(--text-main);">Days Out Distribution</h3>
+            <select id="distributionSelect" class="distribution-select">
+                <option value="daysOut">Days Out Distribution</option>
+                <option value="grade">Grade Distribution</option>
+                <option value="missing">Missing Assignments Distribution</option>
+                <option value="gpa">GPA Distribution</option>
+            </select>
             <div id="whiskerPlotStats" class="whisker-stats-grid"></div>
             <canvas id="whiskerPlotCanvas" style="width:100%;"></canvas>
             <div id="whiskerPlotLegend" class="whisker-legend"></div>
