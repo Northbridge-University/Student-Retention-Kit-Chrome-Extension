@@ -63,6 +63,7 @@ export function resolveStudentData(entry, reformatEnabled = true) {
         url: entry.url || entry.Gradebook || null, // Fallback to Gradebook for legacy data
         grade: entry.grade || entry.currentGrade || null,
         enrollGpa: entry.enrollGpa || null,
+        attendancePercent: entry.attendancePercent || null,
         Photo: entry.Photo || null,
         isNew: entry.isNew || false,
         created_at: entry.created_at || null,
@@ -381,6 +382,7 @@ export async function renderMasterList(rawEntries, onStudentClick) {
         li.setAttribute('data-days', data.daysOut);
         li.setAttribute('data-grade', data.grade || '');
         li.setAttribute('data-gpa', data.enrollGpa || '');
+        li.setAttribute('data-attendance', data.attendancePercent || '');
         li.setAttribute('data-created', data.created_at || '');
         li.setAttribute('data-campus', rawEntry.campus || '');
 
@@ -548,7 +550,8 @@ const DISTRIBUTION_TYPES = {
     daysOut: { attr: 'data-days', label: 'Days Out', unit: 'days', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
     grade: { attr: 'data-grade', label: 'Grade', unit: '%', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
     missing: { attr: 'data-missing', label: 'Missing Assignments', unit: '', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
-    gpa: { attr: 'data-gpa', label: 'GPA', unit: '', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) }
+    gpa: { attr: 'data-gpa', label: 'GPA', unit: '', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
+    attendance: { attr: 'data-attendance', label: 'Attendance %', unit: '%', parse: v => { const n = parseFloat(v); return n <= 1 ? Math.round(n * 100) : Math.round(n); }, isValid: v => v !== '' && v !== '0' && !isNaN(parseFloat(v)) }
 };
 
 /**
