@@ -763,14 +763,20 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 if (student.SyStudentId && attendanceRowsBySyId.has(student.SyStudentId)) {
                     student._attendanceRows = attendanceRowsBySyId.get(student.SyStudentId);
 
-                    // Compute overall attendance percentage for this student
+                    // Compute attendance percentage from on-ground rows only (exclude Canvas/online)
                     let totalAttMin = 0;
                     let totalSchedMin = 0;
                     for (const row of student._attendanceRows) {
-                        totalAttMin += row.attMin;
-                        totalSchedMin += row.schedMin;
+                        const isCanvas = row.attComment && String(row.attComment).toLowerCase().includes('canvas');
+                        if (!isCanvas) {
+                            totalAttMin += row.attMin;
+                            totalSchedMin += row.schedMin;
+                        }
                     }
-                    student.attendancePercent = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
+                    // Only set attendancePercent if student has on-ground rows
+                    if (totalSchedMin > 0) {
+                        student.attendancePercent = totalAttMin / totalSchedMin;
+                    }
                 }
             }
             console.log(`Attendance report: ${attendanceRowsBySyId.size} students with attendance data`);
