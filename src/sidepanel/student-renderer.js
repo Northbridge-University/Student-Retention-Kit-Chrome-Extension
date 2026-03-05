@@ -551,7 +551,7 @@ const DISTRIBUTION_TYPES = {
     grade: { attr: 'data-grade', label: 'Grade', unit: '%', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
     missing: { attr: 'data-missing', label: 'Missing Assignments', unit: '', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
     gpa: { attr: 'data-gpa', label: 'GPA', unit: '', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
-    attendance: { attr: 'data-attendance', label: 'Attendance %', unit: '%', parse: v => { const n = parseFloat(v); return n <= 1 ? Math.round(n * 100) : Math.round(n); }, isValid: v => v !== '' && v !== '0' && !isNaN(parseFloat(v)) }
+    attendance: { attr: 'data-attendance', label: 'On-Ground Attendance %', unit: '%', parse: v => { const n = parseFloat(v); return n <= 1 ? Math.round(n * 100) : Math.round(n); }, isValid: v => v !== '' && v !== '0' && !isNaN(parseFloat(v)) }
 };
 
 /**
