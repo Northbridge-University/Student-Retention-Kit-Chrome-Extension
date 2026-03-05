@@ -299,6 +299,10 @@ export function cacheDomElements() {
     elements.dataTabContextMenu = document.getElementById('dataTabContextMenu');
     elements.viewBackupsMenuItem = document.getElementById('viewBackupsMenuItem');
 
+    // Tab Bar Context Menu
+    elements.tabBarContextMenu = document.getElementById('tabBarContextMenu');
+    elements.openConsoleMenuItem = document.getElementById('openConsoleMenuItem');
+
     // Backup Modal
     elements.backupModal = document.getElementById('backupModal');
     elements.closeBackupModalBtn = document.getElementById('closeBackupModalBtn');

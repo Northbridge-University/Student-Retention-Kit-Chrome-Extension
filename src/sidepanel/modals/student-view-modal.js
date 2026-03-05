@@ -320,7 +320,7 @@ export function generateStudentEmailTemplate(student) {
     const data = resolveStudentData(student);
     const firstName = getFirstName(data.name);
     const greeting = getTimeOfDayGreeting();
-    const daysOut = data.daysOut || 0;
+    const daysOut = parseInt(data.daysOut) || 0;
     const missingAssignments = student.missingAssignments || [];
     const missingCount = missingAssignments.length;
 

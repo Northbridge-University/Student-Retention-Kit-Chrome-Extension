@@ -389,7 +389,6 @@ export const MASTER_LIST_COLUMNS = [
     { header: 'Next Assignment Due', field: 'nextAssignment.DueDate', width: 15 },
     { header: 'LDA', field: 'lda', width: 8 },
     { header: 'Days Out', field: 'daysOut', width: 8 },
-    { header: 'Attendance %', field: 'attendancePercent', conditionalFormatting: 'attendance', width: 10 },
     { header: 'Gender', field: 'gender', hidden: true },
     { header: 'Shift', field: 'shift', width: 10 },
     { header: 'Program Version', field: 'programVersion', width: 30 },
@@ -417,7 +416,8 @@ export const MASTER_LIST_COLUMNS = [
     { header: 'Last Course Letter Grade', field: 'lastCourseLetterGrade', width: 10 },
     { header: 'Enroll GPA', field: 'enrollGpa', conditionalFormatting: 'gpa', width: 11 },
     { header: 'Enrollment Status', field: 'currEnrollStatus', width: 15 },
-    { header: 'Campus', field: 'campus', width: 15 }
+    { header: 'Campus', field: 'campus', width: 15 },
+    { header: 'Attendance %', field: 'attendancePercent', conditionalFormatting: 'attendance', width: 10 }
 ];
 
 /**
@@ -451,14 +451,14 @@ export const LDA_VISIBLE_COLUMNS = [
     'shift',
     'lda',
     'daysOut',
-    'attendancePercent',
     'missingCount',
     'outreach',
     'phone',
     'otherPhone',
     'lastCourseGrade',
     'lastCourseLetterGrade',
-    'enrollGpa'
+    'enrollGpa',
+    'attendancePercent'
 ];
 
 /**

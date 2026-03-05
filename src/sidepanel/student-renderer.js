@@ -56,7 +56,7 @@ export function resolveStudentData(entry, reformatEnabled = true) {
         nameOriginal: entry.nameOriginal || entry.name || 'Unknown Student',
         sortable_name: entry.sortable_name || null,
         phone: entry.phone || null,
-        daysOut: parseInt(entry.daysOut || 0),
+        daysOut: parseInt(entry.daysOut) || 0,
         missing: parseInt(entry.missingCount || 0),
         StudentNumber: entry.StudentNumber || null,
         SyStudentId: entry.SyStudentId || null,
