@@ -334,13 +334,11 @@ function addConsoleMessage(type, args) {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const argsArray = args ? (Array.isArray(args) ? args : [args]) : [];
 
-    // Extract %c color directives before joining args
-    let cssColor = null;
+    // Extract %c CSS directives before joining args
+    let cssStyle = null;
     const cleanArgs = [...argsArray];
     if (cleanArgs.length >= 2 && typeof cleanArgs[0] === 'string' && cleanArgs[0].includes('%c')) {
-        const cssStr = String(cleanArgs[1]);
-        const colorMatch = cssStr.match(/color:\s*([^;]+)/);
-        if (colorMatch) cssColor = colorMatch[1].trim();
+        cssStyle = String(cleanArgs[1]);
         cleanArgs[0] = cleanArgs[0].replace(/%c/g, '');
         cleanArgs.splice(1, 1); // remove the CSS arg
     }
@@ -367,7 +365,7 @@ function addConsoleMessage(type, args) {
     const logEntry = document.createElement('div');
     logEntry.className = `console-log ${customType}`;
     logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
-    if (cssColor && customType === type) logEntry.style.color = cssColor;
+    if (cssStyle && customType === type) logEntry.style.cssText += cssStyle;
 
     elements.consoleContent.appendChild(logEntry);
     elements.consoleContent.scrollTop = elements.consoleContent.scrollHeight;
@@ -380,7 +378,7 @@ function addConsoleMessage(type, args) {
 
     // Forward to standalone console tab via storage + runtime message
     const consoleEntry = { type: customType, message, timestamp };
-    if (cssColor) consoleEntry.color = cssColor;
+    if (cssStyle) consoleEntry.css = cssStyle;
     try {
         chrome.storage.local.get('srk_console_logs', (data) => {
             const logs = data.srk_console_logs || [];
