@@ -14,6 +14,8 @@ const statusText = document.getElementById('statusText');
 const statusDetail = document.getElementById('statusDetail');
 const statusBar = document.getElementById('statusBar');
 const searchInput = document.getElementById('searchInput');
+const warnCounter = document.getElementById('warnCounter');
+const errorCounter = document.getElementById('errorCounter');
 
 let allEntries = [];
 let activeFilter = 'all';
@@ -94,6 +96,12 @@ function appendEntry(entry) {
 function updateCount() {
     const visible = output.querySelectorAll('.log-entry').length;
     logCountBadge.textContent = `${visible} ${visible === 1 ? 'entry' : 'entries'}`;
+
+    // Update warn/error counters from all entries (not filtered)
+    const warns = allEntries.filter(e => e.type === 'warn').length;
+    const errors = allEntries.filter(e => e.type === 'error').length;
+    warnCounter.textContent = `\u26A0 ${warns}`;
+    errorCounter.textContent = `\u2715 ${errors}`;
 }
 
 function scrollToBottom() {
@@ -103,14 +111,15 @@ function scrollToBottom() {
 // ── Detect custom types (same logic as sidepanel) ──────────
 
 function detectCustomType(type, message) {
-    if (message.includes('Sending payload to Office Add-in') || message.includes('SRK_HIGHLIGHT_STUDENT_ROW')) {
+    // Error detection first — takes priority even over ping/submission patterns
+    if (type !== 'error' && /\berror\b/i.test(message)) {
+        return 'error';
+    }
+    if (/SRK_PING|SRK_HIGHLIGHT_STUDENT_ROW|🏓|highlight.?ping|Sending payload to Office Add-in|Ping Received|Ponging|Forwarding.*PING|highlight student row|Ignoring ping|Highlight Confirmation/i.test(message)) {
         return 'ping';
     }
     if (message.includes('onSubmissionFound triggered') || message.includes('Submission Found')) {
         return 'submission';
-    }
-    if (type !== 'error' && /\berror\b/i.test(message)) {
-        return 'error';
     }
     return type;
 }

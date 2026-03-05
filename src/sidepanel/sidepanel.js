@@ -355,13 +355,14 @@ function addConsoleMessage(type, args) {
     }).join(' ');
 
     // Detect specific message patterns and apply custom types
+    // Error detection first — takes priority even over ping/submission patterns
     let customType = type;
-    if (message.includes('Sending payload to Office Add-in') || message.includes('SRK_HIGHLIGHT_STUDENT_ROW')) {
+    if (type !== 'error' && /\berror\b/i.test(message)) {
+        customType = 'error';
+    } else if (/SRK_PING|SRK_HIGHLIGHT_STUDENT_ROW|🏓|highlight.?ping|Sending payload to Office Add-in|Ping Received|Ponging|Forwarding.*PING|highlight student row|Ignoring ping|Highlight Confirmation/i.test(message)) {
         customType = 'ping';
     } else if (message.includes('onSubmissionFound triggered') || message.includes('Submission Found')) {
         customType = 'submission';
-    } else if (type !== 'error' && /\berror\b/i.test(message)) {
-        customType = 'error';
     }
 
     // Drop %c CSS for recognized custom types — use our own consistent styling

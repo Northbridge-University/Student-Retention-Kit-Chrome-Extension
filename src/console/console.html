@@ -50,8 +50,19 @@
 
         .toolbar-actions {
             display: flex;
+            align-items: center;
             gap: 6px;
         }
+
+        .toolbar-counter {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #383838;
+        }
+
+        .toolbar-counter.warn-counter { color: #ffa500; }
+        .toolbar-counter.error-counter { color: #ff4444; }
 
         .toolbar-btn {
             background: none;
@@ -221,6 +232,8 @@
             <span class="toolbar-badge" id="logCount">0 entries</span>
         </div>
         <div class="toolbar-actions">
+            <span class="toolbar-counter warn-counter" id="warnCounter" title="Warnings">&#9888; 0</span>
+            <span class="toolbar-counter error-counter" id="errorCounter" title="Errors">&#10005; 0</span>
             <button class="toolbar-btn" id="exportBtn" title="Export logs as .txt">Export</button>
             <button class="toolbar-btn" id="scrollBottomBtn" title="Scroll to bottom">Scroll to Bottom</button>
             <button class="toolbar-btn" id="clearBtn" title="Clear all logs">Clear</button>
