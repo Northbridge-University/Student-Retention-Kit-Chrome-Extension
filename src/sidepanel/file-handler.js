@@ -2764,11 +2764,14 @@ export async function exportMasterListCSV() {
                     if (col.field === 'missingCount') {
                         value = (value !== null && value !== undefined && value !== '') ? value : '-';
                     } else if (col.field === 'daysOut') {
-                        value = parseInt(value || 0);
+                        value = parseInt(value) || 0;
                     } else if (col.conditionalFormatting) {
-                        // Ensure grade/gpa values are numeric so Excel color scales apply
+                        // Ensure grade/gpa/attendance values are numeric so Excel color scales apply
                         const num = parseFloat(value);
-                        if (!isNaN(num)) value = num;
+                        if (!isNaN(num)) {
+                            // Attendance values are stored as decimals (0-1); convert to whole percentages (0-100)
+                            value = (col.conditionalFormatting === 'attendance' && num <= 1) ? Math.round(num * 100) : num;
+                        }
                     } else if (col.field === 'lda') {
                         if (value) {
                             const dateObj = parseDate(value);
