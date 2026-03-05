@@ -63,6 +63,7 @@ export function resolveStudentData(entry, reformatEnabled = true) {
         url: entry.url || entry.Gradebook || null, // Fallback to Gradebook for legacy data
         grade: entry.grade || entry.currentGrade || null,
         enrollGpa: entry.enrollGpa || null,
+        attendancePercent: entry.attendancePercent || null,
         Photo: entry.Photo || null,
         isNew: entry.isNew || false,
         created_at: entry.created_at || null,
@@ -381,6 +382,7 @@ export async function renderMasterList(rawEntries, onStudentClick) {
         li.setAttribute('data-days', data.daysOut);
         li.setAttribute('data-grade', data.grade || '');
         li.setAttribute('data-gpa', data.enrollGpa || '');
+        li.setAttribute('data-attendance', data.attendancePercent || '');
         li.setAttribute('data-created', data.created_at || '');
         li.setAttribute('data-campus', rawEntry.campus || '');
 
@@ -548,8 +550,100 @@ const DISTRIBUTION_TYPES = {
     daysOut: { attr: 'data-days', label: 'Days Out', unit: 'days', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
     grade: { attr: 'data-grade', label: 'Grade', unit: '%', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
     missing: { attr: 'data-missing', label: 'Missing Assignments', unit: '', parse: v => parseInt(v), isValid: v => v !== '' && !isNaN(parseInt(v)) },
-    gpa: { attr: 'data-gpa', label: 'GPA', unit: '', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) }
+    gpa: { attr: 'data-gpa', label: 'GPA', unit: '', parse: v => parseFloat(v), isValid: v => v !== '' && !isNaN(parseFloat(v)) },
+    attendance: { attr: 'data-attendance', label: 'Attendance %', unit: '%', parse: v => { const n = parseFloat(v); return n <= 1 ? Math.round(n * 100) : Math.round(n); }, isValid: v => v !== '' && v !== '0' && !isNaN(parseFloat(v)) }
 };
+
+/**
+ * Bucket configurations for histogram and pie chart per distribution type.
+ * Each bucket: { label, min (inclusive), max (exclusive, except last bucket) }
+ */
+const BUCKET_CONFIGS = {
+    daysOut: [
+        { label: '0–2', min: 0, max: 3, color: '#22c55e' },
+        { label: '3–5', min: 3, max: 6, color: '#eab308' },
+        { label: '6–10', min: 6, max: 11, color: '#f97316' },
+        { label: '11+', min: 11, max: Infinity, color: '#ef4444' }
+    ],
+    grade: [
+        { label: 'A (90–100)', min: 90, max: 101, color: '#22c55e' },
+        { label: 'B (80–89)', min: 80, max: 90, color: '#3b82f6' },
+        { label: 'C (70–79)', min: 70, max: 80, color: '#eab308' },
+        { label: 'D (60–69)', min: 60, max: 70, color: '#f97316' },
+        { label: 'F (0–59)', min: 0, max: 60, color: '#ef4444' }
+    ],
+    missing: [
+        { label: '0', min: 0, max: 1, color: '#22c55e' },
+        { label: '1–2', min: 1, max: 3, color: '#eab308' },
+        { label: '3–5', min: 3, max: 6, color: '#f97316' },
+        { label: '6+', min: 6, max: Infinity, color: '#ef4444' }
+    ],
+    gpa: [
+        { label: '3.5–4.0', min: 3.5, max: 4.01, color: '#22c55e' },
+        { label: '3.0–3.49', min: 3.0, max: 3.5, color: '#3b82f6' },
+        { label: '2.5–2.99', min: 2.5, max: 3.0, color: '#eab308' },
+        { label: '2.0–2.49', min: 2.0, max: 2.5, color: '#f97316' },
+        { label: '< 2.0', min: 0, max: 2.0, color: '#ef4444' }
+    ],
+    attendance: [
+        { label: '90–100%', min: 90, max: 101, color: '#22c55e' },
+        { label: '80–89%', min: 80, max: 90, color: '#3b82f6' },
+        { label: '70–79%', min: 70, max: 80, color: '#eab308' },
+        { label: '< 70%', min: 0, max: 70, color: '#ef4444' }
+    ]
+};
+
+/** Currently selected chart type */
+let currentChartType = 'whisker';
+
+/**
+ * Extracts sorted numeric data from the master list for a given distribution type
+ */
+function extractChartData(distributionType) {
+    const type = distributionType || elements.distributionSelect?.value || 'daysOut';
+    const config = DISTRIBUTION_TYPES[type] || DISTRIBUTION_TYPES.daysOut;
+    const listItems = Array.from(elements.masterList?.querySelectorAll('li.expandable') || []);
+    const data = listItems
+        .map(li => li.getAttribute(config.attr) || '')
+        .filter(v => config.isValid(v))
+        .map(v => config.parse(v))
+        .sort((a, b) => a - b);
+    return { data, type, config };
+}
+
+/**
+ * Prepares canvas for drawing and returns context + dimensions, or null if no data
+ */
+function prepareCanvas(data, config) {
+    const canvas = elements.whiskerPlotCanvas;
+    const legend = elements.whiskerPlotLegend;
+    if (!canvas || !legend) return null;
+
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const width = rect.width - 32;
+    const height = 380;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    if (data.length === 0) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`No ${config.label.toLowerCase()} data available`, width / 2, height / 2);
+        legend.innerHTML = '';
+        if (elements.whiskerPlotStats) elements.whiskerPlotStats.innerHTML = '';
+        return null;
+    }
+
+    return { ctx, width, height, legend, canvas };
+}
 
 /**
  * Updates the distribution dropdown, greying out options with no data
@@ -574,43 +668,10 @@ export function updateDistributionDropdown() {
  * @param {string} [distributionType] - The type of distribution to render (default: current dropdown value)
  */
 export function renderWhiskerPlot(distributionType) {
-    const canvas = elements.whiskerPlotCanvas;
-    const legend = elements.whiskerPlotLegend;
-    if (!canvas || !legend) return;
-
-    const type = distributionType || elements.distributionSelect?.value || 'daysOut';
-    const config = DISTRIBUTION_TYPES[type] || DISTRIBUTION_TYPES.daysOut;
-
-    const listItems = Array.from(elements.masterList?.querySelectorAll('li.expandable') || []);
-    const daysData = listItems
-        .map(li => li.getAttribute(config.attr) || '')
-        .filter(v => config.isValid(v))
-        .map(v => config.parse(v))
-        .sort((a, b) => a - b);
-
-    // Set canvas size for crisp rendering
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const width = rect.width - 32;
-    const height = 380;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = width + 'px';
-    canvas.style.height = height + 'px';
-
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
-
-    if (daysData.length === 0) {
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '14px Roboto, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`No ${config.label.toLowerCase()} data available`, width / 2, height / 2);
-        legend.innerHTML = '';
-        if (elements.whiskerPlotStats) elements.whiskerPlotStats.innerHTML = '';
-        return;
-    }
+    const { data: daysData, type, config } = extractChartData(distributionType);
+    const prepared = prepareCanvas(daysData, config);
+    if (!prepared) return;
+    const { ctx, width, height, legend } = prepared;
 
     // Calculate statistics
     const n = daysData.length;
@@ -806,6 +867,10 @@ export function renderWhiskerPlot(distributionType) {
     ctx.closePath();
     ctx.fill();
 
+    // Formatting helpers (used in labels and stats)
+    const isDecimal = type === 'gpa';
+    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
+
     // Labels on the right side — collect all and space them to avoid overlap
     const rightLabels = [
         { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#005A9C', font: '11px Roboto, sans-serif' },
@@ -860,8 +925,6 @@ export function renderWhiskerPlot(distributionType) {
     });
 
     // Summary stats grid above the canvas
-    const isDecimal = type === 'gpa';
-    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
     if (elements.whiskerPlotStats) {
         elements.whiskerPlotStats.innerHTML = `
             <div class="whisker-stat-card">
@@ -890,4 +953,275 @@ export function renderWhiskerPlot(distributionType) {
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#10b981; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#f97316; border-radius:50%;"></div> Outliers (${outliers.length})</div>
     `;
+}
+
+/**
+ * Renders a histogram (bar chart) on the canvas
+ */
+function renderHistogram(distributionType) {
+    const { data, type, config } = extractChartData(distributionType);
+    const prepared = prepareCanvas(data, config);
+    if (!prepared) return;
+    const { ctx, width, height, legend } = prepared;
+
+    const buckets = BUCKET_CONFIGS[type] || BUCKET_CONFIGS.daysOut;
+    const counts = buckets.map(b => ({
+        ...b,
+        count: data.filter(v => v >= b.min && v < b.max).length
+    }));
+    const maxCount = Math.max(...counts.map(c => c.count), 1);
+    const n = data.length;
+    const mean = data.reduce((s, v) => s + v, 0) / n;
+    const median = data[Math.floor(n * 0.5)];
+    const min = data[0];
+    const max = data[n - 1];
+    const isDecimal = type === 'gpa';
+    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
+
+    const padding = { top: 30, bottom: 60, left: 45, right: 20 };
+    const plotW = width - padding.left - padding.right;
+    const plotH = height - padding.top - padding.bottom;
+    const barGap = 8;
+    const barW = (plotW - barGap * (counts.length - 1)) / counts.length;
+
+    // Y-axis grid lines and labels
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '11px Roboto, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const ySteps = 4;
+    for (let i = 0; i <= ySteps; i++) {
+        const val = Math.round((i / ySteps) * maxCount);
+        const y = padding.top + plotH - (val / maxCount) * plotH;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding.left - 5, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText(val, padding.left - 8, y);
+    }
+
+    // Y-axis title
+    ctx.save();
+    ctx.translate(12, padding.top + plotH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.font = '12px Roboto, sans-serif';
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText('Students', 0, 0);
+    ctx.restore();
+
+    // Draw bars
+    counts.forEach((bucket, i) => {
+        const x = padding.left + i * (barW + barGap);
+        const barH = (bucket.count / maxCount) * plotH;
+        const y = padding.top + plotH - barH;
+
+        // Bar fill
+        ctx.fillStyle = bucket.color;
+        ctx.beginPath();
+        const radius = Math.min(4, barW / 4);
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + barW - radius, y);
+        ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
+        ctx.lineTo(x + barW, padding.top + plotH);
+        ctx.lineTo(x, padding.top + plotH);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.fill();
+
+        // Count label above bar
+        if (bucket.count > 0) {
+            ctx.fillStyle = '#374151';
+            ctx.font = 'bold 11px Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(bucket.count, x + barW / 2, y - 4);
+        }
+
+        // X-axis label
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '11px Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(bucket.label, x + barW / 2, padding.top + plotH + 8);
+    });
+
+    // X-axis label
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '12px Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(config.label, padding.left + plotW / 2, height - 8);
+
+    // Stats
+    if (elements.whiskerPlotStats) {
+        elements.whiskerPlotStats.innerHTML = `
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value">${n}</div>
+                <div class="whisker-stat-label">Students</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value" style="color:#ef4444;">${fmtVal(median)}</div>
+                <div class="whisker-stat-label">Median</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value" style="color:#10b981;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-label">Mean</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value">${fmtVal(min)}–${fmtVal(max)}</div>
+                <div class="whisker-stat-label">Range</div>
+            </div>
+        `;
+    }
+
+    // Legend
+    legend.innerHTML = counts.map(b =>
+        `<div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:${b.color};"></div> ${b.label} (${b.count})</div>`
+    ).join('');
+}
+
+/**
+ * Renders a pie/donut chart on the canvas
+ */
+function renderPieChart(distributionType) {
+    const { data, type, config } = extractChartData(distributionType);
+    const prepared = prepareCanvas(data, config);
+    if (!prepared) return;
+    const { ctx, width, height, legend } = prepared;
+
+    const buckets = BUCKET_CONFIGS[type] || BUCKET_CONFIGS.daysOut;
+    const counts = buckets.map(b => ({
+        ...b,
+        count: data.filter(v => v >= b.min && v < b.max).length
+    }));
+    const n = data.length;
+    const mean = data.reduce((s, v) => s + v, 0) / n;
+    const median = data[Math.floor(n * 0.5)];
+    const min = data[0];
+    const max = data[n - 1];
+    const isDecimal = type === 'gpa';
+    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
+
+    const centerX = width / 2;
+    const centerY = height / 2 + 5;
+    const outerR = Math.min(width, height) / 2 - 40;
+    const innerR = outerR * 0.5; // donut hole
+
+    let startAngle = -Math.PI / 2; // start at 12 o'clock
+
+    counts.forEach(bucket => {
+        if (bucket.count === 0) return;
+        const sliceAngle = (bucket.count / n) * Math.PI * 2;
+        const endAngle = startAngle + sliceAngle;
+
+        // Draw slice
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, outerR, startAngle, endAngle);
+        ctx.arc(centerX, centerY, innerR, endAngle, startAngle, true);
+        ctx.closePath();
+        ctx.fillStyle = bucket.color;
+        ctx.fill();
+
+        // Thin white border between slices
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Percentage label on slice (only if large enough)
+        const pct = ((bucket.count / n) * 100);
+        if (pct >= 5) {
+            const midAngle = startAngle + sliceAngle / 2;
+            const labelR = (outerR + innerR) / 2;
+            const lx = centerX + Math.cos(midAngle) * labelR;
+            const ly = centerY + Math.sin(midAngle) * labelR;
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${Math.round(pct)}%`, lx, ly);
+        }
+
+        startAngle = endAngle;
+    });
+
+    // Center text
+    ctx.fillStyle = '#374151';
+    ctx.font = 'bold 20px Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n, centerX, centerY - 8);
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '11px Roboto, sans-serif';
+    ctx.fillText('Students', centerX, centerY + 10);
+
+    // Stats
+    if (elements.whiskerPlotStats) {
+        elements.whiskerPlotStats.innerHTML = `
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value">${n}</div>
+                <div class="whisker-stat-label">Students</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value" style="color:#ef4444;">${fmtVal(median)}</div>
+                <div class="whisker-stat-label">Median</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value" style="color:#10b981;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-label">Mean</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value">${fmtVal(min)}–${fmtVal(max)}</div>
+                <div class="whisker-stat-label">Range</div>
+            </div>
+        `;
+    }
+
+    // Legend
+    legend.innerHTML = counts.map(b =>
+        `<div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:${b.color};"></div> ${b.label} (${b.count})</div>`
+    ).join('');
+}
+
+/**
+ * Main chart dispatcher — renders the selected chart type
+ */
+export function renderChart(distributionType) {
+    const type = distributionType || elements.distributionSelect?.value || 'daysOut';
+    switch (currentChartType) {
+        case 'histogram':
+            renderHistogram(type);
+            break;
+        case 'pie':
+            renderPieChart(type);
+            break;
+        case 'whisker':
+        default:
+            renderWhiskerPlot(type);
+            break;
+    }
+    // Update active toggle state
+    updateChartToggleState();
+}
+
+/**
+ * Sets the current chart type and re-renders
+ */
+export function setChartType(chartType) {
+    currentChartType = chartType;
+    renderChart();
+}
+
+/**
+ * Updates the visual state of chart toggle buttons
+ */
+function updateChartToggleState() {
+    const container = document.getElementById('chartTypeToggle');
+    if (!container) return;
+    container.querySelectorAll('.chart-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.chart === currentChartType);
+    });
 }
