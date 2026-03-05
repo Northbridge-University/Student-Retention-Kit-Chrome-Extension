@@ -1242,6 +1242,43 @@ function drawPieSlices(ctx, width, height, counts, n, hoveredIdx) {
 }
 
 /**
+ * Positions a tooltip near the cursor, flipping sides to stay within the wrapper bounds
+ */
+function positionTooltip(tooltip, e, wrapper) {
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const gap = 12;
+
+    // Temporarily show at 0,0 to measure
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    const tipW = tooltip.offsetWidth;
+    const tipH = tooltip.offsetHeight;
+
+    const cursorX = e.clientX - wrapperRect.left;
+    const cursorY = e.clientY - wrapperRect.top;
+    const wrapW = wrapperRect.width;
+    const wrapH = wrapperRect.height;
+
+    // Horizontal: prefer right of cursor, flip left if clipped
+    let left = cursorX + gap;
+    if (left + tipW > wrapW) {
+        left = cursorX - gap - tipW;
+    }
+    // Clamp to wrapper bounds
+    left = Math.max(0, Math.min(left, wrapW - tipW));
+
+    // Vertical: prefer above cursor, flip below if clipped
+    let top = cursorY - gap - tipH;
+    if (top < 0) {
+        top = cursorY + gap;
+    }
+    top = Math.max(0, Math.min(top, wrapH - tipH));
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+}
+
+/**
  * Lightens a hex color by a given amount (0–1)
  */
 function lightenColor(hex, amount) {
@@ -1334,9 +1371,7 @@ function renderPieChart(distributionType) {
             }
 
             if (tooltip && hitIdx >= 0) {
-                const wrapperRect = _pieCanvas.parentElement.getBoundingClientRect();
-                tooltip.style.left = (e.clientX - wrapperRect.left + 12) + 'px';
-                tooltip.style.top = (e.clientY - wrapperRect.top - 10) + 'px';
+                positionTooltip(tooltip, e, _pieCanvas.parentElement);
             }
 
             _pieCanvas.style.cursor = hitIdx >= 0 ? 'pointer' : 'default';
