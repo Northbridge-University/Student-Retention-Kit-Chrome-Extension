@@ -560,36 +560,36 @@ const DISTRIBUTION_TYPES = {
  */
 const BUCKET_CONFIGS = {
     daysOut: [
-        { label: '0–2', min: 0, max: 3, color: '#1e3a5f' },
-        { label: '3–5', min: 3, max: 6, color: '#2563eb' },
-        { label: '6–10', min: 6, max: 11, color: '#b45309' },
-        { label: '11+', min: 11, max: Infinity, color: '#9f1239' }
+        { label: '0–2', min: 0, max: 3, color: '#4a90d9' },
+        { label: '3–5', min: 3, max: 6, color: '#60a5fa' },
+        { label: '6–10', min: 6, max: 11, color: '#e08a3c' },
+        { label: '11+', min: 11, max: Infinity, color: '#e5627a' }
     ],
     grade: [
-        { label: 'A (90–100)', min: 90, max: 101, color: '#1e3a5f' },
-        { label: 'B (80–89)', min: 80, max: 90, color: '#2563eb' },
-        { label: 'C (70–79)', min: 70, max: 80, color: '#64748b' },
-        { label: 'D (60–69)', min: 60, max: 70, color: '#b45309' },
-        { label: 'F (0–59)', min: 0, max: 60, color: '#9f1239' }
+        { label: 'A (90–100)', min: 90, max: 101, color: '#4a90d9' },
+        { label: 'B (80–89)', min: 80, max: 90, color: '#60a5fa' },
+        { label: 'C (70–79)', min: 70, max: 80, color: '#94a3b8' },
+        { label: 'D (60–69)', min: 60, max: 70, color: '#e08a3c' },
+        { label: 'F (0–59)', min: 0, max: 60, color: '#e5627a' }
     ],
     missing: [
-        { label: '0', min: 0, max: 1, color: '#1e3a5f' },
-        { label: '1–2', min: 1, max: 3, color: '#2563eb' },
-        { label: '3–5', min: 3, max: 6, color: '#b45309' },
-        { label: '6+', min: 6, max: Infinity, color: '#9f1239' }
+        { label: '0', min: 0, max: 1, color: '#4a90d9' },
+        { label: '1–2', min: 1, max: 3, color: '#60a5fa' },
+        { label: '3–5', min: 3, max: 6, color: '#e08a3c' },
+        { label: '6+', min: 6, max: Infinity, color: '#e5627a' }
     ],
     gpa: [
-        { label: '3.5–4.0', min: 3.5, max: 4.01, color: '#1e3a5f' },
-        { label: '3.0–3.49', min: 3.0, max: 3.5, color: '#2563eb' },
-        { label: '2.5–2.99', min: 2.5, max: 3.0, color: '#64748b' },
-        { label: '2.0–2.49', min: 2.0, max: 2.5, color: '#b45309' },
-        { label: '< 2.0', min: 0, max: 2.0, color: '#9f1239' }
+        { label: '3.5–4.0', min: 3.5, max: 4.01, color: '#4a90d9' },
+        { label: '3.0–3.49', min: 3.0, max: 3.5, color: '#60a5fa' },
+        { label: '2.5–2.99', min: 2.5, max: 3.0, color: '#94a3b8' },
+        { label: '2.0–2.49', min: 2.0, max: 2.5, color: '#e08a3c' },
+        { label: '< 2.0', min: 0, max: 2.0, color: '#e5627a' }
     ],
     attendance: [
-        { label: '90–100%', min: 90, max: 101, color: '#1e3a5f' },
-        { label: '80–89%', min: 80, max: 90, color: '#2563eb' },
-        { label: '70–79%', min: 70, max: 80, color: '#b45309' },
-        { label: '< 70%', min: 0, max: 70, color: '#9f1239' }
+        { label: '90–100%', min: 90, max: 101, color: '#4a90d9' },
+        { label: '80–89%', min: 80, max: 90, color: '#60a5fa' },
+        { label: '70–79%', min: 70, max: 80, color: '#e08a3c' },
+        { label: '< 70%', min: 0, max: 70, color: '#e5627a' }
     ]
 };
 
@@ -722,11 +722,11 @@ export function renderWhiskerPlot(distributionType) {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#b45309;">${fmtVal(median)}</div>
+                <div class="whisker-stat-value" style="color:#e08a3c;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#0f766e;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#2ebfa5;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
@@ -738,10 +738,10 @@ export function renderWhiskerPlot(distributionType) {
 
     // Legend
     legend.innerHTML = `
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#1e3a5f; opacity:0.3;"></div> IQR (Q1–Q3)</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#b45309;"></div> Median</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#0f766e; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#7c3aed; border-radius:50%;"></div> Outliers (${outliers.length})</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#4a90d9; opacity:0.3;"></div> IQR (Q1–Q3)</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#e08a3c;"></div> Median</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#2ebfa5; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#a78bfa; border-radius:50%;"></div> Outliers (${outliers.length})</div>
     `;
 }
 
@@ -845,26 +845,26 @@ function _drawVerticalWhisker(ctx, width, height, s) {
     const boxH = scale(q1) - scale(q3);
     const minBoxH = Math.max(boxH, 30);
     const boxYAdj = boxH < 30 ? boxY - (30 - boxH) / 2 : boxY;
-    ctx.fillStyle = 'rgba(30, 58, 95, 0.15)';
+    ctx.fillStyle = 'rgba(74, 144, 217, 0.18)';
     ctx.fillRect(boxLeft, boxYAdj, boxWidth, minBoxH);
-    ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#4a90d9'; ctx.lineWidth = 2;
     ctx.strokeRect(boxLeft, boxYAdj, boxWidth, minBoxH);
 
     // Median
-    ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#e08a3c'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(boxLeft, scale(median)); ctx.lineTo(boxRight, scale(median)); ctx.stroke();
 
     // Mean diamond
     const meanY = scale(mean);
-    ctx.fillStyle = '#0f766e';
+    ctx.fillStyle = '#2ebfa5';
     ctx.beginPath(); ctx.moveTo(midX, meanY - 8); ctx.lineTo(midX + 6, meanY); ctx.lineTo(midX, meanY + 8); ctx.lineTo(midX - 6, meanY); ctx.closePath(); ctx.fill();
 
     // Right-side labels
     const rightLabels = [
-        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' },
-        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#b45309', font: 'bold 12px Roboto, sans-serif' },
-        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#0f766e', font: '11px Roboto, sans-serif' },
-        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' }
+        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#4a90d9', font: '11px Roboto, sans-serif' },
+        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#e08a3c', font: 'bold 12px Roboto, sans-serif' },
+        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#2ebfa5', font: '11px Roboto, sans-serif' },
+        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#4a90d9', font: '11px Roboto, sans-serif' }
     ].sort((a, b) => a.y - b.y);
     for (let i = 1; i < rightLabels.length; i++) {
         if (rightLabels[i].y - rightLabels[i - 1].y < 14) rightLabels[i].y = rightLabels[i - 1].y + 14;
@@ -873,14 +873,14 @@ function _drawVerticalWhisker(ctx, width, height, s) {
     rightLabels.forEach(lbl => { ctx.fillStyle = lbl.color; ctx.font = lbl.font; ctx.fillText(lbl.text, boxRight + 8, lbl.y); });
 
     // Outliers
-    ctx.fillStyle = '#7c3aed';
+    ctx.fillStyle = '#a78bfa';
     upperOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxWidth * 0.5; ctx.beginPath(); ctx.arc(midX + j, scale(val), 4, 0, Math.PI * 2); ctx.fill(); });
     lowerOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxWidth * 0.5; ctx.beginPath(); ctx.arc(midX + j, scale(val), 4, 0, Math.PI * 2); ctx.fill(); });
 
     // Data points
     const dotAreaLeft = padding.left, dotAreaRight = boxLeft - 10;
     const dotAreaMid = (dotAreaLeft + dotAreaRight) / 2, dotAreaWidth = dotAreaRight - dotAreaLeft;
-    ctx.fillStyle = 'rgba(30, 58, 95, 0.25)';
+    ctx.fillStyle = 'rgba(74, 144, 217, 0.3)';
     daysData.forEach(val => {
         if (val > upperFence || val < lowerFence) return;
         const j = (Math.random() - 0.5) * dotAreaWidth * 0.7;
@@ -988,26 +988,26 @@ function _drawHorizontalWhisker(ctx, width, height, s) {
     const boxW = scale(q3) - scale(q1);
     const minBoxW = Math.max(boxW, 30);
     const boxXAdj = boxW < 30 ? boxX - (30 - boxW) / 2 : boxX;
-    ctx.fillStyle = 'rgba(30, 58, 95, 0.15)';
+    ctx.fillStyle = 'rgba(74, 144, 217, 0.18)';
     ctx.fillRect(boxXAdj, boxTop, minBoxW, boxHeight);
-    ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#4a90d9'; ctx.lineWidth = 2;
     ctx.strokeRect(boxXAdj, boxTop, minBoxW, boxHeight);
 
     // Median (vertical line)
-    ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#e08a3c'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(scale(median), boxTop); ctx.lineTo(scale(median), boxBottom); ctx.stroke();
 
     // Mean diamond
     const meanX = scale(mean);
-    ctx.fillStyle = '#0f766e';
+    ctx.fillStyle = '#2ebfa5';
     ctx.beginPath(); ctx.moveTo(meanX, midY - 8); ctx.lineTo(meanX + 6, midY); ctx.lineTo(meanX, midY + 8); ctx.lineTo(meanX - 6, midY); ctx.closePath(); ctx.fill();
 
     // Labels below the box — collect all and space them
     const bottomLabels = [
-        { x: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' },
-        { x: scale(median), text: `Median: ${fmtVal(median)}`, color: '#b45309', font: 'bold 12px Roboto, sans-serif' },
-        { x: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#0f766e', font: '11px Roboto, sans-serif' },
-        { x: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' }
+        { x: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#4a90d9', font: '11px Roboto, sans-serif' },
+        { x: scale(median), text: `Median: ${fmtVal(median)}`, color: '#e08a3c', font: 'bold 12px Roboto, sans-serif' },
+        { x: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#2ebfa5', font: '11px Roboto, sans-serif' },
+        { x: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#4a90d9', font: '11px Roboto, sans-serif' }
     ].sort((a, b) => a.x - b.x);
     // Measure text widths and push apart
     for (let i = 1; i < bottomLabels.length; i++) {
@@ -1025,14 +1025,14 @@ function _drawHorizontalWhisker(ctx, width, height, s) {
     });
 
     // Outliers
-    ctx.fillStyle = '#7c3aed';
+    ctx.fillStyle = '#a78bfa';
     upperOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxHeight * 0.5; ctx.beginPath(); ctx.arc(scale(val), midY + j, 4, 0, Math.PI * 2); ctx.fill(); });
     lowerOutliers.forEach(val => { const j = (Math.random() - 0.5) * boxHeight * 0.5; ctx.beginPath(); ctx.arc(scale(val), midY + j, 4, 0, Math.PI * 2); ctx.fill(); });
 
     // Data points (jittered vertically, above the box)
     const dotAreaTop = padding.top, dotAreaBottom = boxTop - 10;
     const dotAreaMid = (dotAreaTop + dotAreaBottom) / 2, dotAreaHeight = dotAreaBottom - dotAreaTop;
-    ctx.fillStyle = 'rgba(30, 58, 95, 0.25)';
+    ctx.fillStyle = 'rgba(74, 144, 217, 0.3)';
     daysData.forEach(val => {
         if (val > upperFence || val < lowerFence) return;
         const j = (Math.random() - 0.5) * dotAreaHeight * 0.7;
@@ -1148,11 +1148,11 @@ function renderHistogram(distributionType) {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#b45309;">${fmtVal(median)}</div>
+                <div class="whisker-stat-value" style="color:#e08a3c;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#0f766e;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#2ebfa5;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
@@ -1239,6 +1239,43 @@ function drawPieSlices(ctx, width, height, counts, n, hoveredIdx) {
     ctx.fillStyle = '#9ca3af';
     ctx.font = '11px Roboto, sans-serif';
     ctx.fillText('Students', centerX, centerY + 10);
+}
+
+/**
+ * Positions a tooltip near the cursor, flipping sides to stay within the wrapper bounds
+ */
+function positionTooltip(tooltip, e, wrapper) {
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const gap = 12;
+
+    // Temporarily show at 0,0 to measure
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    const tipW = tooltip.offsetWidth;
+    const tipH = tooltip.offsetHeight;
+
+    const cursorX = e.clientX - wrapperRect.left;
+    const cursorY = e.clientY - wrapperRect.top;
+    const wrapW = wrapperRect.width;
+    const wrapH = wrapperRect.height;
+
+    // Horizontal: prefer right of cursor, flip left if clipped
+    let left = cursorX + gap;
+    if (left + tipW > wrapW) {
+        left = cursorX - gap - tipW;
+    }
+    // Clamp to wrapper bounds
+    left = Math.max(0, Math.min(left, wrapW - tipW));
+
+    // Vertical: prefer above cursor, flip below if clipped
+    let top = cursorY - gap - tipH;
+    if (top < 0) {
+        top = cursorY + gap;
+    }
+    top = Math.max(0, Math.min(top, wrapH - tipH));
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
 }
 
 /**
@@ -1334,9 +1371,7 @@ function renderPieChart(distributionType) {
             }
 
             if (tooltip && hitIdx >= 0) {
-                const wrapperRect = _pieCanvas.parentElement.getBoundingClientRect();
-                tooltip.style.left = (e.clientX - wrapperRect.left + 12) + 'px';
-                tooltip.style.top = (e.clientY - wrapperRect.top - 10) + 'px';
+                positionTooltip(tooltip, e, _pieCanvas.parentElement);
             }
 
             _pieCanvas.style.cursor = hitIdx >= 0 ? 'pointer' : 'default';
@@ -1365,11 +1400,11 @@ function renderPieChart(distributionType) {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#b45309;">${fmtVal(median)}</div>
+                <div class="whisker-stat-value" style="color:#e08a3c;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#0f766e;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#2ebfa5;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
