@@ -1268,13 +1268,16 @@ export function handleFileImport(files, onSuccess) {
                     const { content: suppContent, isCSV: suppIsCSV } = await readFileContent(supplementaryFile);
                     mergeSupplementaryFile(students, suppContent, suppIsCSV);
 
-                    // Recalculate daysOut for students whose lda came from the supplementary file.
-                    // mergeSupplementaryFile adds lda values but cannot compute daysOut
-                    // because it lacks referenceDate.
+                    // Recalculate daysOut for students whose lda came from the supplementary file
+                    // or whose daysOut was corrupted/overwritten during the merge.
                     if (referenceDate) {
                         for (const student of students) {
-                            if (student.lda && (student.daysOut === undefined || student.daysOut === null)) {
+                            const currentDaysOut = parseInt(student.daysOut);
+                            const needsRecalc = isNaN(currentDaysOut) || student.daysOut === undefined || student.daysOut === null;
+                            if (student.lda && needsRecalc) {
                                 student.daysOut = calculateDaysSinceLastAttendance(student.lda, referenceDate);
+                            } else if (needsRecalc) {
+                                student.daysOut = 0;
                             }
                         }
                     }
@@ -1452,8 +1455,8 @@ function getFieldValue(obj, field, fallback) {
  * @param {Array} cellValueFmts - Array of {sheetIndex, colIndex, rowCount, value, fillColor} for cell-value conditional formatting
  * @param {Array} tableMetadata - Array of {sheetIndex, displayName, columns, dataRowCount} for Excel tables
  */
-async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = [], tableMetadata = [], percentageCols = []) {
-    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0 && tableMetadata.length === 0 && percentageCols.length === 0) {
+async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors = [], colorScale = {}, rowHighlights = [], cellValueFmts = [], tableMetadata = []) {
+    if (condFmtSheets.length === 0 && tabColors.length === 0 && rowHighlights.length === 0 && cellValueFmts.length === 0 && tableMetadata.length === 0) {
         const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         downloadBlob(blob, filename);
         return;
@@ -1481,11 +1484,6 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
     // --- Inject dxf entries into styles.xml for cell-value conditional formatting ---
     if (cellValueFmts.length > 0) {
         await injectDxfStyles(zip, cellValueFmts);
-    }
-
-    // --- Inject percentage number format (0%) for attendance columns ---
-    if (percentageCols.length > 0) {
-        await injectPercentageFormat(zip, percentageCols);
     }
 
     // Collect all sheet indices that need modification
@@ -1538,7 +1536,7 @@ async function writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtShe
         const COLOR_SCALE_PRESETS = {
             grade:      { minVal: 0,   midVal: 65,  maxVal: 100, low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' },
             gpa:        { minVal: 0,   midVal: 2,   maxVal: 4,   low: 'FFFFC7CE', mid: 'FF9BC2E6', high: 'FFC6EFCE' },
-            attendance: { minVal: 0,   midVal: 0.5, maxVal: 1,   low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' }
+            attendance: { minVal: 0,   midVal: 50,  maxVal: 100, low: 'FFF8696B', mid: 'FFFFEB84', high: 'FF63BE7B' }
         };
         const condFmtsForSheet = condFmtSheets.filter(c => c.sheetIndex === sheetIndex);
         for (const condFmt of condFmtsForSheet) {
@@ -1661,74 +1659,6 @@ async function injectFillStyles(zip, colors, fillStyleMap) {
     stylesXml = stylesXml.replace('</cellXfs>', newXfsXml + '</cellXfs>');
 
     zip.file(stylesPath, stylesXml);
-}
-
-/**
- * Injects a percentage (0%) numFmt cellXf into styles.xml and returns the xf index (s value).
- * Uses built-in numFmtId=9 which is the Excel standard "0%" format.
- * Then applies that style to the specified cells in each sheet.
- *
- * @param {JSZip} zip - The JSZip instance
- * @param {Array} percentageCols - Array of {sheetIndex, colIndex, startRow, endRow}
- */
-async function injectPercentageFormat(zip, percentageCols) {
-    if (!percentageCols || percentageCols.length === 0) return;
-
-    // Add a cellXf entry using built-in numFmtId=9 (0%) to styles.xml
-    const stylesPath = 'xl/styles.xml';
-    let stylesXml = await zip.file(stylesPath)?.async('string');
-    if (!stylesXml) return;
-
-    const xfCountMatch = stylesXml.match(/<cellXfs count="(\d+)">/);
-    if (!xfCountMatch) return;
-    const xfCount = parseInt(xfCountMatch[1]);
-    const pctXfIndex = xfCount; // The new xf entry's index
-
-    // numFmtId="9" is the built-in Excel "0%" format
-    const newXf = `<xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`;
-    stylesXml = stylesXml.replace(
-        /<cellXfs count="\d+">/,
-        `<cellXfs count="${xfCount + 1}">`
-    );
-    stylesXml = stylesXml.replace('</cellXfs>', newXf + '</cellXfs>');
-    zip.file(stylesPath, stylesXml);
-
-    // Apply the percentage style to cells in each sheet
-    const sheetGroups = new Map();
-    for (const pc of percentageCols) {
-        if (!sheetGroups.has(pc.sheetIndex)) sheetGroups.set(pc.sheetIndex, []);
-        sheetGroups.get(pc.sheetIndex).push(pc);
-    }
-
-    for (const [sheetIndex, cols] of sheetGroups) {
-        const sheetPath = `xl/worksheets/sheet${sheetIndex + 1}.xml`;
-        let xml = await zip.file(sheetPath)?.async('string');
-        if (!xml) continue;
-
-        for (const { colIndex, startRow, endRow } of cols) {
-            const colLetter = columnIndexToLetter(colIndex);
-
-            // Match cells in this column and apply the percentage style
-            // startRow/endRow are 1-based Excel row numbers (row 1 = header, row 2 = first data)
-            for (let r = startRow; r < endRow; r++) {
-                const cellRef = `${colLetter}${r}`;
-                const cellRegex = new RegExp(`<c r="${cellRef}"([^>]*?)(\\/?>)`);
-                const match = xml.match(cellRegex);
-                if (match) {
-                    let attrs = match[1];
-                    // Replace or add s attribute
-                    if (/\ss="[^"]*"/.test(attrs)) {
-                        attrs = attrs.replace(/\ss="[^"]*"/, ` s="${pctXfIndex}"`);
-                    } else {
-                        attrs = ` s="${pctXfIndex}"` + attrs;
-                    }
-                    xml = xml.replace(cellRegex, `<c r="${cellRef}"${attrs}${match[2]}`);
-                }
-            }
-        }
-
-        zip.file(sheetPath, xml);
-    }
 }
 
 /**
@@ -2036,25 +1966,6 @@ function columnIndexToLetter(index) {
 }
 
 /**
- * Applies percentage number format (0.00%) to cells in a column range.
- * Values should be stored as decimals (e.g. 0.85 for 85%).
- * @param {Object} ws - SheetJS worksheet
- * @param {number} colIndex - 0-based column index
- * @param {number} startRow - 1-based start row (inclusive)
- * @param {number} endRow - 1-based end row (exclusive)
- */
-function applyPercentageFormat(ws, colIndex, startRow, endRow) {
-    const colLetter = columnIndexToLetter(colIndex);
-    for (let r = startRow; r < endRow; r++) {
-        const cellRef = `${colLetter}${r + 1}`; // +1 because sheet rows are 1-based and row 1 is header
-        const cell = ws[cellRef];
-        if (cell && typeof cell.v === 'number') {
-            cell.z = '0%';
-        }
-    }
-}
-
-/**
  * Triggers a browser download for a Blob.
  */
 function downloadBlob(blob, filename) {
@@ -2172,7 +2083,7 @@ export async function exportAttendanceOnly() {
 
         const instructorRows = [...instructorAgg.entries()]
             .map(([name, agg]) => {
-                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                 return [name, agg.attMin, agg.schedMin, pct];
             })
             .sort((a, b) => b[3] - a[3]); // highest attendance % first
@@ -2195,7 +2106,7 @@ export async function exportAttendanceOnly() {
 
         const instructorShiftRows = [...instructorShiftAgg.values()]
             .map(agg => {
-                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                 return [agg.name, agg.shift, agg.attMin, agg.schedMin, pct];
             })
             .sort((a, b) => b[4] - a[4]); // highest attendance % first
@@ -2209,7 +2120,7 @@ export async function exportAttendanceOnly() {
                     totalAttMin += row.attMin;
                     totalSchedMin += row.schedMin;
                 }
-                const pct = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
+                const pct = totalSchedMin > 0 ? Math.round((totalAttMin / totalSchedMin) * 100) : 0;
                 return [name, totalAttMin, totalSchedMin, pct];
             })
             .sort((a, b) => a[3] - b[3]); // lowest attendance % first
@@ -2265,14 +2176,14 @@ export async function exportAttendanceOnly() {
         const dailyRows = [...dailyAgg.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([, agg]) => {
-                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                 return [formatDateLabel(agg.dateObj), agg.attMin, agg.schedMin, pct];
             });
 
         const dailyShiftRows = [...dailyShiftAgg.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([, agg]) => {
-                const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                 return [formatDateLabel(agg.dateObj), agg.shift, agg.attMin, agg.schedMin, pct];
             });
 
@@ -2333,23 +2244,6 @@ export async function exportAttendanceOnly() {
             { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 15 } // F-J
         ];
 
-        // Track percentage columns for XML-level injection (sheetIndex 0 since only one sheet)
-        const percentageCols = [];
-        // Left tables (col D = index 3)
-        percentageCols.push({ sheetIndex: 0, colIndex: 3, startRow: 2, endRow: instructorRows.length + 2 });
-        if (dailyRows.length > 0) {
-            const dailyDataStart = dailyTableLeftStartRow + 2; // +2: skip header, 1-based to Excel row
-            percentageCols.push({ sheetIndex: 0, colIndex: 3, startRow: dailyDataStart, endRow: dailyDataStart + dailyRows.length });
-        }
-        const studentDataStart = studentTableStartRow + 2;
-        percentageCols.push({ sheetIndex: 0, colIndex: 3, startRow: studentDataStart, endRow: studentDataStart + studentRows.length });
-        // Right tables (col J = RIGHT_START_COL + 4)
-        percentageCols.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, startRow: 2, endRow: instructorShiftRows.length + 2 });
-        if (dailyShiftRows.length > 0) {
-            const dailyShiftDataStart = dailyShiftStartRow + 2;
-            percentageCols.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, startRow: dailyShiftDataStart, endRow: dailyShiftDataStart + dailyShiftRows.length });
-        }
-
         XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
         // ===== Table metadata =====
@@ -2375,7 +2269,7 @@ export async function exportAttendanceOnly() {
                 startRow: 1,
                 totalsRowFunctions: totalsFunctions4,
                 totalsRowLabels: totalsLabels4,
-                totalsCustomFormulas: { 3: `${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]` }
+                totalsCustomFormulas: { 3: `ROUND(${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
             });
             condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: instructorRows.length, startRow: 1, type: 'attendance' });
 
@@ -2394,7 +2288,7 @@ export async function exportAttendanceOnly() {
                     startRow: dailyStartRow1,
                     totalsRowFunctions: totalsFunctions4,
                     totalsRowLabels: totalsLabels4,
-                    totalsCustomFormulas: { 3: `${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]` }
+                    totalsCustomFormulas: { 3: `ROUND(${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
                 });
                 condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: dailyRows.length, startRow: dailyStartRow1, type: 'attendance' });
             }
@@ -2413,7 +2307,7 @@ export async function exportAttendanceOnly() {
                 startRow: studStartRow1,
                 totalsRowFunctions: totalsFunctions4,
                 totalsRowLabels: totalsLabels4,
-                totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
+                totalsCustomFormulas: { 3: `ROUND(${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
             });
             condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: studentRows.length, startRow: studStartRow1, type: 'attendance' });
 
@@ -2431,7 +2325,7 @@ export async function exportAttendanceOnly() {
                 startCol: RIGHT_START_COL,
                 totalsRowFunctions: totalsFunctions5,
                 totalsRowLabels: totalsLabels5,
-                totalsCustomFormulas: { 4: `${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+                totalsCustomFormulas: { 4: `ROUND(${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
             });
             condFmtSheets.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, rowCount: instructorShiftRows.length, startRow: 1, type: 'attendance' });
 
@@ -2451,7 +2345,7 @@ export async function exportAttendanceOnly() {
                     startCol: RIGHT_START_COL,
                     totalsRowFunctions: totalsFunctions5,
                     totalsRowLabels: totalsLabels5,
-                    totalsCustomFormulas: { 4: `${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+                    totalsCustomFormulas: { 4: `ROUND(${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
                 });
                 condFmtSheets.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, rowCount: dailyShiftRows.length, startRow: dailyShiftStartRow1, type: 'attendance' });
             }
@@ -2461,7 +2355,7 @@ export async function exportAttendanceOnly() {
         const filename = `attendance_report_${timestamp}.xlsx`;
 
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, [], {}, [], [], tableMetadata, percentageCols);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, [], {}, [], [], tableMetadata);
 
         console.log(`Exported attendance-only report: ${instructorRows.length} instructors, ${studentRows.length} students, ${dailyRows.length} daily entries`);
 
@@ -2558,11 +2452,14 @@ export async function exportMasterListCSV() {
                 if (col.field === 'missingCount') {
                     value = (value !== null && value !== undefined && value !== '') ? value : '-';
                 } else if (col.field === 'daysOut') {
-                    value = parseInt(value || 0);
+                    value = parseInt(value) || 0;
                 } else if (col.conditionalFormatting) {
-                    // Ensure grade/gpa values are numeric so Excel color scales apply
+                    // Ensure grade/gpa/attendance values are numeric so Excel color scales apply
                     const num = parseFloat(value);
-                    if (!isNaN(num)) value = num;
+                    if (!isNaN(num)) {
+                        // Attendance values are stored as decimals (0-1); convert to whole percentages (0-100)
+                        value = (col.conditionalFormatting === 'attendance' && num <= 1) ? Math.round(num * 100) : num;
+                    }
                 } else if (col.field === 'lda') {
                     if (value) {
                         // Format LDA dates to MM-DD-YY format
@@ -2713,27 +2610,20 @@ export async function exportMasterListCSV() {
         // Set column widths for Master List (custom or auto-fit)
         ws1['!cols'] = calculateColumnWidths(activeColumns, masterListData);
 
-        // Track attendance columns for percentage formatting injection (XML-level)
-        const percentageCols = [];
-        const masterAttendanceColIndex = activeColumns.findIndex(col => col.field === 'attendancePercent');
-        if (masterAttendanceColIndex !== -1 && students.length > 0) {
-            percentageCols.push({ sheetIndex: 0, colIndex: masterAttendanceColIndex, startRow: 2, endRow: students.length + 2 });
-        }
-
         // Set column widths for Missing Assignments (custom or auto-fit)
         ws2['!cols'] = calculateColumnWidths(EXPORT_MISSING_ASSIGNMENTS_COLUMNS, missingAssignmentsData);
 
         // --- LDA SHEETS (Filtered and Sorted Master List) ---
         // Filter students by daysOut >= 5
         const filteredStudents = students.filter(student => {
-            const daysOut = parseInt(student.daysOut || 0);
+            const daysOut = parseInt(student.daysOut) || 0;
             return daysOut >= 5;
         });
 
         // Sort by daysOut from highest to lowest
         filteredStudents.sort((a, b) => {
-            const daysOutA = parseInt(a.daysOut || 0);
-            const daysOutB = parseInt(b.daysOut || 0);
+            const daysOutA = parseInt(a.daysOut) || 0;
+            const daysOutB = parseInt(b.daysOut) || 0;
             return daysOutB - daysOutA; // Descending order
         });
 
@@ -2930,12 +2820,6 @@ export async function exportMasterListCSV() {
             // Set column widths
             ws['!cols'] = calculateColumnWidths(ldaColumns, ldaData);
 
-            // Track attendance column for percentage formatting injection (XML-level)
-            const ldaAttendanceColIndex = ldaColumns.findIndex(col => col.field === 'attendancePercent');
-            if (ldaAttendanceColIndex !== -1 && group.students.length > 0) {
-                percentageCols.push({ sheetIndex: sheetIndex, colIndex: ldaAttendanceColIndex, startRow: 2, endRow: group.students.length + 2 });
-            }
-
             // Hide columns not in LDA_VISIBLE_COLUMNS whitelist
             ldaColumns.forEach((col, i) => {
                 if (!LDA_VISIBLE_COLUMNS.includes(col.field)) {
@@ -3041,7 +2925,7 @@ export async function exportMasterListCSV() {
 
             const instructorRows = [...instructorAgg.entries()]
                 .map(([name, agg]) => {
-                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                     return [name, agg.attMin, agg.schedMin, pct];
                 })
                 .sort((a, b) => b[3] - a[3]);
@@ -3063,7 +2947,7 @@ export async function exportMasterListCSV() {
             }
             const instructorShiftRows = [...instructorShiftAgg.values()]
                 .map(agg => {
-                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                     return [agg.name, agg.shift, agg.attMin, agg.schedMin, pct];
                 })
                 .sort((a, b) => b[4] - a[4]);
@@ -3077,7 +2961,7 @@ export async function exportMasterListCSV() {
                         totalAttMin += row.attMin;
                         totalSchedMin += row.schedMin;
                     }
-                    const pct = totalSchedMin > 0 ? totalAttMin / totalSchedMin : 0;
+                    const pct = totalSchedMin > 0 ? Math.round((totalAttMin / totalSchedMin) * 100) : 0;
                     return [name, totalAttMin, totalSchedMin, pct];
                 })
                 .sort((a, b) => a[3] - b[3]);
@@ -3123,14 +3007,14 @@ export async function exportMasterListCSV() {
             const dailyRows = [...dailyAgg.entries()]
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([, agg]) => {
-                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                     return [fmtDateLabel(agg.dateObj), agg.attMin, agg.schedMin, pct];
                 });
 
             const dailyShiftRows = [...dailyShiftAgg.entries()]
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([, agg]) => {
-                    const pct = agg.schedMin > 0 ? agg.attMin / agg.schedMin : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
                     return [fmtDateLabel(agg.dateObj), agg.shift, agg.attMin, agg.schedMin, pct];
                 });
 
@@ -3185,18 +3069,6 @@ export async function exportMasterListCSV() {
                 { wch: 3 },  // E (gap)
                 { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 15 } // F-J
             ];
-
-            // Percentage format — left tables (col D = index 3) — tracked for XML injection
-            percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, startRow: 2, endRow: instructorRows.length + 2 });
-            if (dailyRows.length > 0) {
-                percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, startRow: attDailyStartRow + 2, endRow: attDailyStartRow + 2 + dailyRows.length });
-            }
-            percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, startRow: attStudentStartRow + 2, endRow: attStudentStartRow + 2 + studentRows.length });
-            // Percentage format — right tables (col J = index RIGHT_COL+4) — tracked for XML injection
-            percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: RIGHT_COL + 4, startRow: 2, endRow: instructorShiftRows.length + 2 });
-            if (dailyShiftRows.length > 0) {
-                percentageCols.push({ sheetIndex: attendanceSheetIndex, colIndex: RIGHT_COL + 4, startRow: attDailyShiftStartRow + 2, endRow: attDailyShiftStartRow + 2 + dailyShiftRows.length });
-            }
 
             XLSX.utils.book_append_sheet(wb, wsAttendance, 'On-Ground Attendance');
 
@@ -3263,7 +3135,7 @@ export async function exportMasterListCSV() {
                 sheetIndex: attendanceSheetIndex, displayName: instName,
                 columns: attCols4('Instructor Name'), dataRowCount: attendanceInstructorRowCount,
                 startRow: 1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
-                totalsCustomFormulas: { 3: `${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]` }
+                totalsCustomFormulas: { 3: `ROUND(${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
             });
             condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: attendanceInstructorRowCount, startRow: 1, type: 'attendance' });
 
@@ -3275,7 +3147,7 @@ export async function exportMasterListCSV() {
                     sheetIndex: attendanceSheetIndex, displayName: dailyName,
                     columns: attCols4('Date'), dataRowCount: layout.dailyRowCount,
                     startRow: dailyStartRow1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
-                    totalsCustomFormulas: { 3: `${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]` }
+                    totalsCustomFormulas: { 3: `ROUND(${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
                 });
                 condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: layout.dailyRowCount, startRow: dailyStartRow1, type: 'attendance' });
             }
@@ -3287,7 +3159,7 @@ export async function exportMasterListCSV() {
                 sheetIndex: attendanceSheetIndex, displayName: studName,
                 columns: attCols4('Student Name'), dataRowCount: attendanceStudentRowCount,
                 startRow: studStartRow1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
-                totalsCustomFormulas: { 3: `${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]` }
+                totalsCustomFormulas: { 3: `ROUND(${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
             });
             condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: attendanceStudentRowCount, startRow: studStartRow1, type: 'attendance' });
 
@@ -3297,7 +3169,7 @@ export async function exportMasterListCSV() {
                 sheetIndex: attendanceSheetIndex, displayName: instShiftName,
                 columns: attCols5('Instructor Name'), dataRowCount: layout.instructorShiftRowCount,
                 startRow: 1, startCol: layout.rightCol, totalsRowFunctions: attTotalsFunctions5, totalsRowLabels: attTotalsLabels5,
-                totalsCustomFormulas: { 4: `${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+                totalsCustomFormulas: { 4: `ROUND(${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
             });
             condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: layout.rightCol + 4, rowCount: layout.instructorShiftRowCount, startRow: 1, type: 'attendance' });
 
@@ -3309,7 +3181,7 @@ export async function exportMasterListCSV() {
                     sheetIndex: attendanceSheetIndex, displayName: dailyShiftName,
                     columns: attCols5('Date'), dataRowCount: layout.dailyShiftRowCount,
                     startRow: dailyShiftStartRow1, startCol: layout.rightCol, totalsRowFunctions: attTotalsFunctions5, totalsRowLabels: attTotalsLabels5,
-                    totalsCustomFormulas: { 4: `${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]` }
+                    totalsCustomFormulas: { 4: `ROUND(${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
                 });
                 condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: layout.rightCol + 4, rowCount: layout.dailyShiftRowCount, startRow: dailyShiftStartRow1, type: 'attendance' });
             }
@@ -3317,7 +3189,7 @@ export async function exportMasterListCSV() {
 
         // Write workbook to buffer, then inject conditional formatting, tab colors, row highlights, and tables via JSZip
         const wbBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts, tableMetadata, percentageCols);
+        await writeXlsxWithConditionalFormatting(wbBuffer, filename, condFmtSheets, tabColors, colorScale, rowHighlights, cellValueFmts, tableMetadata);
 
         console.log(`✓ Exported ${students.length} students to Excel file: ${filename}`);
         console.log(`  - Master List: ${students.length} students`);
