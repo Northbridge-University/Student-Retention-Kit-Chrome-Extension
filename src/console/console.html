@@ -100,6 +100,8 @@
         .filter-btn.log-filter[data-level="warn"] { border-left-color: #ffa500; }
         .filter-btn.log-filter[data-level="error"] { border-left-color: #ff4444; }
         .filter-btn.log-filter[data-level="info"] { border-left-color: #4fc3f7; }
+        .filter-btn.log-filter[data-level="ping"] { border-left-color: #f48fb1; }
+        .filter-btn.log-filter[data-level="submission"] { border-left-color: #4caf50; }
 
         .search-input {
             flex: 1;
@@ -171,8 +173,8 @@
         .log-entry.info .level { color: #4fc3f7; }
         .log-entry.info .message { color: #4fc3f7; }
 
-        .log-entry.ping .level { color: #ffa500; }
-        .log-entry.ping .message { color: #ffcc80; }
+        .log-entry.ping .level { color: #f48fb1; }
+        .log-entry.ping .message { color: #f8bbd0; }
 
         .log-entry.submission .level { color: #4caf50; }
         .log-entry.submission .message { color: #81c784; }
@@ -231,6 +233,8 @@
         <button class="filter-btn log-filter" data-level="warn">Warn</button>
         <button class="filter-btn log-filter" data-level="error">Error</button>
         <button class="filter-btn log-filter" data-level="info">Info</button>
+        <button class="filter-btn log-filter" data-level="ping">Ping</button>
+        <button class="filter-btn log-filter" data-level="submission">Submission</button>
         <input type="text" class="search-input" id="searchInput" placeholder="Filter output...">
     </div>
 
