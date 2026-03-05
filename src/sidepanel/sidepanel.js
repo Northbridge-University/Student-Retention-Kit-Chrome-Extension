@@ -32,7 +32,8 @@ import {
     setSortCriteria,
     updateDistributionDropdown,
     renderChart,
-    setChartType
+    setChartType,
+    initChartResizeObserver
 } from './student-renderer.js';
 
 import {
@@ -1481,6 +1482,9 @@ function setupEventListeners() {
             }
         });
     }
+
+    // Real-time chart resize when panel width changes
+    initChartResizeObserver();
 
     if (elements.campusFilter) {
         elements.campusFilter.addEventListener('change', filterByCampus);

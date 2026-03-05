@@ -560,41 +560,52 @@ const DISTRIBUTION_TYPES = {
  */
 const BUCKET_CONFIGS = {
     daysOut: [
-        { label: '0–2', min: 0, max: 3, color: '#22c55e' },
-        { label: '3–5', min: 3, max: 6, color: '#eab308' },
-        { label: '6–10', min: 6, max: 11, color: '#f97316' },
-        { label: '11+', min: 11, max: Infinity, color: '#ef4444' }
+        { label: '0–2', min: 0, max: 3, color: '#1e3a5f' },
+        { label: '3–5', min: 3, max: 6, color: '#2563eb' },
+        { label: '6–10', min: 6, max: 11, color: '#b45309' },
+        { label: '11+', min: 11, max: Infinity, color: '#9f1239' }
     ],
     grade: [
-        { label: 'A (90–100)', min: 90, max: 101, color: '#22c55e' },
-        { label: 'B (80–89)', min: 80, max: 90, color: '#3b82f6' },
-        { label: 'C (70–79)', min: 70, max: 80, color: '#eab308' },
-        { label: 'D (60–69)', min: 60, max: 70, color: '#f97316' },
-        { label: 'F (0–59)', min: 0, max: 60, color: '#ef4444' }
+        { label: 'A (90–100)', min: 90, max: 101, color: '#1e3a5f' },
+        { label: 'B (80–89)', min: 80, max: 90, color: '#2563eb' },
+        { label: 'C (70–79)', min: 70, max: 80, color: '#64748b' },
+        { label: 'D (60–69)', min: 60, max: 70, color: '#b45309' },
+        { label: 'F (0–59)', min: 0, max: 60, color: '#9f1239' }
     ],
     missing: [
-        { label: '0', min: 0, max: 1, color: '#22c55e' },
-        { label: '1–2', min: 1, max: 3, color: '#eab308' },
-        { label: '3–5', min: 3, max: 6, color: '#f97316' },
-        { label: '6+', min: 6, max: Infinity, color: '#ef4444' }
+        { label: '0', min: 0, max: 1, color: '#1e3a5f' },
+        { label: '1–2', min: 1, max: 3, color: '#2563eb' },
+        { label: '3–5', min: 3, max: 6, color: '#b45309' },
+        { label: '6+', min: 6, max: Infinity, color: '#9f1239' }
     ],
     gpa: [
-        { label: '3.5–4.0', min: 3.5, max: 4.01, color: '#22c55e' },
-        { label: '3.0–3.49', min: 3.0, max: 3.5, color: '#3b82f6' },
-        { label: '2.5–2.99', min: 2.5, max: 3.0, color: '#eab308' },
-        { label: '2.0–2.49', min: 2.0, max: 2.5, color: '#f97316' },
-        { label: '< 2.0', min: 0, max: 2.0, color: '#ef4444' }
+        { label: '3.5–4.0', min: 3.5, max: 4.01, color: '#1e3a5f' },
+        { label: '3.0–3.49', min: 3.0, max: 3.5, color: '#2563eb' },
+        { label: '2.5–2.99', min: 2.5, max: 3.0, color: '#64748b' },
+        { label: '2.0–2.49', min: 2.0, max: 2.5, color: '#b45309' },
+        { label: '< 2.0', min: 0, max: 2.0, color: '#9f1239' }
     ],
     attendance: [
-        { label: '90–100%', min: 90, max: 101, color: '#22c55e' },
-        { label: '80–89%', min: 80, max: 90, color: '#3b82f6' },
-        { label: '70–79%', min: 70, max: 80, color: '#eab308' },
-        { label: '< 70%', min: 0, max: 70, color: '#ef4444' }
+        { label: '90–100%', min: 90, max: 101, color: '#1e3a5f' },
+        { label: '80–89%', min: 80, max: 90, color: '#2563eb' },
+        { label: '70–79%', min: 70, max: 80, color: '#b45309' },
+        { label: '< 70%', min: 0, max: 70, color: '#9f1239' }
     ]
 };
 
 /** Currently selected chart type */
 let currentChartType = 'whisker';
+
+/** Stored pie chart state for hover detection */
+let _pieSlices = [];
+let _pieCenter = { x: 0, y: 0 };
+let _pieRadii = { inner: 0, outer: 0 };
+let _pieHoveredIndex = -1;
+let _pieMouseBound = false;
+let _pieCounts = [];
+let _pieN = 0;
+let _pieCtx = null;
+let _pieCanvas = null;
 
 /**
  * Extracts sorted numeric data from the master list for a given distribution type
@@ -842,14 +853,14 @@ export function renderWhiskerPlot(distributionType) {
     // Ensure minimum box height for readability
     const minBoxH = Math.max(boxH, 30);
     const boxYAdj = boxH < 30 ? boxY - (30 - boxH) / 2 : boxY;
-    ctx.fillStyle = 'rgba(0, 90, 156, 0.15)';
+    ctx.fillStyle = 'rgba(30, 58, 95, 0.15)';
     ctx.fillRect(boxLeft, boxYAdj, boxWidth, minBoxH);
-    ctx.strokeStyle = '#005A9C';
+    ctx.strokeStyle = '#1e3a5f';
     ctx.lineWidth = 2;
     ctx.strokeRect(boxLeft, boxYAdj, boxWidth, minBoxH);
 
     // Draw median line (horizontal across the box)
-    ctx.strokeStyle = '#ef4444';
+    ctx.strokeStyle = '#b45309';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.moveTo(boxLeft, scale(median));
@@ -858,7 +869,7 @@ export function renderWhiskerPlot(distributionType) {
 
     // Draw mean diamond
     const meanY = scale(mean);
-    ctx.fillStyle = '#10b981';
+    ctx.fillStyle = '#0f766e';
     ctx.beginPath();
     ctx.moveTo(midX, meanY - 8);
     ctx.lineTo(midX + 6, meanY);
@@ -873,10 +884,10 @@ export function renderWhiskerPlot(distributionType) {
 
     // Labels on the right side — collect all and space them to avoid overlap
     const rightLabels = [
-        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#005A9C', font: '11px Roboto, sans-serif' },
-        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#ef4444', font: 'bold 12px Roboto, sans-serif' },
-        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#10b981', font: '11px Roboto, sans-serif' },
-        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#005A9C', font: '11px Roboto, sans-serif' }
+        { y: scale(q3), text: `Q3: ${fmtVal(q3)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' },
+        { y: scale(median), text: `Median: ${fmtVal(median)}`, color: '#b45309', font: 'bold 12px Roboto, sans-serif' },
+        { y: scale(mean), text: `Mean: ${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}`, color: '#0f766e', font: '11px Roboto, sans-serif' },
+        { y: scale(q1), text: `Q1: ${fmtVal(q1)}`, color: '#1e3a5f', font: '11px Roboto, sans-serif' }
     ].sort((a, b) => a.y - b.y);
 
     // Push labels apart so they don't overlap (minimum 14px spacing)
@@ -896,7 +907,7 @@ export function renderWhiskerPlot(distributionType) {
     });
 
     // Draw outliers in the outlier zone
-    ctx.fillStyle = '#f97316';
+    ctx.fillStyle = '#7c3aed';
     upperOutliers.forEach(val => {
         const jitter = (Math.random() - 0.5) * boxWidth * 0.5;
         ctx.beginPath();
@@ -915,7 +926,7 @@ export function renderWhiskerPlot(distributionType) {
     const dotAreaRight = boxLeft - 10;
     const dotAreaMid = (dotAreaLeft + dotAreaRight) / 2;
     const dotAreaWidth = dotAreaRight - dotAreaLeft;
-    ctx.fillStyle = 'rgba(0, 90, 156, 0.25)';
+    ctx.fillStyle = 'rgba(30, 58, 95, 0.25)';
     daysData.forEach((val) => {
         if (val > upperFence || val < lowerFence) return;
         const jitter = (Math.random() - 0.5) * dotAreaWidth * 0.7;
@@ -932,11 +943,11 @@ export function renderWhiskerPlot(distributionType) {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#ef4444;">${fmtVal(median)}</div>
+                <div class="whisker-stat-value" style="color:#b45309;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#10b981;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#0f766e;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
@@ -948,10 +959,10 @@ export function renderWhiskerPlot(distributionType) {
 
     // Legend as HTML below the canvas
     legend.innerHTML = `
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#005A9C; opacity:0.3;"></div> IQR (Q1–Q3)</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#ef4444;"></div> Median</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#10b981; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#f97316; border-radius:50%;"></div> Outliers (${outliers.length})</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#1e3a5f; opacity:0.3;"></div> IQR (Q1–Q3)</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#b45309;"></div> Median</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#0f766e; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#7c3aed; border-radius:50%;"></div> Outliers (${outliers.length})</div>
     `;
 }
 
@@ -1063,11 +1074,11 @@ function renderHistogram(distributionType) {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#ef4444;">${fmtVal(median)}</div>
+                <div class="whisker-stat-value" style="color:#b45309;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#10b981;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#0f766e;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
@@ -1084,62 +1095,59 @@ function renderHistogram(distributionType) {
 }
 
 /**
- * Renders a pie/donut chart on the canvas
+ * Draws the pie chart slices on an already-prepared canvas context
  */
-function renderPieChart(distributionType) {
-    const { data, type, config } = extractChartData(distributionType);
-    const prepared = prepareCanvas(data, config);
-    if (!prepared) return;
-    const { ctx, width, height, legend } = prepared;
-
-    const buckets = BUCKET_CONFIGS[type] || BUCKET_CONFIGS.daysOut;
-    const counts = buckets.map(b => ({
-        ...b,
-        count: data.filter(v => v >= b.min && v < b.max).length
-    }));
-    const n = data.length;
-    const mean = data.reduce((s, v) => s + v, 0) / n;
-    const median = data[Math.floor(n * 0.5)];
-    const min = data[0];
-    const max = data[n - 1];
-    const isDecimal = type === 'gpa';
-    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
-
+function drawPieSlices(ctx, width, height, counts, n, hoveredIdx) {
     const centerX = width / 2;
     const centerY = height / 2 + 5;
     const outerR = Math.min(width, height) / 2 - 40;
-    const innerR = outerR * 0.5; // donut hole
+    const innerR = outerR * 0.5;
 
-    let startAngle = -Math.PI / 2; // start at 12 o'clock
+    _pieCenter = { x: centerX, y: centerY };
+    _pieRadii = { inner: innerR, outer: outerR };
+    _pieSlices = [];
 
-    counts.forEach(bucket => {
+    let startAngle = -Math.PI / 2;
+
+    counts.forEach((bucket, i) => {
         if (bucket.count === 0) return;
         const sliceAngle = (bucket.count / n) * Math.PI * 2;
         const endAngle = startAngle + sliceAngle;
+        const isHovered = i === hoveredIdx;
 
-        // Draw slice
+        _pieSlices.push({ startAngle, endAngle, index: i });
+
+        // Offset hovered slice outward
+        let cx = centerX, cy = centerY;
+        let oR = outerR, iR = innerR;
+        if (isHovered) {
+            const midAngle = startAngle + sliceAngle / 2;
+            const offset = 8;
+            cx += Math.cos(midAngle) * offset;
+            cy += Math.sin(midAngle) * offset;
+            oR += 3;
+            iR -= 2;
+        }
+
         ctx.beginPath();
-        ctx.arc(centerX, centerY, outerR, startAngle, endAngle);
-        ctx.arc(centerX, centerY, innerR, endAngle, startAngle, true);
+        ctx.arc(cx, cy, oR, startAngle, endAngle);
+        ctx.arc(cx, cy, Math.max(0, iR), endAngle, startAngle, true);
         ctx.closePath();
-        ctx.fillStyle = bucket.color;
+        ctx.fillStyle = isHovered ? lightenColor(bucket.color, 0.2) : bucket.color;
         ctx.fill();
-
-        // Thin white border between slices
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Percentage label on slice (only if large enough)
+        // Percentage label
         const pct = ((bucket.count / n) * 100);
         if (pct >= 5) {
             const midAngle = startAngle + sliceAngle / 2;
-            const labelR = (outerR + innerR) / 2;
-            const lx = centerX + Math.cos(midAngle) * labelR;
-            const ly = centerY + Math.sin(midAngle) * labelR;
-
+            const labelR = (oR + Math.max(0, iR)) / 2;
+            const lx = cx + Math.cos(midAngle) * labelR;
+            const ly = cy + Math.sin(midAngle) * labelR;
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 12px Roboto, sans-serif';
+            ctx.font = isHovered ? 'bold 13px Roboto, sans-serif' : 'bold 12px Roboto, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(`${Math.round(pct)}%`, lx, ly);
@@ -1157,6 +1165,123 @@ function renderPieChart(distributionType) {
     ctx.fillStyle = '#9ca3af';
     ctx.font = '11px Roboto, sans-serif';
     ctx.fillText('Students', centerX, centerY + 10);
+}
+
+/**
+ * Lightens a hex color by a given amount (0–1)
+ */
+function lightenColor(hex, amount) {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const r = Math.min(255, ((num >> 16) & 0xff) + Math.round(255 * amount));
+    const g = Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * amount));
+    const b = Math.min(255, (num & 0xff) + Math.round(255 * amount));
+    return `rgb(${r},${g},${b})`;
+}
+
+/**
+ * Renders a pie/donut chart on the canvas with hover interaction
+ */
+function renderPieChart(distributionType) {
+    const { data, type, config } = extractChartData(distributionType);
+    const prepared = prepareCanvas(data, config);
+    if (!prepared) return;
+    const { ctx, width, height, legend, canvas } = prepared;
+
+    const buckets = BUCKET_CONFIGS[type] || BUCKET_CONFIGS.daysOut;
+    const counts = buckets.map(b => ({
+        ...b,
+        count: data.filter(v => v >= b.min && v < b.max).length
+    }));
+    const n = data.length;
+    const mean = data.reduce((s, v) => s + v, 0) / n;
+    const median = data[Math.floor(n * 0.5)];
+    const min = data[0];
+    const max = data[n - 1];
+    const isDecimal = type === 'gpa';
+    const fmtVal = (v) => isDecimal ? v.toFixed(2) : v;
+
+    _pieHoveredIndex = -1;
+    _pieCounts = counts;
+    _pieN = n;
+    _pieCtx = ctx;
+    _pieCanvas = canvas;
+    drawPieSlices(ctx, width, height, counts, n, -1);
+
+    // Set up hover interaction (bind once)
+    if (!_pieMouseBound) {
+        _pieMouseBound = true;
+        const tooltip = document.getElementById('chartTooltip');
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (currentChartType !== 'pie' || _pieSlices.length === 0 || !_pieCtx) return;
+            const rect = _pieCanvas.getBoundingClientRect();
+            const scaleX = _pieCanvas.width / (window.devicePixelRatio || 1) / rect.width;
+            const scaleY = _pieCanvas.height / (window.devicePixelRatio || 1) / rect.height;
+            const mx = (e.clientX - rect.left) * scaleX;
+            const my = (e.clientY - rect.top) * scaleY;
+
+            const dx = mx - _pieCenter.x;
+            const dy = my - _pieCenter.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            let angle = Math.atan2(dy, dx);
+
+            let hitIdx = -1;
+            if (dist >= _pieRadii.inner && dist <= _pieRadii.outer) {
+                for (const slice of _pieSlices) {
+                    let a = angle;
+                    let start = slice.startAngle;
+                    let end = slice.endAngle;
+                    if (end > Math.PI) {
+                        if (a < start) a += Math.PI * 2;
+                    }
+                    if (a >= start && a < end) {
+                        hitIdx = slice.index;
+                        break;
+                    }
+                }
+            }
+
+            if (hitIdx !== _pieHoveredIndex) {
+                _pieHoveredIndex = hitIdx;
+                const dpr = window.devicePixelRatio || 1;
+                const w = _pieCanvas.width / dpr;
+                const h = _pieCanvas.height / dpr;
+                _pieCtx.clearRect(0, 0, w, h);
+                drawPieSlices(_pieCtx, w, h, _pieCounts, _pieN, hitIdx);
+
+                if (tooltip && hitIdx >= 0) {
+                    const bucket = _pieCounts[hitIdx];
+                    const pct = ((bucket.count / _pieN) * 100).toFixed(1);
+                    tooltip.innerHTML = `<strong>${bucket.label}</strong><br>${bucket.count} students (${pct}%)`;
+                    tooltip.classList.add('visible');
+                } else if (tooltip) {
+                    tooltip.classList.remove('visible');
+                }
+            }
+
+            if (tooltip && hitIdx >= 0) {
+                const wrapperRect = _pieCanvas.parentElement.getBoundingClientRect();
+                tooltip.style.left = (e.clientX - wrapperRect.left + 12) + 'px';
+                tooltip.style.top = (e.clientY - wrapperRect.top - 10) + 'px';
+            }
+
+            _pieCanvas.style.cursor = hitIdx >= 0 ? 'pointer' : 'default';
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            if (currentChartType !== 'pie' || !_pieCtx) return;
+            if (_pieHoveredIndex !== -1) {
+                _pieHoveredIndex = -1;
+                const dpr = window.devicePixelRatio || 1;
+                const w = _pieCanvas.width / dpr;
+                const h = _pieCanvas.height / dpr;
+                _pieCtx.clearRect(0, 0, w, h);
+                drawPieSlices(_pieCtx, w, h, _pieCounts, _pieN, -1);
+            }
+            if (tooltip) tooltip.classList.remove('visible');
+            _pieCanvas.style.cursor = 'default';
+        });
+    }
 
     // Stats
     if (elements.whiskerPlotStats) {
@@ -1166,11 +1291,11 @@ function renderPieChart(distributionType) {
                 <div class="whisker-stat-label">Students</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#ef4444;">${fmtVal(median)}</div>
+                <div class="whisker-stat-value" style="color:#b45309;">${fmtVal(median)}</div>
                 <div class="whisker-stat-label">Median</div>
             </div>
             <div class="whisker-stat-card">
-                <div class="whisker-stat-value" style="color:#10b981;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
+                <div class="whisker-stat-value" style="color:#0f766e;">${isDecimal ? mean.toFixed(2) : mean.toFixed(1)}</div>
                 <div class="whisker-stat-label">Mean</div>
             </div>
             <div class="whisker-stat-card">
@@ -1191,6 +1316,11 @@ function renderPieChart(distributionType) {
  */
 export function renderChart(distributionType) {
     const type = distributionType || elements.distributionSelect?.value || 'daysOut';
+
+    // Hide tooltip when not in pie mode
+    const tooltip = document.getElementById('chartTooltip');
+    if (tooltip) tooltip.classList.remove('visible');
+
     switch (currentChartType) {
         case 'histogram':
             renderHistogram(type);
@@ -1203,7 +1333,6 @@ export function renderChart(distributionType) {
             renderWhiskerPlot(type);
             break;
     }
-    // Update active toggle state
     updateChartToggleState();
 }
 
@@ -1224,4 +1353,30 @@ function updateChartToggleState() {
     container.querySelectorAll('.chart-toggle-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.chart === currentChartType);
     });
+}
+
+/** Track whether the ResizeObserver is already set up */
+let _resizeObserverBound = false;
+
+/**
+ * Sets up a ResizeObserver to re-render charts when the panel width changes
+ */
+export function initChartResizeObserver() {
+    if (_resizeObserverBound) return;
+    const container = document.querySelector('.stats-container');
+    if (!container) return;
+    _resizeObserverBound = true;
+
+    let rafId = null;
+    const observer = new ResizeObserver(() => {
+        // Debounce with rAF for smooth real-time resizing
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+            // Only re-render if the stats view is visible
+            if (elements.statsViewSection?.style.display !== 'none') {
+                renderChart();
+            }
+        });
+    });
+    observer.observe(container);
 }
