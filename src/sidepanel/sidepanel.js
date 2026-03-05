@@ -354,18 +354,23 @@ function addConsoleMessage(type, args) {
         return String(arg);
     }).join(' ');
 
-    // Detect specific message patterns and apply custom colors
+    // Detect specific message patterns and apply custom types
     let customType = type;
     if (message.includes('Sending payload to Office Add-in') || message.includes('SRK_HIGHLIGHT_STUDENT_ROW')) {
         customType = 'ping';
     } else if (message.includes('onSubmissionFound triggered') || message.includes('Submission Found')) {
         customType = 'submission';
+    } else if (type !== 'error' && /\berror\b/i.test(message)) {
+        customType = 'error';
     }
+
+    // Drop %c CSS for recognized custom types — use our own consistent styling
+    const applyCss = (cssStyle && customType === type);
 
     const logEntry = document.createElement('div');
     logEntry.className = `console-log ${customType}`;
     logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
-    if (cssStyle && customType === type) logEntry.style.cssText += cssStyle;
+    if (applyCss) logEntry.style.cssText += cssStyle;
 
     elements.consoleContent.appendChild(logEntry);
     elements.consoleContent.scrollTop = elements.consoleContent.scrollHeight;
@@ -378,7 +383,7 @@ function addConsoleMessage(type, args) {
 
     // Forward to standalone console tab via storage + runtime message
     const consoleEntry = { type: customType, message, timestamp };
-    if (cssStyle) consoleEntry.css = cssStyle;
+    if (applyCss) consoleEntry.css = cssStyle;
     try {
         chrome.storage.local.get('srk_console_logs', (data) => {
             const logs = data.srk_console_logs || [];
