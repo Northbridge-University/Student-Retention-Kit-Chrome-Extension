@@ -538,7 +538,8 @@ export function sortMasterList() {
 }
 
 /**
- * Renders a box-and-whisker plot of student Days Out on a canvas
+ * Renders a vertical box-and-whisker plot of student Days Out on a canvas
+ * Designed to be readable in a narrow sidepanel
  */
 export function renderWhiskerPlot() {
     const canvas = elements.whiskerPlotCanvas;
@@ -552,7 +553,7 @@ export function renderWhiskerPlot() {
     const rect = canvas.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const width = rect.width - 32;
-    const height = 300;
+    const height = 380;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     canvas.style.width = width + 'px';
@@ -586,119 +587,185 @@ export function renderWhiskerPlot() {
     // Outliers
     const outliers = daysData.filter(v => v < lowerFence || v > upperFence);
 
-    // Drawing parameters
-    const padding = { top: 50, bottom: 60, left: 50, right: 30 };
+    // Vertical layout: Y-axis = days out (top = high, bottom = low)
+    const padding = { top: 30, bottom: 40, left: 55, right: 30 };
     const plotWidth = width - padding.left - padding.right;
     const plotHeight = height - padding.top - padding.bottom;
-    const boxTop = padding.top + plotHeight * 0.2;
-    const boxBottom = padding.top + plotHeight * 0.8;
-    const boxHeight = boxBottom - boxTop;
+
+    // Box occupies the center horizontal band
+    const boxLeft = padding.left + plotWidth * 0.3;
+    const boxRight = padding.left + plotWidth * 0.7;
+    const boxWidth = boxRight - boxLeft;
+    const midX = (boxLeft + boxRight) / 2;
 
     const dataMax = max || 1;
-    const scale = (val) => padding.left + (val / dataMax) * plotWidth;
+    // Scale: value -> y position (high values at top)
+    const scale = (val) => padding.top + plotHeight - (val / dataMax) * plotHeight;
 
-    // Draw grid lines
+    // Draw horizontal grid lines
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
     ctx.lineWidth = 1;
     const gridSteps = 5;
     for (let i = 0; i <= gridSteps; i++) {
-        const x = padding.left + (i / gridSteps) * plotWidth;
+        const y = padding.top + (i / gridSteps) * plotHeight;
         ctx.beginPath();
-        ctx.moveTo(x, padding.top - 10);
-        ctx.lineTo(x, padding.top + plotHeight + 10);
+        ctx.moveTo(padding.left - 5, y);
+        ctx.lineTo(width - padding.right, y);
         ctx.stroke();
     }
 
-    // Draw axis labels
+    // Draw Y-axis labels (days out values)
     ctx.fillStyle = '#6b7280';
-    ctx.font = '11px Roboto, sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = '12px Roboto, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
     for (let i = 0; i <= gridSteps; i++) {
-        const val = Math.round((i / gridSteps) * dataMax);
-        const x = padding.left + (i / gridSteps) * plotWidth;
-        ctx.fillText(val, x, padding.top + plotHeight + 25);
+        const val = Math.round(((gridSteps - i) / gridSteps) * dataMax);
+        const y = padding.top + (i / gridSteps) * plotHeight;
+        ctx.fillText(val, padding.left - 10, y);
     }
-    ctx.fillText('Days Out', width / 2, height - 8);
 
-    // Draw whisker lines (min to Q1, Q3 to max)
+    // Y-axis title
+    ctx.save();
+    ctx.translate(14, padding.top + plotHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.font = '12px Roboto, sans-serif';
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText('Days Out', 0, 0);
+    ctx.restore();
+
+    // Draw whisker lines (vertical)
     ctx.strokeStyle = '#6b7280';
     ctx.lineWidth = 2;
-    const midY = (boxTop + boxBottom) / 2;
 
-    // Left whisker
+    // Bottom whisker (lower fence to Q1)
     ctx.beginPath();
-    ctx.moveTo(scale(lowerFence), midY);
-    ctx.lineTo(scale(q1), midY);
+    ctx.moveTo(midX, scale(lowerFence));
+    ctx.lineTo(midX, scale(q1));
     ctx.stroke();
-    // Left whisker cap
+    // Bottom whisker cap
     ctx.beginPath();
-    ctx.moveTo(scale(lowerFence), boxTop + boxHeight * 0.3);
-    ctx.lineTo(scale(lowerFence), boxBottom - boxHeight * 0.3);
+    ctx.moveTo(boxLeft + boxWidth * 0.25, scale(lowerFence));
+    ctx.lineTo(boxRight - boxWidth * 0.25, scale(lowerFence));
     ctx.stroke();
 
-    // Right whisker
+    // Top whisker (Q3 to upper fence)
     ctx.beginPath();
-    ctx.moveTo(scale(q3), midY);
-    ctx.lineTo(scale(upperFence), midY);
+    ctx.moveTo(midX, scale(q3));
+    ctx.lineTo(midX, scale(upperFence));
     ctx.stroke();
-    // Right whisker cap
+    // Top whisker cap
     ctx.beginPath();
-    ctx.moveTo(scale(upperFence), boxTop + boxHeight * 0.3);
-    ctx.lineTo(scale(upperFence), boxBottom - boxHeight * 0.3);
+    ctx.moveTo(boxLeft + boxWidth * 0.25, scale(upperFence));
+    ctx.lineTo(boxRight - boxWidth * 0.25, scale(upperFence));
     ctx.stroke();
 
     // Draw IQR box (Q1 to Q3)
-    const boxX = scale(q1);
-    const boxW = scale(q3) - scale(q1);
+    const boxY = scale(q3); // top of box (higher value = higher on canvas)
+    const boxH = scale(q1) - scale(q3);
     ctx.fillStyle = 'rgba(0, 90, 156, 0.15)';
-    ctx.fillRect(boxX, boxTop, boxW, boxHeight);
-    ctx.strokeStyle = 'var(--primary-color, #005A9C)';
+    ctx.fillRect(boxLeft, boxY, boxWidth, boxH);
+    ctx.strokeStyle = '#005A9C';
     ctx.lineWidth = 2;
-    ctx.strokeRect(boxX, boxTop, boxW, boxHeight);
+    ctx.strokeRect(boxLeft, boxY, boxWidth, boxH);
 
-    // Draw median line
+    // Draw median line (horizontal across the box)
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(scale(median), boxTop);
-    ctx.lineTo(scale(median), boxBottom);
+    ctx.moveTo(boxLeft, scale(median));
+    ctx.lineTo(boxRight, scale(median));
     ctx.stroke();
 
+    // Median label
+    ctx.fillStyle = '#ef4444';
+    ctx.font = 'bold 12px Roboto, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${median}`, boxRight + 8, scale(median));
+
     // Draw mean diamond
-    const meanX = scale(mean);
+    const meanY = scale(mean);
     ctx.fillStyle = '#10b981';
     ctx.beginPath();
-    ctx.moveTo(meanX, midY - 7);
-    ctx.lineTo(meanX + 5, midY);
-    ctx.lineTo(meanX, midY + 7);
-    ctx.lineTo(meanX - 5, midY);
+    ctx.moveTo(midX, meanY - 8);
+    ctx.lineTo(midX + 6, meanY);
+    ctx.lineTo(midX, meanY + 8);
+    ctx.lineTo(midX - 6, meanY);
     ctx.closePath();
     ctx.fill();
+
+    // Mean label
+    ctx.fillStyle = '#10b981';
+    ctx.font = '11px Roboto, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${mean.toFixed(1)}`, boxRight + 8, meanY);
 
     // Draw outliers
     ctx.fillStyle = '#f97316';
     outliers.forEach(val => {
+        const jitter = (Math.random() - 0.5) * boxWidth * 0.4;
         ctx.beginPath();
-        ctx.arc(scale(val), midY, 4, 0, Math.PI * 2);
+        ctx.arc(midX + jitter, scale(val), 4, 0, Math.PI * 2);
         ctx.fill();
     });
 
-    // Draw individual data points (jittered)
-    ctx.fillStyle = 'rgba(0, 90, 156, 0.3)';
-    daysData.forEach((val, i) => {
+    // Draw individual data points (jittered horizontally, to the left of the box)
+    const dotAreaLeft = padding.left;
+    const dotAreaRight = boxLeft - 10;
+    const dotAreaMid = (dotAreaLeft + dotAreaRight) / 2;
+    const dotAreaWidth = dotAreaRight - dotAreaLeft;
+    ctx.fillStyle = 'rgba(0, 90, 156, 0.25)';
+    daysData.forEach((val) => {
         if (outliers.includes(val)) return;
-        const jitter = (Math.random() - 0.5) * boxHeight * 0.6;
+        const jitter = (Math.random() - 0.5) * dotAreaWidth * 0.7;
         ctx.beginPath();
-        ctx.arc(scale(val), midY + jitter, 2, 0, Math.PI * 2);
+        ctx.arc(dotAreaMid + jitter, scale(val), 2.5, 0, Math.PI * 2);
         ctx.fill();
     });
 
-    // Legend
+    // Q1 / Q3 labels on the right side
+    ctx.fillStyle = '#005A9C';
+    ctx.font = '11px Roboto, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    // Avoid overlap with median/mean labels by checking distance
+    const labelPositions = [
+        { y: scale(q3), text: `Q3: ${q3}` },
+        { y: scale(q1), text: `Q1: ${q1}` }
+    ];
+    labelPositions.forEach(lbl => {
+        ctx.fillText(lbl.text, boxRight + 8, lbl.y);
+    });
+
+    // Summary stats grid above the canvas
+    if (elements.whiskerPlotStats) {
+        elements.whiskerPlotStats.innerHTML = `
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value">${n}</div>
+                <div class="whisker-stat-label">Students</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value" style="color:#ef4444;">${median}</div>
+                <div class="whisker-stat-label">Median</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value" style="color:#10b981;">${mean.toFixed(1)}</div>
+                <div class="whisker-stat-label">Mean</div>
+            </div>
+            <div class="whisker-stat-card">
+                <div class="whisker-stat-value">${min}–${max}</div>
+                <div class="whisker-stat-label">Range</div>
+            </div>
+        `;
+    }
+
+    // Legend as HTML below the canvas
     legend.innerHTML = `
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:rgba(0,90,156,0.3);"></div> IQR Box (Q1–Q3)</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#ef4444;"></div> Median: ${median}</div>
-        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#10b981;"></div> Mean: ${mean.toFixed(1)}</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#005A9C; opacity:0.3;"></div> IQR (Q1–Q3)</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#ef4444;"></div> Median</div>
+        <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#10b981; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"></div> Mean</div>
         <div class="whisker-legend-item"><div class="whisker-legend-swatch" style="background:#f97316; border-radius:50%;"></div> Outliers (${outliers.length})</div>
-        <div class="whisker-legend-item" style="margin-left:auto; font-weight:500;">n = ${n} students</div>
     `;
 }
