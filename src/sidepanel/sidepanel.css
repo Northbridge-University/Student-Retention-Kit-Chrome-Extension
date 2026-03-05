@@ -1274,6 +1274,37 @@ input:focus, textarea:focus, select:focus {
     margin-bottom: 0;
 }
 
+.chart-controls-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chart-rotate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border: none;
+    background: rgba(0, 0, 0, 0.05);
+    color: #9ca3af;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.chart-rotate-btn:hover {
+    color: #6b7280;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.chart-rotate-btn.rotated {
+    color: var(--primary);
+    background: rgba(0, 90, 156, 0.1);
+}
+
 .chart-toggle-group {
     display: flex;
     gap: 2px;
@@ -1306,6 +1337,29 @@ input:focus, textarea:focus, select:focus {
     background: #fff;
     color: var(--primary);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.chart-canvas-wrapper {
+    position: relative;
+}
+
+.chart-tooltip {
+    display: none;
+    position: absolute;
+    pointer-events: none;
+    background: rgba(30, 41, 59, 0.95);
+    color: #f8fafc;
+    font-size: 12px;
+    font-family: Roboto, sans-serif;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.chart-tooltip.visible {
+    display: block;
 }
 
 .whisker-legend {

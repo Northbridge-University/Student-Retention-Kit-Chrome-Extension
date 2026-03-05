@@ -32,7 +32,9 @@ import {
     setSortCriteria,
     updateDistributionDropdown,
     renderChart,
-    setChartType
+    setChartType,
+    toggleWhiskerOrientation,
+    initChartResizeObserver
 } from './student-renderer.js';
 
 import {
@@ -1481,6 +1483,15 @@ function setupEventListeners() {
             }
         });
     }
+
+    // Rotate box plot button
+    const rotateBtn = document.getElementById('rotateWhiskerBtn');
+    if (rotateBtn) {
+        rotateBtn.addEventListener('click', toggleWhiskerOrientation);
+    }
+
+    // Real-time chart resize when panel width changes
+    initChartResizeObserver();
 
     if (elements.campusFilter) {
         elements.campusFilter.addEventListener('change', filterByCampus);
