@@ -20,6 +20,43 @@ import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { elements } from './ui-manager.js';
 import { formatDuration, updateTotalTime } from './canvas-api.js';
+
+// --- Update cancellation flag ---
+let _updateCancelled = false;
+
+/**
+ * Returns whether the current update operation has been cancelled
+ */
+export function isUpdateCancelled() {
+    return _updateCancelled;
+}
+
+/**
+ * Cancels the current update operation, resets UI, and re-enables buttons
+ */
+export function cancelUpdate() {
+    _updateCancelled = true;
+    const updateQueueSection = document.getElementById('updateQueueSection');
+    if (updateQueueSection) updateQueueSection.style.display = 'none';
+    setUpdateButtonsDisabled(false);
+}
+
+/**
+ * Disables or enables the Update Master List and Download buttons
+ */
+export function setUpdateButtonsDisabled(disabled) {
+    if (elements.updateMasterBtn) {
+        elements.updateMasterBtn.disabled = disabled;
+        elements.updateMasterBtn.style.opacity = disabled ? '0.5' : '';
+        elements.updateMasterBtn.style.pointerEvents = disabled ? 'none' : '';
+    }
+    if (elements.downloadMasterBtn) {
+        elements.downloadMasterBtn.disabled = disabled;
+        elements.downloadMasterBtn.style.opacity = disabled ? '0.5' : '';
+        elements.downloadMasterBtn.style.pointerEvents = disabled ? 'none' : '';
+    }
+}
+
 /**
  * Sends master list data to Excel via SRK_IMPORT_MASTER_LIST payload
  * @param {Array} students - Array of student objects
@@ -1290,7 +1327,7 @@ function mergeSupplementaryFile(students, data, isCSV) {
  * @param {File|FileList|Array} files - The uploaded file(s)
  * @param {Function} onSuccess - Callback after successful import
  */
-export function handleFileImport(files, onSuccess) {
+export async function handleFileImport(files, onSuccess) {
     // Support both single File and FileList/Array (up to 3 files)
     const fileList = files instanceof FileList ? Array.from(files) : (Array.isArray(files) ? files : [files]);
     const file = fileList[0];
@@ -1300,6 +1337,28 @@ export function handleFileImport(files, onSuccess) {
         resetQueueUI();
         return;
     }
+
+    // Reset cancellation flag for new operation
+    _updateCancelled = false;
+
+    // Show progress indicator now that file(s) are uploaded
+    const updateQueueSection = document.getElementById('updateQueueSection');
+    if (updateQueueSection) {
+        updateQueueSection.style.display = 'block';
+        updateQueueSection.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    resetQueueUI();
+    await restoreDefaultQueueUI();
+
+    const step1El = document.getElementById('step1');
+    if (step1El) {
+        step1El.className = 'queue-item active';
+        updateStepIcon(step1El, 'spinner');
+    }
+
+    // Disable Update and Download buttons during the operation
+    setUpdateButtonsDisabled(true);
 
     // Show file count pill next to "Update Progress" header
     const fileCountPill = document.getElementById('queueFileCountPill');
@@ -1332,6 +1391,7 @@ export function handleFileImport(files, onSuccess) {
     if (!isCSV && !isXLSX) {
         alert("Unsupported file type. Please use .csv or .xlsx files.");
         resetQueueUI();
+        setUpdateButtonsDisabled(false);
         return;
     }
 
@@ -1410,6 +1470,7 @@ export function handleFileImport(files, onSuccess) {
             updateStepIcon(step1, 'error');
             step1.style.color = '#ef4444';
             timeSpan.textContent = 'Error: ' + error.message;
+            setUpdateButtonsDisabled(false);
         }
 
         elements.studentPopFile.value = '';

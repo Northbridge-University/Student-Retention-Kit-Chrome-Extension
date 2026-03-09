@@ -15,7 +15,12 @@ import { openCanvasAuthErrorModal, isCanvasAuthError } from './modals/canvas-aut
 import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
+import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
 
+// Custom error for cancelled updates
+class UpdateCancelledError extends Error {
+    constructor() { super('Update cancelled by user'); this.name = 'UpdateCancelledError'; }
+}
 
 // ============================================================================
 // 2. AUTH & SHUTDOWN STATE + DOMAIN FALLBACK
@@ -164,6 +169,11 @@ export function updateTotalTime() {
  * @returns {Promise<*>} The result of work()
  */
 async function withStepUI(stepId, work) {
+    // Check if the update was cancelled before starting this step
+    if (isUpdateCancelled()) {
+        throw new UpdateCancelledError();
+    }
+
     const stepEl = document.getElementById(stepId);
     const timeSpan = stepEl.querySelector('.step-time');
 
@@ -183,11 +193,18 @@ async function withStepUI(stepId, work) {
 
         return result;
     } catch (error) {
+        if (error instanceof UpdateCancelledError) {
+            console.log(`[${stepId}] Cancelled by user`);
+            setUpdateButtonsDisabled(false);
+            throw error;
+        }
+
         if (error instanceof CanvasAuthShutdownError) {
             console.log(`[${stepId}] Stopped by user due to Canvas auth error`);
             updateStepIcon(stepEl, 'error');
             stepEl.style.color = '#ef4444';
             timeSpan.textContent = 'Stopped by user';
+            setUpdateButtonsDisabled(false);
             throw error;
         }
 
@@ -201,6 +218,7 @@ async function withStepUI(stepId, work) {
         updateStepIcon(stepEl, 'error');
         stepEl.style.color = '#ef4444';
         timeSpan.textContent = 'Error';
+        setUpdateButtonsDisabled(false);
         throw error;
     }
 }
