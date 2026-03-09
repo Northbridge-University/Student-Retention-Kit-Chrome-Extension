@@ -1,7 +1,6 @@
 // Sidepanel Main - Orchestrates all modules and manages app lifecycle
 import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
-import { updateStepIcon } from '../utils/ui-helpers.js';
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
 import { loadAndRenderMarkdown } from '../utils/markdownRenderer.js';
@@ -39,13 +38,14 @@ import {
 
 import {
     handleFileImport,
-    resetQueueUI,
-    restoreDefaultQueueUI,
     exportReport,
     sendMasterListToExcel,
     sendMasterListWithMissingAssignmentsToExcel,
     updateCampusFilter,
-    hideCampusFilter
+    hideCampusFilter,
+    cancelUpdate,
+    isUpdateCancelled,
+    setUpdateButtonsDisabled
 } from './file-handler.js';
 
 import { processStep2, processStep3, processStep4, formatDuration } from './canvas-api.js';
@@ -1415,6 +1415,8 @@ function setupEventListeners() {
         elements.studentPopFile.addEventListener('change', (e) => {
             const fileCount = e.target.files.length;
             handleFileImport(e.target.files, async (students, meta) => {
+                if (isUpdateCancelled()) { setUpdateButtonsDisabled(false); return; }
+
                 renderMasterList(students, (entry, li, evt) => {
                     queueManager.handleStudentClick(entry, li, evt);
                 });
@@ -1432,14 +1434,18 @@ function setupEventListeners() {
 
                         // Auto-download the attendance report
                         await exportReport();
+                        setUpdateButtonsDisabled(false);
                         return;
                     }
 
                     if (choice === null) {
                         // User cancelled - do nothing further
+                        setUpdateButtonsDisabled(false);
                         return;
                     }
                 }
+
+                if (isUpdateCancelled()) { setUpdateButtonsDisabled(false); return; }
 
                 // Normal flow: exit attendance mode if previously active, then ping Canvas (Steps 2-4)
                 exitAttendanceMode();
@@ -1449,9 +1455,13 @@ function setupEventListeners() {
                 // already handles re-rendering when MASTER_ENTRIES is updated.
                 // Passing callbacks that also render would cause double renders (duplicate students bug).
                 processStep2(students, async (updatedStudents) => {
+                    if (isUpdateCancelled()) { setUpdateButtonsDisabled(false); return; }
                     const finalStudents = await processStep3(updatedStudents);
+                    if (isUpdateCancelled()) { setUpdateButtonsDisabled(false); return; }
                     // Send master list with missing assignments to Excel
                     await processStep4(finalStudents);
+                    // Re-enable buttons after the entire process completes
+                    setUpdateButtonsDisabled(false);
                     // Create backup after the entire update process completes
                     const lastUpdatedData = await chrome.storage.local.get([STORAGE_KEYS.LAST_UPDATED]);
                     const totalTimeEl = document.getElementById('queueTotalTime');
@@ -1466,7 +1476,7 @@ function setupEventListeners() {
 
     if (elements.queueCloseBtn) {
         elements.queueCloseBtn.addEventListener('click', () => {
-            elements.updateQueueSection.style.display = 'none';
+            cancelUpdate();
         });
     }
 
@@ -1642,24 +1652,8 @@ function handleQueueRemoval(index) {
  * Handles Update Master List button click
  */
 async function handleUpdateMasterList() {
-    if (elements.updateQueueSection) {
-        elements.updateQueueSection.style.display = 'block';
-        elements.updateQueueSection.scrollIntoView({ behavior: 'smooth' });
-
-        resetQueueUI();
-
-        // Direct CSV upload
-        await restoreDefaultQueueUI();
-
-        const step1 = document.getElementById('step1');
-        if (step1) {
-            step1.className = 'queue-item active';
-            updateStepIcon(step1, 'spinner');
-        }
-
-        if (elements.studentPopFile) {
-            elements.studentPopFile.click();
-        }
+    if (elements.studentPopFile) {
+        elements.studentPopFile.click();
     }
 }
 
