@@ -274,6 +274,11 @@ if (window.hasSRKConnectorRun) {
   window.addEventListener("message", (event) => {
       if (!event.data || !event.data.type) return;
 
+      // If the extension has been reloaded, this listener belongs to a stale
+      // content-script instance.  Bail out so only the fresh instance processes
+      // the message — this prevents duplicate log spam and wasted work.
+      if (!isExtensionContextValid()) return;
+
       // Check for the Ping from Office Add-in
       if (event.data.type === "SRK_CHECK_EXTENSION") {
           console.log("%c SRK Connector: Ping Received! Ponging Sender...", "color: green; font-weight: bold");
