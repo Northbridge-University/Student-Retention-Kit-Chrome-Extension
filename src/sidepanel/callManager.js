@@ -22,6 +22,7 @@ export default class CallManager {
         this.skippedIndices = new Set(); // Track indices of students to skip
         this.uiCallbacks = uiCallbacks; // Callbacks for UI updates
         this.waitingForDisposition = false; // Track if call ended but waiting for disposition
+        this._dispositionInProgress = false; // Guard against double-clicks during disposition
     }
 
     /**
@@ -91,6 +92,12 @@ export default class CallManager {
      * @param {boolean} forceEnd - Force end the call regardless of current state
      */
     async toggleCallState(forceEnd = false) {
+        // Block clicks while a disposition is being processed
+        if (this._dispositionInProgress) {
+            console.log("⏳ Disposition in progress — ignoring dial button click");
+            return;
+        }
+
         // --- CANCEL AUTOMATION MODE ---
         // If in automation mode and call is active, cancel automation
         if (this.automationMode && this.isCallActive) {
@@ -427,6 +434,7 @@ export default class CallManager {
 
         // End the current call
         this.isCallActive = false;
+        this._dispositionInProgress = false;
         this.stopCallTimer();
         this.stopDispositionTimer();
 
@@ -553,6 +561,7 @@ export default class CallManager {
         // Reset call state
         this.isCallActive = false;
         this.waitingForDisposition = false;
+        this._dispositionInProgress = false;
 
         // Update UI to ready state
         if (this.elements.dialBtn) {
@@ -635,7 +644,19 @@ export default class CallManager {
      * @param {string} type - The disposition type selected
      */
     async handleDisposition(type) {
+        // Prevent double-clicks while already processing
+        if (this._dispositionInProgress) {
+            console.log("⏳ Disposition already in progress — ignoring");
+            return;
+        }
+        this._dispositionInProgress = true;
+
         console.log("Logged Disposition:", type);
+
+        // Disable dial button immediately to prevent glitchy clicks during processing
+        this.elements.dialBtn.disabled = true;
+        this.elements.dialBtn.style.cursor = 'not-allowed';
+        this.elements.dialBtn.style.opacity = '0.6';
 
         // Stop disposition timer if running
         this.stopDispositionTimer();
@@ -746,6 +767,9 @@ export default class CallManager {
                 this.elements.otherInputArea.style.display = 'none';
             }
         }
+
+        // Clear the disposition-in-progress guard
+        this._dispositionInProgress = false;
     }
 
     /**
@@ -995,6 +1019,9 @@ export default class CallManager {
                 this.elements.upNextCard.style.display = 'none';
             }
         }
+
+        // Allow forceEndCall to bypass the disposition guard since it's internal
+        this._dispositionInProgress = false;
 
         // Use handleDisposition to properly end the call through Five9
         await this.handleDisposition(disposition);
