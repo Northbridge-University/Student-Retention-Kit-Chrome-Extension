@@ -1910,7 +1910,7 @@ async function handleSelectedStudentsMessage(msg) {
                 });
 
                 if (matchedStudent) {
-                    console.log(`Matched with master list: ${matchedStudent.name}`);
+                    console.log(`%c [Sidepanel] Matched with master list: ${matchedStudent.name} | daysOut=${matchedStudent.daysOut} | phone=${matchedStudent.phone} | otherPhone=${matchedStudent.otherPhone}`, 'color: lime');
                     // Merge: master list as base, preserve add-in phone overrides
                     const merged = { ...matchedStudent };
                     if (student.phone) merged.phone = student.phone;
@@ -1918,7 +1918,7 @@ async function handleSelectedStudentsMessage(msg) {
                     if (student.directPhone) merged.directPhone = student.directPhone;
                     return merged;
                 } else {
-                    console.log(`No match for ${student.name}, using Office add-in data`);
+                    console.log(`%c [Sidepanel] No master list match for "${student.name}" (ID: ${student.SyStudentId}) — using add-in data (daysOut will be 0)`, 'color: orange; font-weight: bold');
                 }
             }
             return student;

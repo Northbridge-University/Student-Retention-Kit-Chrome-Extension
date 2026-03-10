@@ -385,13 +385,13 @@ input:focus, textarea:focus, select:focus {
 
 .other-contact-pill {
     display: inline-block;
-    font-size: 0.4em;
+    font-size: 0.85em;
     font-weight: 600;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     padding: 2px 8px;
     margin-left: 8px;
     border-radius: 10px;
-    background: var(--accent-warning, #f59e0b);
+    background: #1e3a5f;
     color: #fff;
     vertical-align: middle;
     white-space: nowrap;

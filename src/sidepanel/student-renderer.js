@@ -167,23 +167,24 @@ export async function setActiveStudent(rawEntry, callManager) {
     if (elements.contactName) elements.contactName.textContent = data.name;
     if (elements.contactPhone) {
         elements.contactPhone.textContent = displayPhone;
-        // Show or remove "Other Contact" pill
-        let pill = elements.contactPhone.querySelector('.other-contact-pill');
-        if (data.isOtherContact) {
-            if (!pill) {
-                pill = document.createElement('span');
-                pill.className = 'other-contact-pill';
-                pill.textContent = 'Other Contact';
-                elements.contactPhone.appendChild(pill);
-            }
-        } else if (pill) {
-            pill.remove();
-        }
     }
 
     if (elements.contactDetail) {
         elements.contactDetail.textContent = `${data.daysOut} Days Out`;
         elements.contactDetail.style.display = 'block';
+
+        // Show or remove "Other Contact" pill (placed after days-out text)
+        let pill = elements.contactDetail.querySelector('.other-contact-pill');
+        if (data.isOtherContact) {
+            if (!pill) {
+                pill = document.createElement('span');
+                pill.className = 'other-contact-pill';
+                pill.textContent = 'Other Contact';
+                elements.contactDetail.appendChild(pill);
+            }
+        } else if (pill) {
+            pill.remove();
+        }
     }
 
     let colorCode = '#10b981';
