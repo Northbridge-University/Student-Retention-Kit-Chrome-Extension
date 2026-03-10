@@ -142,7 +142,8 @@ import {
     updateFive9ConnectionIndicator,
     startFive9ConnectionMonitor,
     stopFive9ConnectionMonitor,
-    setupFive9StatusListeners
+    setupFive9StatusListeners,
+    initDebugModeCache
 } from './five9-integration.js';
 
 import {
@@ -224,6 +225,10 @@ async function initializeApp() {
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
+
+    // Cache debug mode state before any Five9 checks to prevent
+    // "Awaiting Five9 Tab" flash when demo mode is enabled
+    await initDebugModeCache();
 
     // Start Five9 connection monitoring
     startFive9ConnectionMonitor(() => queueManager.getQueue());
