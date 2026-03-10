@@ -2,6 +2,7 @@
 import { elements } from './ui-manager.js';
 import { GENERIC_AVATAR_URL, STORAGE_KEYS, HIGHLIGHT_STATUS, MESSAGE_TYPES } from '../constants/index.js';
 import { updateCallTabDisplay } from './call-tab-placeholder.js';
+import { getCachedDebugMode } from './five9-integration.js';
 
 /**
  * Converts student name from "Last, First" format to "First Last" format if a comma is present.
@@ -106,9 +107,8 @@ export async function setActiveStudent(rawEntry, callManager) {
 
     // 1. Handle "No Student Selected" State - use unified placeholder system
     if (!rawEntry) {
-        // Get debug mode from storage
-        const debugData = await chrome.storage.local.get(STORAGE_KEYS.CALL_DEMO);
-        const debugMode = debugData[STORAGE_KEYS.CALL_DEMO] || false;
+        // Use cached debug mode to avoid async flash
+        const debugMode = getCachedDebugMode();
 
         // Update the call tab display with no student selected
         await updateCallTabDisplay({
@@ -119,9 +119,8 @@ export async function setActiveStudent(rawEntry, callManager) {
     }
 
     // 2. Handle "Student Selected" State - use unified placeholder system
-    // Get debug mode from storage
-    const debugData = await chrome.storage.local.get(STORAGE_KEYS.CALL_DEMO);
-    const debugMode = debugData[STORAGE_KEYS.CALL_DEMO] || false;
+    // Use cached debug mode to avoid async flash
+    const debugMode = getCachedDebugMode();
 
     // Update the call tab display with the selected student
     // This will check Five9 status and show appropriate message or call section
