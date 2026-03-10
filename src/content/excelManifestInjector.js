@@ -4,18 +4,21 @@
 console.log('%c [SRK] Excel Manifest Injector Script LOADED', 'background: #FF9800; color: white; font-size: 14px; font-weight: bold; padding: 2px 4px;');
 
 // Loads manifest XML from the single source of truth: assets/Excel Add-In Manifest.xml
-// This file is declared in web_accessible_resources, so content scripts can fetch it.
+// Content scripts in cross-origin iframes can't use chrome.runtime.getURL() (returns
+// chrome-extension://invalid/), so we ask the background script to fetch it for us.
 let MANIFEST_XML = null;
 
 async function loadManifestXML() {
     if (MANIFEST_XML) return MANIFEST_XML;
     try {
-        const url = chrome.runtime.getURL('assets/Excel Add-In Manifest.xml');
-        const response = await fetch(url);
-        MANIFEST_XML = await response.text();
+        const response = await chrome.runtime.sendMessage({ type: 'SRK_GET_MANIFEST_XML' });
+        if (!response?.success) {
+            throw new Error(response?.error || 'Background script returned failure');
+        }
+        MANIFEST_XML = response.xml;
         return MANIFEST_XML;
     } catch (error) {
-        console.error('[SRK Injector] Failed to load manifest XML from extension assets:', error);
+        console.error('[SRK Injector] Failed to load manifest XML via background script:', error);
         throw error;
     }
 }
