@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Student Retention Kit",
-  "version": "13.0",
+  "version": "13.1",
   "description": "Workflow Solution for Identifying At-Risk Students and Outreach.",
   "icons": {
     "16": "icon.png",
@@ -103,6 +103,7 @@
   },
   "minimum_chrome_version": "109"
 }
+
 
 
 
