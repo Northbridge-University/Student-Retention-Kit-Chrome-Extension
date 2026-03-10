@@ -85,7 +85,6 @@
         "assets/Excel Add-In Manifest.xml",
         "icon.png",
         "src/lib/xlsx.full.min.js",
-        "src/utils/manifestSideloader.js",
         "src/console/console.html",
         "src/console/console.js"
       ],
