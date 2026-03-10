@@ -1902,7 +1902,16 @@ async function handleSelectedStudentsMessage(msg) {
 
                 if (matchedStudent) {
                     console.log(`Matched with master list: ${matchedStudent.name}`);
-                    return matchedStudent;
+                    // Merge: use master list as base but preserve phone from add-in
+                    // if the add-in sent one (user selected a specific number)
+                    const merged = { ...matchedStudent };
+                    if (student.phone) {
+                        merged.phone = student.phone;
+                    }
+                    if (student.directPhone) {
+                        merged.directPhone = student.directPhone;
+                    }
+                    return merged;
                 } else {
                     console.log(`No match for ${student.name}, using Office add-in data`);
                 }
