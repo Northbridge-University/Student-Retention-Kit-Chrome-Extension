@@ -468,14 +468,33 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
 
       // If this is an autoCall (ribbon call button), ensure the side panel is open
       // so the sidepanel listener can process the call request.
-      if (msg.autoCall && sender?.tab?.id) {
+      // chrome.sidePanel.open() requires a user gesture context which is lost by
+      // the time the message reaches the background. Open as a popup window instead.
+      if (msg.autoCall) {
           console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
-          // Store message for sidepanel to pick up if it's just now opening
           await sessionSet({ pendingAutoCall: msg });
           try {
-              await chrome.sidePanel.open({ tabId: sender.tab.id });
+              const panelUrl = chrome.runtime.getURL('src/sidepanel/sidepanel.html');
+              // Check if the side panel is already open as a popup
+              const allWindows = await chrome.windows.getAll({ populate: true });
+              const existing = allWindows.find(w =>
+                  w.type === 'popup' && w.tabs?.some(t => t.url?.includes('sidepanel.html'))
+              );
+              if (existing) {
+                  console.log('%c [Background] autoCall — focusing existing sidepanel popup', 'color: green; font-weight: bold');
+                  await chrome.windows.update(existing.id, { focused: true });
+              } else {
+                  console.log('%c [Background] autoCall — opening sidepanel as popup window', 'color: green; font-weight: bold');
+                  await chrome.windows.create({
+                      url: panelUrl,
+                      type: 'popup',
+                      width: 420,
+                      height: 750,
+                      focused: true
+                  });
+              }
           } catch (e) {
-              console.warn('[Background] Could not open side panel:', e?.message || e);
+              console.warn('[Background] Could not open sidepanel popup:', e?.message || e);
           }
       }
 
