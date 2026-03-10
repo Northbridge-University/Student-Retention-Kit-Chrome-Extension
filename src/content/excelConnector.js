@@ -659,7 +659,8 @@ if (window.hasSRKConnectorRun) {
                   students: transformedStudents,
                   count: data.count,
                   timestamp: Date.now(),
-                  sourceTimestamp: data.timestamp
+                  sourceTimestamp: data.timestamp,
+                  directPhone: data.directPhone || null  // Phone from single cell selection
               });
           });
 

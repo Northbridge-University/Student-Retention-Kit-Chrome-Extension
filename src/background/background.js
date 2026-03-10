@@ -370,6 +370,21 @@ chrome.webRequest.onCompleted.addListener(
   { urls: ["https://*.five9.net/*"] }
 );
 
+// Separate non-async listener for manifest XML requests.
+// Must NOT be async — Chrome only honors `return true` (keep sendResponse open)
+// from synchronous listeners. The main listener below is async, which breaks sendResponse.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === MESSAGE_TYPES.SRK_GET_MANIFEST_XML) {
+        // Content scripts in cross-origin iframes can't use chrome.runtime.getURL(),
+        // so the background script fetches the manifest XML on their behalf.
+        fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'))
+            .then(response => response.text())
+            .then(xml => sendResponse({ success: true, xml }))
+            .catch(error => sendResponse({ success: false, error: error.message }));
+        return true; // Keep sendResponse channel open for async response
+    }
+});
+
 chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   if (msg.type === MESSAGE_TYPES.REQUEST_STORED_LOGS) {
       if (logBuffer.length > 0) {
@@ -406,22 +421,6 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   }
 
   // --- AUTO-SIDELOAD MANIFEST HANDLERS ---
-  else if (msg.type === MESSAGE_TYPES.SRK_GET_MANIFEST_XML) {
-      // Content scripts in cross-origin iframes can't use chrome.runtime.getURL(),
-      // so the background script fetches the manifest XML on their behalf.
-      (async () => {
-          try {
-              const url = chrome.runtime.getURL('assets/Excel Add-In Manifest.xml');
-              const response = await fetch(url);
-              const xml = await response.text();
-              sendResponse({ success: true, xml });
-          } catch (error) {
-              sendResponse({ success: false, error: error.message });
-          }
-      })();
-      return true; // Keep sendResponse channel open for async response
-  }
-
   else if (msg.type === MESSAGE_TYPES.SRK_MANIFEST_INJECTED) {
       console.log(`%c [Background] Manifest Auto-Sideloaded!`, "color: #4CAF50; font-weight: bold");
       console.log(`   Add-in ID: ${msg.addinId}`);
@@ -473,7 +472,8 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           students: msg.students,
           count: msg.count,
           timestamp: msg.timestamp,
-          sourceTimestamp: msg.sourceTimestamp
+          sourceTimestamp: msg.sourceTimestamp,
+          directPhone: msg.directPhone || null
       }, 'selected students');
   }
 

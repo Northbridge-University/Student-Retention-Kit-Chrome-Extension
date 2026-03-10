@@ -1853,11 +1853,21 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
                 return student;
             });
 
+            // If the Add-in sent a directPhone (user selected a phone cell),
+            // attach it to the first student for quick-dial priority
+            if (msg.directPhone && studentsToSet.length === 1) {
+                studentsToSet[0].directPhone = msg.directPhone;
+            }
+
             // Set queue using queue manager (handles both single and multiple)
             queueManager.setQueue(studentsToSet);
 
-            // Switch to contact tab to show the selected student(s)
-            switchTab('contact');
+            // Only auto-switch to the contact tab when there is NO directPhone.
+            // When directPhone is set the user merely clicked a phone cell —
+            // don't yank them away from their current tab.
+            if (!msg.directPhone) {
+                switchTab('contact');
+            }
             // Check Five9 connection when switching to contact tab
             updateFive9ConnectionIndicator(queueManager.getQueue());
 

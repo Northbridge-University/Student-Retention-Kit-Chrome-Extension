@@ -67,11 +67,15 @@ export default class CallManager {
 
     /**
      * Extracts phone number from student object
+     * Prioritizes directPhone (from single cell selection in Excel) for quick dialing
      * @param {Object} student - Student object with phone property
      * @returns {string} Phone number or "No Phone Listed"
      */
     getPhoneNumber(student) {
         if (!student) return "No Phone Listed";
+
+        // Highest priority: user selected a phone cell directly in Excel
+        if (student.directPhone) return student.directPhone;
 
         // Handle different possible property names
         if (student.phone) return student.phone;
