@@ -1945,25 +1945,29 @@ async function handleSelectedStudentsMessage(msg) {
             return student;
         });
 
-        // If the Add-in sent a directPhone (user selected a phone cell),
-        // attach it to the first student for quick-dial priority
-        if (msg.directPhone && studentsToSet.length === 1) {
-            const dp = msg.directPhone;
-            const dpNorm = normalizePhone(dp);
-            const stu = studentsToSet[0];
-            stu.directPhone = dp;
+        // Resolve directPhone and isOtherContact per student
+        // Handles both single-cell (msg.directPhone) and multi-row (per-student) scenarios
+        for (const stu of studentsToSet) {
+            // Per-student directPhone from add-in takes priority, then msg-level directPhone for single student
+            const dp = stu.directPhone || (msg.directPhone && studentsToSet.length === 1 ? msg.directPhone : null);
+            if (!dp) continue;
 
-            // Determine if the directPhone is the "other" (related contact) number
+            stu.directPhone = dp;
+            const dpNorm = normalizePhone(dp);
             const otherNorm = normalizePhone(stu.otherPhone);
             const phoneNorm = normalizePhone(stu.phone);
+
             console.log(`%c [Sidepanel] directPhone=${dp} | phone=${stu.phone} | otherPhone=${stu.otherPhone}`, 'color: cyan');
-            if (otherNorm && dpNorm === otherNorm) {
+
+            // Use the add-in's flag if provided, otherwise determine from phone comparison
+            if (stu.isOtherContact) {
+                console.log(`%c [Sidepanel] "${stu.name}" flagged as Other Contact (from add-in)`, 'color: #f59e0b; font-weight: bold');
+            } else if (otherNorm && dpNorm === otherNorm) {
                 stu.isOtherContact = true;
-                console.log('%c [Sidepanel] Flagged as Other Contact', 'color: #f59e0b; font-weight: bold');
+                console.log(`%c [Sidepanel] "${stu.name}" flagged as Other Contact`, 'color: #f59e0b; font-weight: bold');
             } else if (phoneNorm && dpNorm !== phoneNorm) {
-                // directPhone doesn't match primary — likely an other/related contact
                 stu.isOtherContact = true;
-                console.log('%c [Sidepanel] directPhone differs from primary — flagged as Other Contact', 'color: #f59e0b; font-weight: bold');
+                console.log(`%c [Sidepanel] "${stu.name}" directPhone differs from primary — flagged as Other Contact`, 'color: #f59e0b; font-weight: bold');
             } else {
                 stu.isOtherContact = false;
             }
