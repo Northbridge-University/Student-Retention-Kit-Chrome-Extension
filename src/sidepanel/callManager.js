@@ -977,6 +977,30 @@ export default class CallManager {
     }
 
     /**
+     * Force-ends the current call with a default disposition.
+     * Used when the ribbon sends a new student while a call is active.
+     * @param {string} [disposition="No Answer"] - The disposition to use
+     */
+    async forceEndCall(disposition = "No Answer") {
+        if (!this.isCallActive && !this.waitingForDisposition) return;
+
+        console.log(`📞 Force-ending current call with disposition: "${disposition}"`);
+
+        // Cancel automation mode if active
+        if (this.automationMode) {
+            this.automationMode = false;
+            this.currentAutomationIndex = 0;
+            this.skippedIndices.clear();
+            if (this.elements.upNextCard) {
+                this.elements.upNextCard.style.display = 'none';
+            }
+        }
+
+        // Use handleDisposition to properly end the call through Five9
+        await this.handleDisposition(disposition);
+    }
+
+    /**
      * Cleanup method - call when disposing the manager
      */
     cleanup() {

@@ -1819,7 +1819,15 @@ chrome.storage.session.onChanged.addListener((changes) => {
 // Runtime message listener for Office Add-in student selection sync
 chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
     if (msg.type === MESSAGE_TYPES.SRK_SELECTED_STUDENTS) {
-        // IGNORE PINGS IF CALL IS ACTIVE OR AUTOMATION MODE IS ACTIVE
+        const autoCall = msg.autoCall || false;
+
+        // If a call is active and autoCall is requested, force-end with default disposition first
+        if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState()) && autoCall) {
+            console.log('%c [Sidepanel] Auto-call requested — force-ending current call', 'color: orange; font-weight: bold');
+            await callManager.forceEndCall();
+        }
+
+        // IGNORE PINGS IF CALL IS ACTIVE OR AUTOMATION MODE IS ACTIVE (non-autoCall only)
         // Don't interrupt current call session or disrupt automation queue
         if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState())) {
             const reason = callManager.getAutomationModeState() ? 'automation mode active' : 'call already in session';
@@ -1867,15 +1875,23 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
             // Set queue using queue manager (handles both single and multiple)
             queueManager.setQueue(studentsToSet);
 
-            // Don't auto-switch to the contact tab on every student selection.
-            // The user will navigate to the call tab when they're ready to dial.
-            // Just update the Five9 connection indicator in the background.
+            // Switch to call tab and update display
+            switchTab('contact');
             updateFive9ConnectionIndicator(queueManager.getQueue());
 
             if (msg.count === 1) {
                 console.log(`Active student set to: ${studentsToSet[0].name}`);
             } else {
                 console.log(`Automation mode enabled with ${msg.count} students`);
+            }
+
+            // Auto-initiate the call if requested (ribbon call button)
+            if (autoCall) {
+                // Small delay to let the UI render the new student before dialing
+                setTimeout(() => {
+                    console.log('%c [Sidepanel] Auto-initiating call from ribbon', 'color: green; font-weight: bold');
+                    callManager.toggleCallState();
+                }, 300);
             }
         }
     }

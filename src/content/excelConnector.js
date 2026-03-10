@@ -660,7 +660,8 @@ if (window.hasSRKConnectorRun) {
                   count: data.count,
                   timestamp: Date.now(),
                   sourceTimestamp: data.timestamp,
-                  directPhone: data.directPhone || null  // Phone from single cell selection
+                  directPhone: data.directPhone || null,  // Phone from single cell selection
+                  autoCall: data.autoCall || false  // Auto-initiate call (ribbon call button)
               });
           });
 
