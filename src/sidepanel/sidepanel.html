@@ -453,16 +453,18 @@
                 <button class="icon-btn" id="closeQueueModalBtn" title="Close"><i class="fas fa-times"></i></button>
             </div>
 
-            <div style="margin-bottom:10px; font-size:0.85em; color:var(--text-secondary);">
-                <i class="fas fa-info-circle"></i> Drag to reorder • Click × to remove
-            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:10px; font-size:0.85em; color:var(--text-secondary);">
+                    <i class="fas fa-info-circle"></i> Drag to reorder &bull; Click <i class="fas fa-trash-can" style="font-size:0.85em;"></i> to remove
+                </div>
 
-            <ul id="queueList" class="glass-list" style="min-height:100px;">
-                <!-- Queue items will be populated here -->
-            </ul>
+                <ul id="queueList" class="glass-list" style="min-height:100px;">
+                    <!-- Queue items will be populated here -->
+                </ul>
 
-            <div style="text-align:center; margin-top:15px; font-size:0.9em; color:var(--text-secondary);">
-                <span id="queueCount">0 students</span> in queue
+                <div style="text-align:center; margin-top:15px; font-size:0.9em; color:var(--text-secondary);">
+                    <span id="queueCount">0 students</span> in queue
+                </div>
             </div>
         </div>
     </div>
