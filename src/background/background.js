@@ -406,6 +406,22 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   }
 
   // --- AUTO-SIDELOAD MANIFEST HANDLERS ---
+  else if (msg.type === MESSAGE_TYPES.SRK_GET_MANIFEST_XML) {
+      // Content scripts in cross-origin iframes can't use chrome.runtime.getURL(),
+      // so the background script fetches the manifest XML on their behalf.
+      (async () => {
+          try {
+              const url = chrome.runtime.getURL('assets/Excel Add-In Manifest.xml');
+              const response = await fetch(url);
+              const xml = await response.text();
+              sendResponse({ success: true, xml });
+          } catch (error) {
+              sendResponse({ success: false, error: error.message });
+          }
+      })();
+      return true; // Keep sendResponse channel open for async response
+  }
+
   else if (msg.type === MESSAGE_TYPES.SRK_MANIFEST_INJECTED) {
       console.log(`%c [Background] Manifest Auto-Sideloaded!`, "color: #4CAF50; font-weight: bold");
       console.log(`   Add-in ID: ${msg.addinId}`);
