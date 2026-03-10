@@ -1897,9 +1897,9 @@ async function handleSelectedStudentsMessage(msg) {
                 const studentOtherNorm = normalizePhone(student.otherPhone);
 
                 const matchedStudent = masterEntries.find(entry => {
-                    // Match by SyStudentId if available
+                    // Match by SyStudentId if available (normalize to string for comparison)
                     if (student.SyStudentId && entry.SyStudentId) {
-                        return entry.SyStudentId === student.SyStudentId;
+                        return String(entry.SyStudentId) === String(student.SyStudentId);
                     }
                     // Match by name
                     if (entry.name === student.name) return true;

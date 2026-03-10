@@ -642,7 +642,7 @@ if (window.hasSRKConnectorRun) {
                       name: rawName, // Will be formatted based on user setting in display logic
                       phone: student.phone || null,
                       otherPhone: student.otherPhone || null,
-                      SyStudentId: student.syStudentId || null,
+                      SyStudentId: student.syStudentId ? String(student.syStudentId) : null,
                       // Set defaults for fields not provided by the Office add-in
                       grade: null,
                       StudentNumber: null,
