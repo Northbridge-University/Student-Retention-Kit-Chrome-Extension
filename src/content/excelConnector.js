@@ -620,15 +620,11 @@ if (window.hasSRKConnectorRun) {
               return;
           }
 
-          // Check if sync active student is enabled - check both nested and legacy paths
-          chrome.storage.local.get(['settings', 'syncActiveStudent'], (result) => {
-              const syncEnabled = getSettingValue(result, 'syncActiveStudent', true);
-
-              if (!syncEnabled) {
-                  console.log("%c Sync Active Student is disabled. Skipping student sync.", "color: orange; font-weight: bold");
-                  return;
-              }
-
+          /**
+           * Transforms student data and sends it to the extension.
+           * Extracted so it can be called with or without the settings check.
+           */
+          function transformAndSend() {
               // Transform all students from add-in format to extension format
               const transformedStudents = data.students.map(student => {
                   const rawName = student.name || 'Unknown';
@@ -663,6 +659,25 @@ if (window.hasSRKConnectorRun) {
                   directPhone: data.directPhone || null,  // Phone from single cell selection
                   autoCall: data.autoCall || false  // Auto-initiate call (ribbon call button)
               });
+          }
+
+          // Check if extension context is still valid before accessing chrome.storage
+          if (!isExtensionContextValid()) {
+              console.warn("%c Extension context invalidated — sending student data without settings check", "color: orange; font-weight: bold");
+              transformAndSend();
+              return;
+          }
+
+          // Check if sync active student is enabled - check both nested and legacy paths
+          chrome.storage.local.get(['settings', 'syncActiveStudent'], (result) => {
+              const syncEnabled = getSettingValue(result, 'syncActiveStudent', true);
+
+              if (!syncEnabled) {
+                  console.log("%c Sync Active Student is disabled. Skipping student sync.", "color: orange; font-weight: bold");
+                  return;
+              }
+
+              transformAndSend();
           });
 
       } catch (error) {
