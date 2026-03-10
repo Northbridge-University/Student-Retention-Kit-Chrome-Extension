@@ -57,6 +57,7 @@ export function resolveStudentData(entry, reformatEnabled = true) {
         nameOriginal: entry.nameOriginal || entry.name || 'Unknown Student',
         sortable_name: entry.sortable_name || null,
         phone: entry.directPhone || entry.phone || null,
+        isOtherContact: entry.isOtherContact || false,
         daysOut: parseInt(entry.daysOut) || 0,
         missing: parseInt(entry.missingCount || 0),
         StudentNumber: entry.StudentNumber || null,
@@ -164,7 +165,21 @@ export async function setActiveStudent(rawEntry, callManager) {
     }
 
     if (elements.contactName) elements.contactName.textContent = data.name;
-    if (elements.contactPhone) elements.contactPhone.textContent = displayPhone;
+    if (elements.contactPhone) {
+        elements.contactPhone.textContent = displayPhone;
+        // Show or remove "Other Contact" pill
+        let pill = elements.contactPhone.querySelector('.other-contact-pill');
+        if (data.isOtherContact) {
+            if (!pill) {
+                pill = document.createElement('span');
+                pill.className = 'other-contact-pill';
+                pill.textContent = 'Other Contact';
+                elements.contactPhone.appendChild(pill);
+            }
+        } else if (pill) {
+            pill.remove();
+        }
+    }
 
     if (elements.contactDetail) {
         elements.contactDetail.textContent = `${data.daysOut} Days Out`;
