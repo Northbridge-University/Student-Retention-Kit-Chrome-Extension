@@ -466,36 +466,13 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           : `${msg.count} students`;
       console.log(`%c [Background] Selected Students Received:`, "color: purple; font-weight: bold", studentText);
 
-      // If this is an autoCall (ribbon call button), ensure the side panel is open
-      // so the sidepanel listener can process the call request.
-      // chrome.sidePanel.open() requires a user gesture context which is lost by
-      // the time the message reaches the background. Open as a popup window instead.
+      // If this is an autoCall (ribbon call button), store for the sidepanel to pick up.
+      // Note: chrome.sidePanel.open() requires a direct user gesture, so the panel
+      // must already be open. The pendingAutoCall is stored so if the user opens
+      // the panel manually, it will pick up and execute the call.
       if (msg.autoCall) {
-          console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
+          console.log('%c [Background] autoCall detected — storing pendingAutoCall', 'color: green; font-weight: bold');
           await sessionSet({ pendingAutoCall: msg });
-          try {
-              const panelUrl = chrome.runtime.getURL('src/sidepanel/sidepanel.html');
-              // Check if the side panel is already open as a popup
-              const allWindows = await chrome.windows.getAll({ populate: true });
-              const existing = allWindows.find(w =>
-                  w.type === 'popup' && w.tabs?.some(t => t.url?.includes('sidepanel.html'))
-              );
-              if (existing) {
-                  console.log('%c [Background] autoCall — focusing existing sidepanel popup', 'color: green; font-weight: bold');
-                  await chrome.windows.update(existing.id, { focused: true });
-              } else {
-                  console.log('%c [Background] autoCall — opening sidepanel as popup window', 'color: green; font-weight: bold');
-                  await chrome.windows.create({
-                      url: panelUrl,
-                      type: 'popup',
-                      width: 420,
-                      height: 750,
-                      focused: true
-                  });
-              }
-          } catch (e) {
-              console.warn('[Background] Could not open sidepanel popup:', e?.message || e);
-          }
       }
 
       // NOTE: Do NOT forward to sidepanel here. The sidepanel already receives
