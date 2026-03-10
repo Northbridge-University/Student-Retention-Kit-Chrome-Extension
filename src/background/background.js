@@ -472,7 +472,8 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           students: msg.students,
           count: msg.count,
           timestamp: msg.timestamp,
-          sourceTimestamp: msg.sourceTimestamp
+          sourceTimestamp: msg.sourceTimestamp,
+          directPhone: msg.directPhone || null
       }, 'selected students');
   }
 

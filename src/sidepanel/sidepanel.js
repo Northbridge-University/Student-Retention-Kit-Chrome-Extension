@@ -1853,6 +1853,12 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
                 return student;
             });
 
+            // If the Add-in sent a directPhone (user selected a phone cell),
+            // attach it to the first student for quick-dial priority
+            if (msg.directPhone && studentsToSet.length === 1) {
+                studentsToSet[0].directPhone = msg.directPhone;
+            }
+
             // Set queue using queue manager (handles both single and multiple)
             queueManager.setQueue(studentsToSet);
 
