@@ -1935,13 +1935,15 @@ async function handleSelectedStudentsMessage(msg) {
             // Determine if the directPhone is the "other" (related contact) number
             const otherNorm = normalizePhone(stu.otherPhone);
             const phoneNorm = normalizePhone(stu.phone);
+            console.log(`%c [Sidepanel] directPhone=${dp} | phone=${stu.phone} | otherPhone=${stu.otherPhone}`, 'color: cyan');
             if (otherNorm && dpNorm === otherNorm) {
                 stu.isOtherContact = true;
-            } else if (phoneNorm && dpNorm === phoneNorm) {
-                stu.isOtherContact = false;
+                console.log('%c [Sidepanel] Flagged as Other Contact', 'color: #f59e0b; font-weight: bold');
+            } else if (phoneNorm && dpNorm !== phoneNorm) {
+                // directPhone doesn't match primary — likely an other/related contact
+                stu.isOtherContact = true;
+                console.log('%c [Sidepanel] directPhone differs from primary — flagged as Other Contact', 'color: #f59e0b; font-weight: bold');
             } else {
-                // directPhone doesn't match either field — could be from otherPhone column
-                // but with formatting differences already resolved; default to not flagging
                 stu.isOtherContact = false;
             }
         }
