@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>2.1.0.1</Version>
+  <Version>2.1.0.2</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -121,6 +121,21 @@
                     <SourceLocation resid="PersonalizedEmail.Url"/>
                   </Action>
                 </Control>
+                <Control xsi:type="Button" id="CallQueueButton">
+                  <Label resid="CallQueueButton.Label"/>
+                  <Supertip>
+                    <Title resid="CallQueueButton.Label"/>
+                    <Description resid="CallQueueButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="CallIcon.16x16"/>
+                    <bt:Image size="32" resid="CallIcon.32x32"/>
+                    <bt:Image size="80" resid="CallIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>sendToCallQueue</FunctionName>
+                  </Action>
+                </Control>
               </Group>
               <Group id="StudentViewGroup">
                 <Label resid="StudentViewGroup.Label"/>
@@ -168,6 +183,9 @@
         <bt:Image id="EmailIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/email-icon.png"/>
         <bt:Image id="EmailIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/email-icon.png"/>
         <bt:Image id="EmailIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/email-icon.png"/>
+        <bt:Image id="CallIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/contacted-icon.png"/>
+        <bt:Image id="CallIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/contacted-icon.png"/>
+        <bt:Image id="CallIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/contacted-icon.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
@@ -188,6 +206,7 @@
         <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
         <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Emails"/>
+        <bt:String id="CallQueueButton.Label" DefaultValue="Call"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
@@ -195,6 +214,7 @@
         <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
+        <bt:String id="CallQueueButton.Tooltip" DefaultValue="Sends selected student(s) to the Chrome Extension call queue."/>
       </bt:LongStrings>
     </Resources>
 
