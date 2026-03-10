@@ -1,6 +1,6 @@
 // Queue Manager - Handles multi-select queue operations
 import { setActiveStudent, setAutomationModeUI } from './student-renderer.js';
-import { switchTab } from './ui-manager.js';
+import { elements, switchTab } from './ui-manager.js';
 import { updateFive9ConnectionIndicator } from './five9-integration.js';
 import { STORAGE_KEYS } from '../constants/index.js';
 import { storageGetValue } from '../utils/storage.js';
@@ -168,8 +168,21 @@ export class QueueManager {
             setActiveStudent(this.selectedQueue[0], this.callManager);
             return 'close'; // Signal to close modal
         } else {
-            setAutomationModeUI(this.selectedQueue.length);
+            // Only update the queue count text, don't re-render the entire call tab
+            this.updateQueueCountUI(this.selectedQueue.length);
             return 'refresh'; // Signal to refresh modal
+        }
+    }
+
+    /**
+     * Updates just the queue count displays without re-rendering the call tab
+     */
+    updateQueueCountUI(count) {
+        if (elements.contactDetail) {
+            elements.contactDetail.textContent = `${count} Students Selected`;
+        }
+        if (elements.contactAvatar) {
+            elements.contactAvatar.textContent = count;
         }
     }
 
