@@ -30,10 +30,14 @@ if (window.hasSRKConnectorRun) {
    */
   function safeSendMessage(message) {
       if (!isExtensionContextValid()) {
+          console.warn('%c [safeSendMessage] Extension context invalid — message dropped', 'color: red; font-weight: bold', message.type);
           return Promise.resolve(undefined);
       }
-      return chrome.runtime.sendMessage(message).catch(() => {
-          // Extension might not be ready or context invalidated
+      console.log('%c [safeSendMessage] Sending to background:', 'color: lime; font-weight: bold', message.type, 'autoCall:', message.autoCall);
+      return chrome.runtime.sendMessage(message).then((response) => {
+          console.log('%c [safeSendMessage] Background responded:', 'color: lime', response);
+      }).catch((err) => {
+          console.error('%c [safeSendMessage] Failed to send:', 'color: red; font-weight: bold', err?.message || err);
       });
   }
 
