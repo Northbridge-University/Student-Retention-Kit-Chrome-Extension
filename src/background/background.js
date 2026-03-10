@@ -466,36 +466,16 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           : `${msg.count} students`;
       console.log(`%c [Background] Selected Students Received:`, "color: purple; font-weight: bold", studentText);
 
-      // If this is an autoCall (ribbon call button), store the message so the
-      // sidepanel can process it on init, then open the side panel.
-      if (msg.autoCall) {
+      // If this is an autoCall (ribbon call button), ensure the side panel is open
+      // so the sidepanel listener can process the call request.
+      if (msg.autoCall && sender?.tab?.id) {
+          console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
+          // Store message for sidepanel to pick up if it's just now opening
           await sessionSet({ pendingAutoCall: msg });
-
-          // chrome.sidePanel.open() requires a user gesture context, which is
-          // lost by the time the message travels add-in → content script → background.
-          // Open the sidepanel HTML as a popup window instead — it has full extension
-          // API access and will pick up the pendingAutoCall from session storage.
           try {
-              const panelUrl = chrome.runtime.getURL('src/sidepanel/sidepanel.html');
-              const allWindows = await chrome.windows.getAll({ populate: true });
-              const existing = allWindows.find(w =>
-                  w.type === 'popup' && w.tabs?.some(t => t.url?.includes('sidepanel.html'))
-              );
-              if (!existing) {
-                  console.log('%c [Background] autoCall — opening sidepanel as popup window', 'color: green; font-weight: bold');
-                  await chrome.windows.create({
-                      url: panelUrl,
-                      type: 'popup',
-                      width: 420,
-                      height: 750,
-                      focused: true
-                  });
-              } else {
-                  console.log('%c [Background] autoCall — focusing existing sidepanel popup', 'color: green; font-weight: bold');
-                  await chrome.windows.update(existing.id, { focused: true });
-              }
+              await chrome.sidePanel.open({ tabId: sender.tab.id });
           } catch (e) {
-              console.warn('[Background] Could not open sidepanel popup:', e?.message || e);
+              console.warn('[Background] Could not open side panel:', e?.message || e);
           }
       }
 
