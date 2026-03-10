@@ -643,6 +643,9 @@ if (window.hasSRKConnectorRun) {
                       phone: student.phone || null,
                       otherPhone: student.otherPhone || null,
                       SyStudentId: student.syStudentId ? String(student.syStudentId) : null,
+                      // Per-student phone override and contact type from add-in
+                      ...(student.directPhone ? { directPhone: student.directPhone } : {}),
+                      ...(student.isOtherContact ? { isOtherContact: true } : {}),
                       // Set defaults for fields not provided by the Office add-in
                       grade: null,
                       StudentNumber: null,
