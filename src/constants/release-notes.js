@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'13.1': {
+        title: 'Latest Updates',
+        date: 'March 10, 2026',
+        updates: [
+			'Improved Update Master List Process',
+			'Created the Call Button support for Excel Add In',
+        ]
+    },
 	'13.0': {
         title: 'Latest Updates',
         date: 'March 5, 2026',
@@ -165,6 +173,7 @@ export function getLatestReleaseNotes() {
         notes: RELEASE_NOTES[latestVersion]
     };
 }
+
 
 
 
