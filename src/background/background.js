@@ -466,6 +466,17 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           : `${msg.count} students`;
       console.log(`%c [Background] Selected Students Received:`, "color: purple; font-weight: bold", studentText);
 
+      // If this is an autoCall (ribbon call button), ensure the side panel is open
+      // so the sidepanel listener can process the call request.
+      if (msg.autoCall && sender?.tab?.id) {
+          console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
+          try {
+              await chrome.sidePanel.open({ tabId: sender.tab.id });
+          } catch (e) {
+              console.warn('[Background] Could not open side panel:', e?.message || e);
+          }
+      }
+
       // NOTE: Do NOT forward to sidepanel here. The sidepanel already receives
       // this message directly from the content script via chrome.runtime.sendMessage.
       // Re-forwarding causes the sidepanel to process it twice, which triggers
