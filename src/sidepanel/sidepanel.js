@@ -1681,7 +1681,8 @@ function handleQueueRemoval(index) {
         renderQueueModal(
             queueManager.getQueue(),
             (fromIdx, toIdx) => queueManager.reorderQueue(fromIdx, toIdx),
-            (idx) => handleQueueRemoval(idx)
+            (idx) => handleQueueRemoval(idx),
+            { currentIndex: callManager.currentAutomationIndex, skippedIndices: callManager.skippedIndices }
         );
     }
 }
