@@ -279,6 +279,10 @@ export default class CallManager {
 
         // Start the call
         this.isCallActive = true;
+        this.waitingForDisposition = false;
+        this.elements.dialBtn.disabled = false;
+        this.elements.dialBtn.style.cursor = 'pointer';
+        this.elements.dialBtn.style.opacity = '1';
         this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
         this.elements.dialBtn.style.transform = 'rotate(135deg)';
         const statusText = this.debugMode ? '🎭 Demo Call Active' : 'Connected';
