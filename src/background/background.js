@@ -468,13 +468,22 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
 
       // If this is an autoCall (ribbon call button), ensure the side panel is open
       // so the sidepanel listener can process the call request.
-      if (msg.autoCall && sender?.tab?.id) {
+      if (msg.autoCall) {
           console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
           // Store the message in session storage so the sidepanel can pick it up
           // when it initializes (the runtime message may arrive before the panel loads).
           await sessionSet({ pendingAutoCall: msg });
           try {
-              await chrome.sidePanel.open({ tabId: sender.tab.id });
+              // Use windowId (not tabId) — chrome.sidePanel.open with windowId
+              // does not require a user gesture, unlike tabId which does.
+              const tab = sender?.tab;
+              if (tab?.windowId) {
+                  await chrome.sidePanel.open({ windowId: tab.windowId });
+              } else {
+                  // Fallback: get the current/focused window
+                  const win = await chrome.windows.getCurrent();
+                  await chrome.sidePanel.open({ windowId: win.id });
+              }
           } catch (e) {
               console.warn('[Background] Could not open side panel:', e?.message || e);
           }
