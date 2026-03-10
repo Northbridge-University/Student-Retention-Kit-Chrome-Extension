@@ -58,7 +58,7 @@ export function resolveStudentData(entry, reformatEnabled = true) {
         sortable_name: entry.sortable_name || null,
         phone: entry.directPhone || entry.phone || null,
         isOtherContact: entry.isOtherContact || false,
-        daysOut: parseInt(entry.daysOut) || 0,
+        daysOut: entry.daysOut != null && entry.daysOut !== '' ? parseInt(entry.daysOut) : null,
         missing: parseInt(entry.missingCount || 0),
         StudentNumber: entry.StudentNumber || null,
         SyStudentId: entry.SyStudentId || null,
@@ -170,12 +170,18 @@ export async function setActiveStudent(rawEntry, callManager) {
     }
 
     if (elements.contactDetail) {
-        elements.contactDetail.textContent = `${data.daysOut} Days Out`;
-        elements.contactDetail.style.display = 'block';
+        if (data.daysOut != null) {
+            elements.contactDetail.textContent = `${data.daysOut} Days Out`;
+            elements.contactDetail.style.display = 'block';
+        } else {
+            elements.contactDetail.textContent = '';
+            elements.contactDetail.style.display = 'none';
+        }
 
         // Show or remove "Other Contact" pill (placed after days-out text)
         let pill = elements.contactDetail.querySelector('.other-contact-pill');
         if (data.isOtherContact) {
+            elements.contactDetail.style.display = 'block';
             if (!pill) {
                 pill = document.createElement('span');
                 pill.className = 'other-contact-pill';
@@ -188,9 +194,9 @@ export async function setActiveStudent(rawEntry, callManager) {
     }
 
     let colorCode = '#10b981';
-    if (data.daysOut > 10) colorCode = '#ef4444';
-    else if (data.daysOut > 5) colorCode = '#f97316';
-    else if (data.daysOut > 2) colorCode = '#f59e0b';
+    if (data.daysOut != null && data.daysOut > 10) colorCode = '#ef4444';
+    else if (data.daysOut != null && data.daysOut > 5) colorCode = '#f97316';
+    else if (data.daysOut != null && data.daysOut > 2) colorCode = '#f59e0b';
 
     if (elements.contactCard) {
         elements.contactCard.style.borderLeftColor = colorCode;
@@ -394,14 +400,14 @@ export async function renderMasterList(rawEntries, onStudentClick) {
 
         li.setAttribute('data-name', data.name);
         li.setAttribute('data-missing', data.missing);
-        li.setAttribute('data-days', data.daysOut);
+        li.setAttribute('data-days', data.daysOut != null ? data.daysOut : '');
         li.setAttribute('data-grade', data.grade || '');
         li.setAttribute('data-gpa', data.enrollGpa || '');
         li.setAttribute('data-attendance', data.attendancePercent || '');
         li.setAttribute('data-created', data.created_at || '');
         li.setAttribute('data-campus', rawEntry.campus || '');
 
-        let heatmapClass = data.daysOut > 10 ? 'heatmap-red' : (data.daysOut > 5 ? 'heatmap-orange' : (data.daysOut > 2 ? 'heatmap-yellow' : 'heatmap-green'));
+        let heatmapClass = data.daysOut == null ? 'heatmap-green' : (data.daysOut > 10 ? 'heatmap-red' : (data.daysOut > 5 ? 'heatmap-orange' : (data.daysOut > 2 ? 'heatmap-yellow' : 'heatmap-green')));
 
         let missingPillHtml = '';
         if (data.missing > 0) {
@@ -424,7 +430,7 @@ export async function renderMasterList(rawEntries, onStudentClick) {
                         </div>
                         ${missingPillHtml}
                     </div>
-                    <span style="font-size:0.8em; color:gray;">${data.daysOut} Days Out</span>
+                    ${data.daysOut != null ? `<span style="font-size:0.8em; color:gray;">${data.daysOut} Days Out</span>` : ''}
                 </div>
             </div>
         `;
