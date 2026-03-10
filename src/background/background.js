@@ -470,9 +470,10 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
       // so the sidepanel listener can process the call request.
       if (msg.autoCall && sender?.tab?.id) {
           console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
-          // Store the message in session storage so the sidepanel can pick it up
-          // when it initializes (the runtime message may arrive before the panel loads).
-          await sessionSet({ pendingAutoCall: msg });
+          // Store the pending message WITHOUT awaiting — any await before
+          // sidePanel.open() breaks Chrome's user-gesture chain and causes
+          // "may only be called in response to a user gesture" error.
+          sessionSet({ pendingAutoCall: msg }); // fire-and-forget
           try {
               await chrome.sidePanel.open({ tabId: sender.tab.id });
           } catch (e) {
