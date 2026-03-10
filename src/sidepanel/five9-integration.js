@@ -6,6 +6,23 @@ import { updateCallTabDisplay, showConnectionError, clearConnectionError } from 
 
 let five9ConnectionCheckInterval = null;
 let lastFive9ConnectionState = FIVE9_CONNECTION_STATES.NO_TAB;
+let cachedDebugMode = null; // In-memory cache to avoid async storage reads on every tick
+
+/**
+ * Initializes the debug mode cache from storage.
+ * Call once at startup so subsequent checks are synchronous.
+ */
+export async function initDebugModeCache() {
+    const data = await storageGet(STORAGE_KEYS.CALL_DEMO);
+    cachedDebugMode = data[STORAGE_KEYS.CALL_DEMO] || false;
+
+    // Keep cache in sync when the setting changes
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes[STORAGE_KEYS.CALL_DEMO]) {
+            cachedDebugMode = changes[STORAGE_KEYS.CALL_DEMO].newValue || false;
+        }
+    });
+}
 
 /**
  * Checks Five9 connection status with three states:
@@ -48,12 +65,8 @@ export async function checkFive9Connection() {
  * @param {boolean} [debugModeOverride] - Optional debug mode override (if not provided, fetches from storage)
  */
 export async function updateFive9ConnectionIndicator(selectedQueue, debugModeOverride = null) {
-    // Get debug mode from storage if not provided
-    let isDebugMode = debugModeOverride;
-    if (isDebugMode === null) {
-        const data = await storageGet(STORAGE_KEYS.CALL_DEMO);
-        isDebugMode = data[STORAGE_KEYS.CALL_DEMO] || false;
-    }
+    // Use cached debug mode (synchronous) unless an explicit override is provided
+    const isDebugMode = debugModeOverride !== null ? debugModeOverride : (cachedDebugMode ?? false);
 
     // Skip Five9 monitoring entirely in demo mode
     if (isDebugMode) {
