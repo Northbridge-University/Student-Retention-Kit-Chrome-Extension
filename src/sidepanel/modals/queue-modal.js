@@ -10,11 +10,15 @@ let draggedIndex = null;
 
 /**
  * Opens the queue management modal
+ * @param {Array} selectedQueue - Full queue array
+ * @param {Function} onReorder - Callback when items are reordered
+ * @param {Function} onRemove - Callback when an item is removed
+ * @param {Object} [automationState] - { currentIndex, skippedIndices } from callManager
  */
-export function openQueueModal(selectedQueue, onReorder, onRemove) {
+export function openQueueModal(selectedQueue, onReorder, onRemove, automationState) {
     if (!elements.queueModal || !elements.queueList) return;
 
-    renderQueueModal(selectedQueue, onReorder, onRemove);
+    renderQueueModal(selectedQueue, onReorder, onRemove, automationState);
     elements.queueModal.style.display = 'flex';
 }
 
@@ -28,43 +32,57 @@ export function closeQueueModal() {
 
 /**
  * Renders the queue modal content
+ * Only shows students still in the queue (current + upcoming), not already-called ones.
  */
-export async function renderQueueModal(selectedQueue, onReorder, onRemove) {
+export async function renderQueueModal(selectedQueue, onReorder, onRemove, automationState) {
     if (!elements.queueList || !elements.queueCount) return;
 
     elements.queueList.innerHTML = '';
 
-    if (selectedQueue.length === 0) {
+    // Determine which students are still pending (current + future, not skipped)
+    const currentIndex = automationState?.currentIndex || 0;
+    const skippedIndices = automationState?.skippedIndices || new Set();
+
+    // Build list of pending entries: [ { originalIndex, student } ]
+    const pendingEntries = [];
+    selectedQueue.forEach((student, index) => {
+        if (index >= currentIndex && !skippedIndices.has(index)) {
+            pendingEntries.push({ originalIndex: index, student });
+        }
+    });
+
+    if (pendingEntries.length === 0) {
         elements.queueList.innerHTML = '<li style="justify-content:center; color:gray;">No students in queue</li>';
         elements.queueCount.textContent = '0 students';
         return;
     }
 
-    elements.queueCount.textContent = `${selectedQueue.length} student${selectedQueue.length !== 1 ? 's' : ''}`;
+    elements.queueCount.textContent = `${pendingEntries.length} student${pendingEntries.length !== 1 ? 's' : ''}`;
 
     // Get reformat name setting
     const reformatEnabled = await storageGetValue(STORAGE_KEYS.REFORMAT_NAME_ENABLED, true);
 
-    selectedQueue.forEach((student, index) => {
+    pendingEntries.forEach((entry, displayIndex) => {
         const li = document.createElement('li');
         li.className = 'queue-item-draggable';
         li.draggable = true;
-        li.dataset.index = index;
+        li.dataset.index = entry.originalIndex;
 
-        const data = resolveStudentData(student, reformatEnabled);
+        const data = resolveStudentData(entry.student, reformatEnabled);
+        const isCurrent = entry.originalIndex === currentIndex;
 
         li.innerHTML = `
             <div style="display: flex; align-items: center; width: 100%; justify-content: space-between;">
                 <div style="display: flex; align-items: center; flex-grow: 1;">
                     <i class="fas fa-grip-vertical queue-drag-handle"></i>
-                    <div style="margin-right: 10px; font-weight: 600; color: var(--text-secondary); min-width: 20px;">#${index + 1}</div>
+                    <div style="margin-right: 10px; font-weight: 600; color: var(--text-secondary); min-width: 20px;">#${displayIndex + 1}</div>
                     <div>
-                        <div style="font-weight: 500; color: var(--text-main);">${data.name}</div>
+                        <div style="font-weight: 500; color: var(--text-main);">${data.name}${isCurrent ? ' <span style="font-size:0.75em; color:var(--primary-color); font-weight:600;">(current)</span>' : ''}</div>
                         <div style="font-size: 0.8em; color: var(--text-secondary);">${data.daysOut} Days Out</div>
                     </div>
                 </div>
-                <button class="queue-remove-btn" data-index="${index}" title="Remove from queue">
-                    <i class="fas fa-times"></i>
+                <button class="queue-remove-btn" data-index="${entry.originalIndex}" title="Remove from queue">
+                    <i class="fas fa-trash-can"></i>
                 </button>
             </div>
         `;
@@ -81,7 +99,7 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove) {
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (onRemove) {
-                onRemove(index);
+                onRemove(entry.originalIndex);
             }
         });
 

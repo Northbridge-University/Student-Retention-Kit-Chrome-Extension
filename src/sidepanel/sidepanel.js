@@ -767,17 +767,24 @@ function setupEventListeners() {
     // Queue Modal
     if (elements.manageQueueBtn) {
         elements.manageQueueBtn.addEventListener('click', () => {
+            const automationState = {
+                currentIndex: callManager.currentAutomationIndex,
+                skippedIndices: callManager.skippedIndices
+            };
+            const reorderCb = (fromIndex, toIndex) => {
+                queueManager.reorderQueue(fromIndex, toIndex);
+                renderQueueModal(
+                    queueManager.getQueue(),
+                    reorderCb,
+                    (index) => handleQueueRemoval(index),
+                    { currentIndex: callManager.currentAutomationIndex, skippedIndices: callManager.skippedIndices }
+                );
+            };
             openQueueModal(
                 queueManager.getQueue(),
-                (fromIndex, toIndex) => {
-                    queueManager.reorderQueue(fromIndex, toIndex);
-                    renderQueueModal(
-                        queueManager.getQueue(),
-                        (fromIdx, toIdx) => queueManager.reorderQueue(fromIdx, toIdx),
-                        (index) => handleQueueRemoval(index)
-                    );
-                },
-                (index) => handleQueueRemoval(index)
+                reorderCb,
+                (index) => handleQueueRemoval(index),
+                automationState
             );
         });
     }
