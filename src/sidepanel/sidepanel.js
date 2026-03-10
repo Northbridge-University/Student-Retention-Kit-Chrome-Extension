@@ -1862,13 +1862,9 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
             // Set queue using queue manager (handles both single and multiple)
             queueManager.setQueue(studentsToSet);
 
-            // Only auto-switch to the contact tab when there is NO directPhone.
-            // When directPhone is set the user merely clicked a phone cell —
-            // don't yank them away from their current tab.
-            if (!msg.directPhone) {
-                switchTab('contact');
-            }
-            // Check Five9 connection when switching to contact tab
+            // Don't auto-switch to the contact tab on every student selection.
+            // The user will navigate to the call tab when they're ready to dial.
+            // Just update the Five9 connection indicator in the background.
             updateFive9ConnectionIndicator(queueManager.getQueue());
 
             if (msg.count === 1) {
