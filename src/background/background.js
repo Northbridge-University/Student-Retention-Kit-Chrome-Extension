@@ -473,7 +473,7 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           // Store the pending message WITHOUT awaiting — any await before
           // sidePanel.open() breaks Chrome's user-gesture chain and causes
           // "may only be called in response to a user gesture" error.
-          sessionSet({ pendingAutoCall: msg }); // fire-and-forget
+          sessionSet({ pendingAutoCall: { ...msg, _timestamp: Date.now() } }); // fire-and-forget
           try {
               await chrome.sidePanel.open({ tabId: sender.tab.id });
           } catch (e) {

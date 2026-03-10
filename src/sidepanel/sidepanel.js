@@ -292,6 +292,14 @@ async function processPendingAutoCall() {
         // Clear it immediately so it doesn't fire again on next open
         await sessionSet({ pendingAutoCall: null });
 
+        // Ignore stale messages (older than 5 seconds) — prevents auto-call
+        // when the panel is reopened after being closed
+        const age = Date.now() - (pending._timestamp || 0);
+        if (age > 5000) {
+            console.log(`%c [Sidepanel] Ignoring stale pendingAutoCall (${Math.round(age / 1000)}s old)`, 'color: orange; font-weight: bold');
+            return;
+        }
+
         console.log('%c [Sidepanel] Processing pending autoCall from ribbon', 'color: green; font-weight: bold');
 
         // Process through the same handler used by the runtime message listener
@@ -300,6 +308,11 @@ async function processPendingAutoCall() {
         console.warn('[Sidepanel] Error checking pending autoCall:', e);
     }
 }
+
+// Clear pending autoCall when the panel closes so it never fires on reopen
+window.addEventListener('pagehide', () => {
+    sessionSet({ pendingAutoCall: null });
+});
 
 // --- ABOUT PAGE ---
 let aboutContentLoaded = false;
