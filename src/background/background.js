@@ -466,16 +466,10 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           : `${msg.count} students`;
       console.log(`%c [Background] Selected Students Received:`, "color: purple; font-weight: bold", studentText);
 
-      // Forward to sidepanel to set as active student or automation mode
-      safeSendMessage({
-          type: MESSAGE_TYPES.SRK_SELECTED_STUDENTS,
-          students: msg.students,
-          count: msg.count,
-          timestamp: msg.timestamp,
-          sourceTimestamp: msg.sourceTimestamp,
-          directPhone: msg.directPhone || null,
-          autoCall: msg.autoCall || false
-      }, 'selected students');
+      // NOTE: Do NOT forward to sidepanel here. The sidepanel already receives
+      // this message directly from the content script via chrome.runtime.sendMessage.
+      // Re-forwarding causes the sidepanel to process it twice, which triggers
+      // the autoCall logic twice (call then immediate hangup).
   }
 
   // --- HIGHLIGHT CONFIRMATION FROM EXCEL ADD-IN ---
