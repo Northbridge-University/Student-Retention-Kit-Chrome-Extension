@@ -1821,9 +1821,25 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
     if (msg.type === MESSAGE_TYPES.SRK_SELECTED_STUDENTS) {
         const autoCall = msg.autoCall || false;
 
-        // If a call is active and autoCall is requested, force-end with default disposition first
+        // If a call is active and autoCall is requested, check if it's the same student
         if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState()) && autoCall) {
-            console.log('%c [Sidepanel] Auto-call requested — force-ending current call', 'color: orange; font-weight: bold');
+            // Check if the incoming student is the same one already being called
+            const currentStudent = callManager.selectedQueue && callManager.selectedQueue[0];
+            const incomingStudent = msg.students && msg.students[0];
+            const isSameStudent = currentStudent && incomingStudent && (
+                (currentStudent.SyStudentId && incomingStudent.SyStudentId && currentStudent.SyStudentId === incomingStudent.SyStudentId) ||
+                (currentStudent.name === incomingStudent.name)
+            );
+
+            if (isSameStudent) {
+                // Same student — treat as a toggle: just end the current call
+                console.log('%c [Sidepanel] Same student call button pressed again — ending call', 'color: orange; font-weight: bold');
+                await callManager.forceEndCall();
+                return; // Don't re-initiate
+            }
+
+            // Different student — force-end current call so we can start the new one
+            console.log('%c [Sidepanel] Auto-call requested for different student — ending current call', 'color: orange; font-weight: bold');
             await callManager.forceEndCall();
         }
 
