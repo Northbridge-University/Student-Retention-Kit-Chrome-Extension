@@ -1937,6 +1937,7 @@ async function handleSelectedStudentsMessage(msg) {
                     if (student.phone) merged.phone = student.phone;
                     if (student.otherPhone) merged.otherPhone = student.otherPhone;
                     if (student.directPhone) merged.directPhone = student.directPhone;
+                    if (student.isOtherContact) merged.isOtherContact = true;
                     return merged;
                 } else {
                     console.log(`%c [Sidepanel] No master list match for "${student.name}" (ID: ${student.SyStudentId}) — using add-in data (daysOut will be 0)`, 'color: orange; font-weight: bold');
