@@ -1887,30 +1887,35 @@ async function handleSelectedStudentsMessage(msg) {
         const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
         const masterEntries = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
 
+        // Normalize a phone string for comparison (digits only)
+        const normalizePhone = (p) => p ? String(p).replace(/\D/g, '') : '';
+
         // Match all students with master list
         const studentsToSet = msg.students.map(student => {
-            // Try to match by SyStudentId or name
             if (masterEntries.length > 0) {
+                const studentPhoneNorm = normalizePhone(student.phone);
+                const studentOtherNorm = normalizePhone(student.otherPhone);
+
                 const matchedStudent = masterEntries.find(entry => {
                     // Match by SyStudentId if available
                     if (student.SyStudentId && entry.SyStudentId) {
                         return entry.SyStudentId === student.SyStudentId;
                     }
-                    // Otherwise match by name
-                    return entry.name === student.name;
+                    // Match by name
+                    if (entry.name === student.name) return true;
+                    // Match by phone number as fallback identifier
+                    if (studentPhoneNorm && normalizePhone(entry.phone) === studentPhoneNorm) return true;
+                    if (studentOtherNorm && normalizePhone(entry.otherPhone) === studentOtherNorm) return true;
+                    return false;
                 });
 
                 if (matchedStudent) {
                     console.log(`Matched with master list: ${matchedStudent.name}`);
-                    // Merge: use master list as base but preserve phone from add-in
-                    // if the add-in sent one (user selected a specific number)
+                    // Merge: master list as base, preserve add-in phone overrides
                     const merged = { ...matchedStudent };
-                    if (student.phone) {
-                        merged.phone = student.phone;
-                    }
-                    if (student.directPhone) {
-                        merged.directPhone = student.directPhone;
-                    }
+                    if (student.phone) merged.phone = student.phone;
+                    if (student.otherPhone) merged.otherPhone = student.otherPhone;
+                    if (student.directPhone) merged.directPhone = student.directPhone;
                     return merged;
                 } else {
                     console.log(`No match for ${student.name}, using Office add-in data`);
@@ -1922,7 +1927,23 @@ async function handleSelectedStudentsMessage(msg) {
         // If the Add-in sent a directPhone (user selected a phone cell),
         // attach it to the first student for quick-dial priority
         if (msg.directPhone && studentsToSet.length === 1) {
-            studentsToSet[0].directPhone = msg.directPhone;
+            const dp = msg.directPhone;
+            const dpNorm = normalizePhone(dp);
+            const stu = studentsToSet[0];
+            stu.directPhone = dp;
+
+            // Determine if the directPhone is the "other" (related contact) number
+            const otherNorm = normalizePhone(stu.otherPhone);
+            const phoneNorm = normalizePhone(stu.phone);
+            if (otherNorm && dpNorm === otherNorm) {
+                stu.isOtherContact = true;
+            } else if (phoneNorm && dpNorm === phoneNorm) {
+                stu.isOtherContact = false;
+            } else {
+                // directPhone doesn't match either field — could be from otherPhone column
+                // but with formatting differences already resolved; default to not flagging
+                stu.isOtherContact = false;
+            }
         }
 
         // Set queue using queue manager (handles both single and multiple)
