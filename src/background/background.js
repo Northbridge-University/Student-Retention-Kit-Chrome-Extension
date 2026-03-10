@@ -466,26 +466,21 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
           : `${msg.count} students`;
       console.log(`%c [Background] Selected Students Received:`, "color: purple; font-weight: bold", studentText);
 
-      // If this is an autoCall (ribbon call button), ensure the side panel is open
-      // so the sidepanel listener can process the call request.
+      // If this is an autoCall (ribbon call button), store the message so the
+      // sidepanel can process it on init, then open the side panel.
       if (msg.autoCall) {
-          console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
-          // Store the message in session storage so the sidepanel can pick it up
-          // when it initializes (the runtime message may arrive before the panel loads).
           await sessionSet({ pendingAutoCall: msg });
+
           try {
-              // Use windowId (not tabId) — chrome.sidePanel.open with windowId
-              // does not require a user gesture, unlike tabId which does.
-              const tab = sender?.tab;
-              if (tab?.windowId) {
-                  await chrome.sidePanel.open({ windowId: tab.windowId });
-              } else {
-                  // Fallback: get the current/focused window
-                  const win = await chrome.windows.getCurrent();
-                  await chrome.sidePanel.open({ windowId: win.id });
+              // Get the active tab in the focused window to open the side panel on
+              const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+              const tabId = activeTab?.id ?? sender?.tab?.id;
+              console.log('%c [Background] autoCall — opening side panel on tab', 'color: green; font-weight: bold', tabId);
+              if (tabId) {
+                  await chrome.sidePanel.open({ tabId });
               }
           } catch (e) {
-              console.warn('[Background] Could not open side panel:', e?.message || e);
+              console.warn('[Background] sidePanel.open failed:', e?.message || e);
           }
       }
 
