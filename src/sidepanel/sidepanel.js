@@ -273,6 +273,32 @@ async function initializeApp() {
     setInterval(async () => {
         await updateCanvasStatus();
     }, 5000);
+
+    // Check for a pending autoCall message (ribbon call button opened the panel)
+    await processPendingAutoCall();
+}
+
+/**
+ * Checks session storage for a pending autoCall message that was stored by
+ * the background script before opening the side panel. This handles the case
+ * where the panel wasn't open yet when the ribbon call button was pressed.
+ */
+async function processPendingAutoCall() {
+    try {
+        const data = await sessionGet(['pendingAutoCall']);
+        const pending = data.pendingAutoCall;
+        if (!pending) return;
+
+        // Clear it immediately so it doesn't fire again on next open
+        await sessionSet({ pendingAutoCall: null });
+
+        console.log('%c [Sidepanel] Processing pending autoCall from ribbon', 'color: green; font-weight: bold');
+
+        // Process through the same handler used by the runtime message listener
+        await handleSelectedStudentsMessage(pending);
+    } catch (e) {
+        console.warn('[Sidepanel] Error checking pending autoCall:', e);
+    }
 }
 
 // --- ABOUT PAGE ---
@@ -1816,100 +1842,108 @@ chrome.storage.session.onChanged.addListener((changes) => {
     }
 });
 
+/**
+ * Handles incoming SRK_SELECTED_STUDENTS messages (from runtime listener or pending autoCall).
+ * Sets the active student / automation queue and optionally auto-dials.
+ */
+async function handleSelectedStudentsMessage(msg) {
+    const autoCall = msg.autoCall || false;
+
+    // If a call is active and autoCall is requested, check if it's the same student
+    if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState()) && autoCall) {
+        // Check if the incoming student is the same one already being called
+        const currentStudent = callManager.selectedQueue && callManager.selectedQueue[0];
+        const incomingStudent = msg.students && msg.students[0];
+        const isSameStudent = currentStudent && incomingStudent && (
+            (currentStudent.SyStudentId && incomingStudent.SyStudentId && currentStudent.SyStudentId === incomingStudent.SyStudentId) ||
+            (currentStudent.name === incomingStudent.name)
+        );
+
+        if (isSameStudent) {
+            // Same student — treat as a toggle: just end the current call
+            console.log('%c [Sidepanel] Same student call button pressed again — ending call', 'color: orange; font-weight: bold');
+            await callManager.forceEndCall();
+            return; // Don't re-initiate
+        }
+
+        // Different student — force-end current call so we can start the new one
+        console.log('%c [Sidepanel] Auto-call requested for different student — ending current call', 'color: orange; font-weight: bold');
+        await callManager.forceEndCall();
+    }
+
+    // IGNORE PINGS IF CALL IS ACTIVE OR AUTOMATION MODE IS ACTIVE (non-autoCall only)
+    // Don't interrupt current call session or disrupt automation queue
+    if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState())) {
+        const reason = callManager.getAutomationModeState() ? 'automation mode active' : 'call already in session';
+        console.log(`%c [Sidepanel] Ignoring ping - ${reason}`, 'color: orange; font-weight: bold');
+        return; // Exit early, don't process this ping
+    }
+
+    const modeText = msg.count === 1 ? 'active student' : 'automation mode';
+    console.log(`%c [Sidepanel] Setting ${modeText} from Office Add-in:`, 'color: purple; font-weight: bold', msg.count, 'student(s)');
+
+    if (msg.students && msg.students.length > 0 && callManager && queueManager) {
+        // Try to find matching students in master list for complete data
+        const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+        const masterEntries = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
+
+        // Match all students with master list
+        const studentsToSet = msg.students.map(student => {
+            // Try to match by SyStudentId or name
+            if (masterEntries.length > 0) {
+                const matchedStudent = masterEntries.find(entry => {
+                    // Match by SyStudentId if available
+                    if (student.SyStudentId && entry.SyStudentId) {
+                        return entry.SyStudentId === student.SyStudentId;
+                    }
+                    // Otherwise match by name
+                    return entry.name === student.name;
+                });
+
+                if (matchedStudent) {
+                    console.log(`Matched with master list: ${matchedStudent.name}`);
+                    return matchedStudent;
+                } else {
+                    console.log(`No match for ${student.name}, using Office add-in data`);
+                }
+            }
+            return student;
+        });
+
+        // If the Add-in sent a directPhone (user selected a phone cell),
+        // attach it to the first student for quick-dial priority
+        if (msg.directPhone && studentsToSet.length === 1) {
+            studentsToSet[0].directPhone = msg.directPhone;
+        }
+
+        // Set queue using queue manager (handles both single and multiple)
+        queueManager.setQueue(studentsToSet);
+
+        // Switch to call tab and update display
+        switchTab('contact');
+        updateFive9ConnectionIndicator(queueManager.getQueue());
+
+        if (msg.count === 1) {
+            console.log(`Active student set to: ${studentsToSet[0].name}`);
+        } else {
+            console.log(`Automation mode enabled with ${msg.count} students`);
+        }
+
+        // Auto-initiate the call if requested (ribbon call button)
+        if (autoCall) {
+            // Small delay to let the UI render the new student before dialing
+            setTimeout(() => {
+                console.log('%c [Sidepanel] Auto-initiating call from ribbon', 'color: green; font-weight: bold');
+                callManager.toggleCallState();
+            }, 300);
+        }
+    }
+}
+
 // Runtime message listener for Office Add-in student selection sync
 chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
     if (msg.type === MESSAGE_TYPES.SRK_SELECTED_STUDENTS) {
-        const autoCall = msg.autoCall || false;
-
-        // If a call is active and autoCall is requested, check if it's the same student
-        if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState()) && autoCall) {
-            // Check if the incoming student is the same one already being called
-            const currentStudent = callManager.selectedQueue && callManager.selectedQueue[0];
-            const incomingStudent = msg.students && msg.students[0];
-            const isSameStudent = currentStudent && incomingStudent && (
-                (currentStudent.SyStudentId && incomingStudent.SyStudentId && currentStudent.SyStudentId === incomingStudent.SyStudentId) ||
-                (currentStudent.name === incomingStudent.name)
-            );
-
-            if (isSameStudent) {
-                // Same student — treat as a toggle: just end the current call
-                console.log('%c [Sidepanel] Same student call button pressed again — ending call', 'color: orange; font-weight: bold');
-                await callManager.forceEndCall();
-                return; // Don't re-initiate
-            }
-
-            // Different student — force-end current call so we can start the new one
-            console.log('%c [Sidepanel] Auto-call requested for different student — ending current call', 'color: orange; font-weight: bold');
-            await callManager.forceEndCall();
-        }
-
-        // IGNORE PINGS IF CALL IS ACTIVE OR AUTOMATION MODE IS ACTIVE (non-autoCall only)
-        // Don't interrupt current call session or disrupt automation queue
-        if (callManager && (callManager.getCallActiveState() || callManager.getAutomationModeState())) {
-            const reason = callManager.getAutomationModeState() ? 'automation mode active' : 'call already in session';
-            console.log(`%c [Sidepanel] Ignoring ping - ${reason}`, 'color: orange; font-weight: bold');
-            return; // Exit early, don't process this ping
-        }
-
-        const modeText = msg.count === 1 ? 'active student' : 'automation mode';
-        console.log(`%c [Sidepanel] Setting ${modeText} from Office Add-in:`, 'color: purple; font-weight: bold', msg.count, 'student(s)');
-
-        if (msg.students && msg.students.length > 0 && callManager && queueManager) {
-            // Try to find matching students in master list for complete data
-            const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
-            const masterEntries = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
-
-            // Match all students with master list
-            const studentsToSet = msg.students.map(student => {
-                // Try to match by SyStudentId or name
-                if (masterEntries.length > 0) {
-                    const matchedStudent = masterEntries.find(entry => {
-                        // Match by SyStudentId if available
-                        if (student.SyStudentId && entry.SyStudentId) {
-                            return entry.SyStudentId === student.SyStudentId;
-                        }
-                        // Otherwise match by name
-                        return entry.name === student.name;
-                    });
-
-                    if (matchedStudent) {
-                        console.log(`Matched with master list: ${matchedStudent.name}`);
-                        return matchedStudent;
-                    } else {
-                        console.log(`No match for ${student.name}, using Office add-in data`);
-                    }
-                }
-                return student;
-            });
-
-            // If the Add-in sent a directPhone (user selected a phone cell),
-            // attach it to the first student for quick-dial priority
-            if (msg.directPhone && studentsToSet.length === 1) {
-                studentsToSet[0].directPhone = msg.directPhone;
-            }
-
-            // Set queue using queue manager (handles both single and multiple)
-            queueManager.setQueue(studentsToSet);
-
-            // Switch to call tab and update display
-            switchTab('contact');
-            updateFive9ConnectionIndicator(queueManager.getQueue());
-
-            if (msg.count === 1) {
-                console.log(`Active student set to: ${studentsToSet[0].name}`);
-            } else {
-                console.log(`Automation mode enabled with ${msg.count} students`);
-            }
-
-            // Auto-initiate the call if requested (ribbon call button)
-            if (autoCall) {
-                // Small delay to let the UI render the new student before dialing
-                setTimeout(() => {
-                    console.log('%c [Sidepanel] Auto-initiating call from ribbon', 'color: green; font-weight: bold');
-                    callManager.toggleCallState();
-                }, 300);
-            }
-        }
+        await handleSelectedStudentsMessage(msg);
     }
 
     // Handle logs from background script
