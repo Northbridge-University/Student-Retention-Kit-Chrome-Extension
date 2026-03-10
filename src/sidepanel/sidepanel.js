@@ -217,6 +217,10 @@ async function initializeApp() {
     // Ensure checker is stopped when side panel opens (use session storage)
     await sessionSet({ [STORAGE_KEYS.EXTENSION_STATE]: EXTENSION_STATES.OFF });
 
+    // Cache debug mode state before any Five9 checks or student renders
+    // to prevent "Awaiting Five9 Tab" flash when demo mode is enabled
+    await initDebugModeCache();
+
     setupEventListeners();
     initializeCallControlButtons();
     await loadStorageData();
@@ -225,10 +229,6 @@ async function initializeApp() {
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
-
-    // Cache debug mode state before any Five9 checks to prevent
-    // "Awaiting Five9 Tab" flash when demo mode is enabled
-    await initDebugModeCache();
 
     // Start Five9 connection monitoring
     startFive9ConnectionMonitor(() => queueManager.getQueue());

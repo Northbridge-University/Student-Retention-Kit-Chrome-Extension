@@ -25,6 +25,14 @@ export async function initDebugModeCache() {
 }
 
 /**
+ * Returns the cached debug mode value.
+ * @returns {boolean}
+ */
+export function getCachedDebugMode() {
+    return cachedDebugMode ?? false;
+}
+
+/**
  * Checks Five9 connection status with three states:
  * - NO_TAB: No Five9 tab detected
  * - AWAITING_CONNECTION: Tab exists but agent not connected
