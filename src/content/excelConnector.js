@@ -671,6 +671,14 @@ if (window.hasSRKConnectorRun) {
           // Check if sync active student is enabled - check both nested and legacy paths
           chrome.storage.local.get(['settings', 'syncActiveStudent'], (result) => {
               const syncEnabled = getSettingValue(result, 'syncActiveStudent', true);
+              console.log(`%c [excelConnector] syncActiveStudent=${syncEnabled}, autoCall=${data.autoCall}`, 'color: cyan; font-weight: bold');
+
+              // Always send if autoCall — the call must go through regardless of sync setting
+              if (data.autoCall) {
+                  console.log('%c [excelConnector] autoCall=true — forcing transformAndSend', 'color: green; font-weight: bold');
+                  transformAndSend();
+                  return;
+              }
 
               if (!syncEnabled) {
                   console.log("%c Sync Active Student is disabled. Skipping student sync.", "color: orange; font-weight: bold");
