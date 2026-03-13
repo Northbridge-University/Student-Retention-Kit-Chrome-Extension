@@ -252,7 +252,8 @@ function renderPlaceholder(messageConfig) {
                     chrome.windows.update(existingTabs[0].windowId, { focused: true });
                     return;
                 }
-                chrome.tabs.create({ url: 'https://app.five9.com/appsvcs/saml/sp/137928/Acure/alias/agent' });
+                const newTab = await chrome.tabs.create({ url: 'https://app.five9.com/appsvcs/saml/sp/137928/Acure/alias/agent' });
+                chrome.windows.update(newTab.windowId, { focused: true });
             });
         }
     }
