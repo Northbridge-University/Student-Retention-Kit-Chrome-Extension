@@ -53,7 +53,7 @@ let five9ConnectionError = false;
  */
 async function checkFive9ConnectionState() {
     try {
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
 
         if (tabs.length === 0) {
             return FIVE9_CONNECTION_STATES.NO_TAB;
@@ -81,7 +81,7 @@ async function checkFive9ConnectionState() {
  */
 async function restartFive9Station() {
     try {
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
         if (tabs.length === 0) {
             return { success: false, error: "No Five9 tab found" };
         }
@@ -174,6 +174,13 @@ function renderPlaceholder(messageConfig) {
     if (currentPlaceholderMessage === messageConfig.id) return;
     currentPlaceholderMessage = messageConfig.id;
 
+    // Add SSO login button for no tab message
+    let ssoButton = '';
+    if (messageConfig.id === 'five9_no_tab') {
+        const msLogo = `<svg width="16" height="16" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="10" fill="#f25022"/><rect x="11" y="0" width="10" height="10" fill="#7fba00"/><rect x="0" y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>`;
+        ssoButton = `<button id="five9SsoBtn" style="margin-top:18px; padding:8px 16px; background:#2d2d2d; color:#ffffff; border:none; border-radius:6px; cursor:pointer; font-size:0.8em; display:flex; align-items:center; gap:8px; transition:all 0.15s ease; font-weight:500;">${msLogo} SSO Log In</button>`;
+    }
+
     // Add restart station button for awaiting agent and error messages
     let actionButton = '';
     if (messageConfig.id === 'five9_awaiting' || messageConfig.id === 'five9_error') {
@@ -184,8 +191,25 @@ function renderPlaceholder(messageConfig) {
         <i class="fas ${messageConfig.icon}" style="${messageConfig.iconStyle}"></i>
         <span style="font-size:1.1em; font-weight:500;">${messageConfig.header}</span>
         <span style="font-size:0.9em; margin-top:5px; color:#6b7280;">${messageConfig.message}</span>
+        ${ssoButton}
         ${actionButton}
     `;
+
+    // Add click handler for SSO login button
+    if (messageConfig.id === 'five9_no_tab') {
+        const ssoBtn = document.getElementById('five9SsoBtn');
+        if (ssoBtn) {
+            ssoBtn.addEventListener('mouseenter', () => {
+                ssoBtn.style.background = '#404040';
+            });
+            ssoBtn.addEventListener('mouseleave', () => {
+                ssoBtn.style.background = '#2d2d2d';
+            });
+            ssoBtn.addEventListener('click', () => {
+                chrome.tabs.create({ url: 'https://app.five9.com/appsvcs/saml/sp/137928/Acure/alias/agent' });
+            });
+        }
+    }
 
     // Add click handler for restart station button
     if (messageConfig.id === 'five9_awaiting' || messageConfig.id === 'five9_error') {
@@ -325,7 +349,7 @@ export async function determineCallTabState(state = {}) {
     // Check for connection error first - highest priority
     if (five9ConnectionError && !debugMode) {
         // Re-check if Five9 tab still exists
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
         const hasFive9Tab = tabs.length > 0;
 
         return {

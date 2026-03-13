@@ -748,7 +748,7 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   // --- FIVE9 INTEGRATION ---
   else if (msg.type === 'triggerFive9Call') {
       (async () => {
-          const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+          const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
           if (tabs.length === 0) {
               chrome.runtime.sendMessage({ 
                   type: 'callStatus', 
@@ -781,7 +781,7 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   }
   else if (msg.type === 'triggerFive9Hangup') {
       (async () => {
-          const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+          const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
           if (tabs.length === 0) {
               chrome.runtime.sendMessage({ type: 'hangupStatus', success: false, error: "Five9 tab not found." });
               return;
@@ -808,7 +808,7 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   }
   else if (msg.type === 'triggerFive9DisposeOnly') {
       (async () => {
-          const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+          const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
           if (tabs.length === 0) {
               chrome.runtime.sendMessage({ type: 'disposeStatus', success: false, error: "Five9 tab not found." });
               return;
@@ -1108,7 +1108,7 @@ chrome.runtime.onStartup.addListener(async () => {
 // Monitor Five9 tab closes to reset connection state
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
   // Check if any Five9 tabs remain open
-  const five9Tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+  const five9Tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
 
   if (five9Tabs.length === 0) {
     // No Five9 tabs left - reset connection state
