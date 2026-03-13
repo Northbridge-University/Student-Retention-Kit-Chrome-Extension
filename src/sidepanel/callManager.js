@@ -403,6 +403,9 @@ export default class CallManager {
             this.elements.dialBtn.innerHTML = '<i class="fas fa-phone"></i>';
             this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`;
             this.elements.dialBtn.style.transform = 'rotate(0deg)';
+            this.elements.dialBtn.disabled = false;
+            this.elements.dialBtn.style.cursor = 'pointer';
+            this.elements.dialBtn.style.opacity = '1';
         }
 
         if (this.elements.callStatusText) {
@@ -458,6 +461,9 @@ export default class CallManager {
             this.elements.dialBtn.innerHTML = '<i class="fas fa-phone"></i>';
             this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`;
             this.elements.dialBtn.style.transform = 'rotate(0deg)';
+            this.elements.dialBtn.disabled = false;
+            this.elements.dialBtn.style.cursor = 'pointer';
+            this.elements.dialBtn.style.opacity = '1';
         }
 
         if (this.elements.callStatusText) {
