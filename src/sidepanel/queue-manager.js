@@ -56,7 +56,7 @@ export class QueueManager {
         if (this.selectedQueue.length === 1) {
             setActiveStudent(this.selectedQueue[0], this.callManager);
         } else if (this.selectedQueue.length > 1) {
-            setAutomationModeUI(this.selectedQueue.length);
+            setAutomationModeUI(this.selectedQueue.length, this.selectedQueue);
         } else {
             setActiveStudent(null, this.callManager);
         }
@@ -143,7 +143,7 @@ export class QueueManager {
         }
 
         if (this.selectedQueue.length > 1) {
-            setAutomationModeUI(this.selectedQueue.length);
+            setAutomationModeUI(this.selectedQueue.length, this.selectedQueue);
         }
     }
 
@@ -238,7 +238,7 @@ export class QueueManager {
         } else if (this.selectedQueue.length === 1) {
             setActiveStudent(this.selectedQueue[0], this.callManager);
         } else {
-            setAutomationModeUI(this.selectedQueue.length);
+            setAutomationModeUI(this.selectedQueue.length, this.selectedQueue);
         }
     }
 
