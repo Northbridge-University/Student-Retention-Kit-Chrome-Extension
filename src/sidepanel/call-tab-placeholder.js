@@ -53,7 +53,7 @@ let five9ConnectionError = false;
  */
 async function checkFive9ConnectionState() {
     try {
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
 
         if (tabs.length === 0) {
             return FIVE9_CONNECTION_STATES.NO_TAB;
@@ -81,7 +81,7 @@ async function checkFive9ConnectionState() {
  */
 async function restartFive9Station() {
     try {
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
         if (tabs.length === 0) {
             return { success: false, error: "No Five9 tab found" };
         }
@@ -325,7 +325,7 @@ export async function determineCallTabState(state = {}) {
     // Check for connection error first - highest priority
     if (five9ConnectionError && !debugMode) {
         // Re-check if Five9 tab still exists
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
         const hasFive9Tab = tabs.length > 0;
 
         return {

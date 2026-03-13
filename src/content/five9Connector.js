@@ -1,5 +1,5 @@
 // [2025-12-17] Version 1.0 - Five9 Connector
-// This script runs on https://app-atl.five9.com/* to handle call automation.
+// This script runs on https://app-scl.five9.com/* to handle call automation.
 
 // Configuration
 const FIVE9_POLL_INTERVAL_MS = 2000;
@@ -34,11 +34,11 @@ function getDispositionCode(dispositionType) {
  */
 async function monitorCallState() {
     try {
-        const metadataResp = await fetch("https://app-atl.five9.com/appsvcs/rs/svc/auth/metadata");
+        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
         if (!metadataResp.ok) return;
         const metadata = await metadataResp.json();
 
-        const interactionsResp = await fetch(`https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
+        const interactionsResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
         if (!interactionsResp.ok) return;
         const interactions = await interactionsResp.json();
 
@@ -159,11 +159,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function handleFive9Call(phoneNumber, sendResponse) {
     try {
         console.log(`SRK: Dialing ${phoneNumber}...`);
-        const metadataResp = await fetch("https://app-atl.five9.com/appsvcs/rs/svc/auth/metadata");
+        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
         if (!metadataResp.ok) throw new Error("Could not fetch User Metadata");
         const metadata = await metadataResp.json();
         
-        const url = `https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/make_external_call`;
+        const url = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/make_external_call`;
         const payload = {
             "number": phoneNumber,
             "skipDNCCheck": false,
@@ -195,12 +195,12 @@ async function handleFive9Hangup(dispositionType, sendResponse) {
         const dispositionCode = getDispositionCode(dispositionType);
         console.log("SRK: Disposition code:", dispositionCode);
 
-        const metadataResp = await fetch("https://app-atl.five9.com/appsvcs/rs/svc/auth/metadata");
+        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
         if (!metadataResp.ok) throw new Error("Could not fetch User Metadata");
         const metadata = await metadataResp.json();
 
         // Fetch active interactions
-        const interactionsResp = await fetch(`https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
+        const interactionsResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
         if (!interactionsResp.ok) throw new Error("Could not fetch active interactions");
         const interactions = await interactionsResp.json();
 
@@ -217,7 +217,7 @@ async function handleFive9Hangup(dispositionType, sendResponse) {
         console.log(`SRK: STEP 1 - Disconnecting interaction ${activeCall.interactionId}...`);
 
         // STEP 1: DISCONNECT
-        const disconnectUrl = `https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${activeCall.interactionId}/disconnect`;
+        const disconnectUrl = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${activeCall.interactionId}/disconnect`;
         const disconnectResp = await fetch(disconnectUrl, {
             method: "PUT",
             headers: { "Content-Type": "application/json" }
@@ -233,7 +233,7 @@ async function handleFive9Hangup(dispositionType, sendResponse) {
         if (dispositionCode) {
             console.log(`SRK: STEP 2 - Disposing interaction with code ${dispositionCode}...`);
 
-            const disposeUrl = `https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${activeCall.interactionId}/dispose`;
+            const disposeUrl = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${activeCall.interactionId}/dispose`;
             const payload = { "dispositionId": dispositionCode };
 
             const disposeResp = await fetch(disposeUrl, {
@@ -267,7 +267,7 @@ async function handleFive9Hangup(dispositionType, sendResponse) {
 
             // Fetch interaction to get current state (should be WRAP_UP)
             try {
-                const interactionsResp = await fetch(`https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
+                const interactionsResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
                 if (interactionsResp.ok) {
                     const interactions = await interactionsResp.json();
                     const recentCall = interactions.find(i => i.channelType === 'CALL');
@@ -307,12 +307,12 @@ async function handleFive9DisposeOnly(dispositionType, sendResponse) {
             return;
         }
 
-        const metadataResp = await fetch("https://app-atl.five9.com/appsvcs/rs/svc/auth/metadata");
+        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
         if (!metadataResp.ok) throw new Error("Could not fetch User Metadata");
         const metadata = await metadataResp.json();
 
         // Fetch recently ended interactions (they may still be disposable)
-        const interactionsResp = await fetch(`https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
+        const interactionsResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
         if (!interactionsResp.ok) throw new Error("Could not fetch interactions");
         const interactions = await interactionsResp.json();
 
@@ -327,7 +327,7 @@ async function handleFive9DisposeOnly(dispositionType, sendResponse) {
 
         console.log(`SRK: Disposing interaction ${recentCall.interactionId} with code ${dispositionCode}...`);
 
-        const disposeUrl = `https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${recentCall.interactionId}/dispose`;
+        const disposeUrl = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${recentCall.interactionId}/dispose`;
         const payload = { "dispositionId": dispositionCode };
 
         const disposeResp = await fetch(disposeUrl, {
@@ -408,11 +408,11 @@ async function handleFive9RestartStation(sendResponse) {
         // Fallback to API call if button not found
         console.log("SRK: Native button not found, falling back to API...");
 
-        const metadataResp = await fetch("https://app-atl.five9.com/appsvcs/rs/svc/auth/metadata");
+        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
         if (!metadataResp.ok) throw new Error("Could not fetch User Metadata");
         const metadata = await metadataResp.json();
 
-        const restartUrl = `https://app-atl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station/restart`;
+        const restartUrl = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station/restart`;
 
         const restartResp = await fetch(restartUrl, {
             method: "PUT",

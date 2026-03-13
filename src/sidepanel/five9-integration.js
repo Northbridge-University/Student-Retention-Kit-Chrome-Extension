@@ -42,7 +42,7 @@ export function getCachedDebugMode() {
 export async function checkFive9Connection() {
     try {
         // First check if Five9 tab is open
-        const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+        const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
 
         if (tabs.length === 0) {
             return FIVE9_CONNECTION_STATES.NO_TAB;
@@ -152,7 +152,7 @@ export function setupFive9StatusListeners(callManager, getSelectedQueue) {
                     message.error.includes('Could not establish connection')
                 )) {
                     // Check if Five9 tab still exists
-                    const tabs = await chrome.tabs.query({ url: "https://app-atl.five9.com/*" });
+                    const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
                     const hasFive9Tab = tabs.length > 0;
                     showConnectionError(hasFive9Tab);
                 }
