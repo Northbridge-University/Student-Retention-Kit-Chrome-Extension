@@ -38,6 +38,14 @@ export const PLACEHOLDER_MESSAGES = {
         iconStyle: 'font-size:3em; margin-bottom:15px; color:#ef4444;',
         header: 'Five9 Connection Error',
         message: 'Could not establish connection.<br>Try restarting the station.'
+    },
+    FIVE9_RESTARTING: {
+        id: 'five9_restarting',
+        priority: 4,
+        icon: 'fa-sync fa-spin',
+        iconStyle: 'font-size:3em; margin-bottom:15px; opacity:0.5; color: var(--primary-color);',
+        header: 'Restarting Station',
+        message: '<span id="restartProgressText">Waiting for station to reconnect...</span>'
     }
 };
 
@@ -46,6 +54,9 @@ let currentPlaceholderMessage = null;
 
 // Track if there's a Five9 connection error
 let five9ConnectionError = false;
+
+// Track if a station restart is in progress (blocks polling overrides)
+let restartInProgress = false;
 
 /**
  * Checks Five9 connection status (duplicated here to avoid circular dependency)
@@ -86,30 +97,37 @@ async function restartFive9Station() {
             return { success: false, error: "No Five9 tab found" };
         }
 
+        // Block polling from overriding our UI during restart
+        restartInProgress = true;
+
+        // Show "Restarting..." state immediately
+        clearConnectionError();
+        currentPlaceholderMessage = null;
+        renderPlaceholder(PLACEHOLDER_MESSAGES.FIVE9_RESTARTING);
+        showPlaceholder();
+        hideCallSection();
+
+        // Listen for progress updates from the content script
+        const progressListener = (message) => {
+            if (message.type === 'FIVE9_RESTART_PROGRESS') {
+                updateRestartProgress(message.attempt, message.maxAttempts);
+            }
+        };
+        chrome.runtime.onMessage.addListener(progressListener);
+
+        let response = null;
+
         // Try to send restart request to the Five9 content script
         try {
-            const response = await chrome.tabs.sendMessage(tabs[0].id, {
+            response = await chrome.tabs.sendMessage(tabs[0].id, {
                 type: 'executeFive9RestartStation'
             });
-
-            if (response && response.success) {
-                // Clear error state and show awaiting connection message
-                clearConnectionError();
-                currentPlaceholderMessage = null;
-                renderPlaceholder(PLACEHOLDER_MESSAGES.FIVE9_AWAITING_AGENT);
-                showPlaceholder();
-                hideCallSection();
-                return { success: true };
-            } else {
-                return { success: false, error: response?.error || "Restart failed" };
-            }
         } catch (messageError) {
-            // Content script not available - refresh tab and then call restart station
+            // Content script not available - refresh tab and retry
             console.log("Content script not available, refreshing Five9 tab...");
 
             const tabId = tabs[0].id;
 
-            // Set up listener for when tab finishes loading
             const waitForTabLoad = new Promise((resolve) => {
                 const listener = (updatedTabId, changeInfo) => {
                     if (updatedTabId === tabId && changeInfo.status === 'complete') {
@@ -118,48 +136,68 @@ async function restartFive9Station() {
                     }
                 };
                 chrome.tabs.onUpdated.addListener(listener);
-
-                // Timeout after 30 seconds
                 setTimeout(() => {
                     chrome.tabs.onUpdated.removeListener(listener);
                     resolve();
                 }, 30000);
             });
 
-            // Reload the tab
             await chrome.tabs.reload(tabId);
-
-            // Clear error state and show awaiting connection message
-            clearConnectionError();
-            currentPlaceholderMessage = null;
-            renderPlaceholder(PLACEHOLDER_MESSAGES.FIVE9_AWAITING_AGENT);
-            showPlaceholder();
-            hideCallSection();
-
-            // Wait for tab to finish loading
             await waitForTabLoad;
-
-            // Small delay to ensure content script is fully initialized
             await new Promise(r => setTimeout(r, 1500));
 
-            // Now try to restart station with the newly loaded content script
             try {
                 console.log("Tab reloaded, sending restart station request...");
-                const retryResponse = await chrome.tabs.sendMessage(tabId, {
+                response = await chrome.tabs.sendMessage(tabId, {
                     type: 'executeFive9RestartStation'
                 });
-                if (retryResponse && retryResponse.success) {
-                    console.log("Station restart successful after tab reload");
-                }
             } catch (retryError) {
-                console.log("Restart station after reload failed (user may need to reconnect manually):", retryError.message);
+                console.log("Restart station after reload failed:", retryError.message);
+                response = { success: false, error: "Content script unavailable after reload" };
             }
+        }
 
-            return { success: true };
+        // Clean up progress listener
+        chrome.runtime.onMessage.removeListener(progressListener);
+
+        // Unblock polling
+        restartInProgress = false;
+
+        // Handle the response
+        if (response && response.success) {
+            if (response.verified) {
+                // Station confirmed reconnected — clear placeholder, let normal polling take over
+                clearConnectionError();
+                currentPlaceholderMessage = null;
+                return { success: true, verified: true };
+            } else {
+                // Restart was sent but reconnection not confirmed
+                console.warn("Station restart sent but not verified:", response.warning);
+                currentPlaceholderMessage = null;
+                renderPlaceholder(PLACEHOLDER_MESSAGES.FIVE9_AWAITING_AGENT);
+                showPlaceholder();
+                hideCallSection();
+                return { success: true, verified: false };
+            }
+        } else {
+            return { success: false, error: response?.error || "Restart failed" };
         }
     } catch (error) {
+        restartInProgress = false;
         console.error("Error restarting Five9 station:", error);
         return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Updates the restart progress indicator in the placeholder
+ * @param {number} attempt - Current attempt number
+ * @param {number} maxAttempts - Total max attempts
+ */
+function updateRestartProgress(attempt, maxAttempts) {
+    const progressEl = document.getElementById('restartProgressText');
+    if (progressEl) {
+        progressEl.textContent = `Verifying connection... (${attempt}/${maxAttempts})`;
     }
 }
 
@@ -235,7 +273,12 @@ function renderPlaceholder(messageConfig) {
                 btn.style.cursor = 'not-allowed';
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:0.85em;"></i> Restarting...';
                 const result = await restartFive9Station();
-                if (!result.success) {
+                if (result.success && result.verified) {
+                    // Station confirmed reconnected — the normal 3s polling will
+                    // detect ACTIVE_CONNECTION and clear the placeholder automatically.
+                    // Nothing more to do here.
+                    console.log("Station restart verified — connection confirmed");
+                } else if (!result.success) {
                     // Show error or no tab message
                     if (result.error?.includes("No Five9 tab")) {
                         showConnectionError(false);
@@ -343,6 +386,14 @@ function hideCallSection() {
  * @returns {Object} Result with showPlaceholder boolean and message config
  */
 export async function determineCallTabState(state = {}) {
+    // Don't override UI while a station restart is in progress
+    if (restartInProgress) {
+        return {
+            showPlaceholder: true,
+            message: PLACEHOLDER_MESSAGES.FIVE9_RESTARTING
+        };
+    }
+
     const { selectedQueue = [], debugMode = false } = state;
     const hasStudentSelected = selectedQueue && selectedQueue.length > 0;
 
