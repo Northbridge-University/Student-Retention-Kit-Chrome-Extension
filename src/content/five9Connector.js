@@ -137,6 +137,28 @@ startCallStateMonitor();
 
 console.log("SRK: Five9 Connector Loaded");
 
+// On load, check if the station is already connected and notify the background.
+// This handles the SSO re-login case where the agent session is still active
+// but the extension lost track of the connection state.
+(async function checkStationOnLoad() {
+    try {
+        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
+        if (!metadataResp.ok) return;
+        const metadata = await metadataResp.json();
+
+        const stationResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station`);
+        if (!stationResp.ok) return;
+        const station = await stationResp.json();
+
+        if (station && (station.stationType || station.stationId || station.type)) {
+            console.log("SRK: Station already connected on load, notifying background:", station);
+            chrome.runtime.sendMessage({ type: 'FIVE9_STATION_RESTART_VERIFIED' });
+        }
+    } catch (e) {
+        // Silently fail — the restart button is still available as a fallback
+    }
+})();
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'executeFive9Call') {
         handleFive9Call(request.phoneNumber, sendResponse);
