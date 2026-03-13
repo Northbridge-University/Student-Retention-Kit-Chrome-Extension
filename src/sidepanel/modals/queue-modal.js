@@ -9,6 +9,7 @@ let draggedElement = null;
 let draggedIndex = null;
 let currentOnReorder = null;
 let currentStudentIndex = null;
+let automationRunning = false;
 
 /**
  * Opens the queue management modal
@@ -42,6 +43,7 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
     elements.queueList.innerHTML = '';
     currentOnReorder = onReorder;
     currentStudentIndex = automationState?.currentIndex || 0;
+    automationRunning = automationState?.isRunning || false;
 
     // Determine which students are still pending (current + future, not skipped)
     const currentIndex = automationState?.currentIndex || 0;
@@ -91,8 +93,8 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
             </div>
         `;
 
-        // Disable dragging on the current student
-        if (isCurrent) {
+        // Disable dragging on the current student during active automation
+        if (isCurrent && automationRunning) {
             li.draggable = false;
             li.style.cursor = 'default';
         } else {
@@ -175,8 +177,8 @@ function handleContainerDragOver(e) {
     const { item, position } = getClosestItem(e.clientY);
     if (item && item !== draggedElement) {
         const itemIndex = parseInt(item.dataset.index);
-        // Prevent placing above the current student
-        if (itemIndex === currentStudentIndex && position === 'top') return;
+        // Prevent placing above the current student during active automation
+        if (automationRunning && itemIndex === currentStudentIndex && position === 'top') return;
         item.classList.add(position === 'top' ? 'drag-over-top' : 'drag-over-bottom');
     }
 }
@@ -195,8 +197,8 @@ function handleContainerDrop(e) {
     const { item, position } = getClosestItem(e.clientY);
     if (item) {
         const dropIndex = parseInt(item.dataset.index);
-        // Prevent placing above the current student
-        if (dropIndex === currentStudentIndex && position === 'top') {
+        // Prevent placing above the current student during active automation
+        if (automationRunning && dropIndex === currentStudentIndex && position === 'top') {
             clearAllIndicators();
             return;
         }

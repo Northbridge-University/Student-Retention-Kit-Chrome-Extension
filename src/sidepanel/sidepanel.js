@@ -782,7 +782,8 @@ function setupEventListeners() {
         elements.manageQueueBtn.addEventListener('click', () => {
             const automationState = {
                 currentIndex: callManager.currentAutomationIndex,
-                skippedIndices: callManager.skippedIndices
+                skippedIndices: callManager.skippedIndices,
+                isRunning: callManager.automationMode
             };
             const reorderCb = (fromIndex, toIndex) => {
                 queueManager.reorderQueue(fromIndex, toIndex);
@@ -790,7 +791,7 @@ function setupEventListeners() {
                     queueManager.getQueue(),
                     reorderCb,
                     (index) => handleQueueRemoval(index),
-                    { currentIndex: callManager.currentAutomationIndex, skippedIndices: callManager.skippedIndices }
+                    { currentIndex: callManager.currentAutomationIndex, skippedIndices: callManager.skippedIndices, isRunning: callManager.automationMode }
                 );
             };
             openQueueModal(
