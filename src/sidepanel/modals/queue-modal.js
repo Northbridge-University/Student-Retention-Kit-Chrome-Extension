@@ -8,6 +8,7 @@ import { resolveStudentData } from '../student-renderer.js';
 let draggedElement = null;
 let draggedIndex = null;
 let currentOnReorder = null;
+let currentStudentIndex = null;
 
 /**
  * Opens the queue management modal
@@ -40,6 +41,7 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
 
     elements.queueList.innerHTML = '';
     currentOnReorder = onReorder;
+    currentStudentIndex = automationState?.currentIndex || 0;
 
     // Determine which students are still pending (current + future, not skipped)
     const currentIndex = automationState?.currentIndex || 0;
@@ -89,9 +91,14 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
             </div>
         `;
 
-        // Drag start/end on individual items
-        li.addEventListener('dragstart', (e) => handleDragStart(e));
-        li.addEventListener('dragend', (e) => handleDragEnd(e));
+        // Disable dragging on the current student
+        if (isCurrent) {
+            li.draggable = false;
+            li.style.cursor = 'default';
+        } else {
+            li.addEventListener('dragstart', (e) => handleDragStart(e));
+            li.addEventListener('dragend', (e) => handleDragEnd(e));
+        }
 
         // Remove button (not present for current call)
         const removeBtn = li.querySelector('.queue-remove-btn');
@@ -167,6 +174,9 @@ function handleContainerDragOver(e) {
 
     const { item, position } = getClosestItem(e.clientY);
     if (item && item !== draggedElement) {
+        const itemIndex = parseInt(item.dataset.index);
+        // Prevent placing above the current student
+        if (itemIndex === currentStudentIndex && position === 'top') return;
         item.classList.add(position === 'top' ? 'drag-over-top' : 'drag-over-bottom');
     }
 }
@@ -182,9 +192,14 @@ function handleContainerDrop(e) {
     e.preventDefault();
     e.stopPropagation();
 
-    const { item } = getClosestItem(e.clientY);
+    const { item, position } = getClosestItem(e.clientY);
     if (item) {
         const dropIndex = parseInt(item.dataset.index);
+        // Prevent placing above the current student
+        if (dropIndex === currentStudentIndex && position === 'top') {
+            clearAllIndicators();
+            return;
+        }
         if (draggedIndex !== dropIndex && currentOnReorder) {
             currentOnReorder(draggedIndex, dropIndex);
         }
