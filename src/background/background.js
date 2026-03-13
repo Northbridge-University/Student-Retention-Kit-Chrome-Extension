@@ -416,6 +416,23 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
       lastAgentConnectionTime: lastAgentConnectionTime
     });
     return true; // Keep channel open for async response
+  } else if (msg.type === 'FIVE9_STATION_RESTART_VERIFIED') {
+    // Content script verified station reconnected after restart —
+    // update state immediately since the webRequest listener may not fire
+    console.log('Five9 station restart verified by content script, updating connection state');
+    lastAgentConnectionTime = Date.now();
+    five9ConnectionState = FIVE9_CONNECTION_STATES.ACTIVE_CONNECTION;
+
+    chrome.storage.local.set({
+      five9ConnectionState: FIVE9_CONNECTION_STATES.ACTIVE_CONNECTION,
+      lastAgentConnectionTime: lastAgentConnectionTime
+    });
+
+    // Notify sidepanel of state change
+    safeSendMessage({
+      type: 'FIVE9_CONNECTION_STATE_CHANGED',
+      state: FIVE9_CONNECTION_STATES.ACTIVE_CONNECTION
+    }, 'Five9 restart verified state');
   } else if (msg.type === MESSAGE_TYPES.LOG_TO_PANEL) {
       // Re-broadcast logs
   }

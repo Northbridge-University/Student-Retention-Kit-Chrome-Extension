@@ -500,6 +500,15 @@ async function handleFive9RestartStation(sendResponse) {
 
         if (result.connected) {
             console.log("SRK: Station restart verified — connection confirmed");
+
+            // Notify background to update Five9 connection state immediately,
+            // since the webRequest listener may not fire after a restart
+            try {
+                chrome.runtime.sendMessage({
+                    type: 'FIVE9_STATION_RESTART_VERIFIED'
+                });
+            } catch (_) { /* ignore */ }
+
             sendResponse({ success: true, method, verified: true });
         } else {
             console.warn("SRK: Station restart sent but could not verify reconnection");
