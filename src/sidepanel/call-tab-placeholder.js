@@ -243,8 +243,17 @@ function renderPlaceholder(messageConfig) {
             ssoBtn.addEventListener('mouseleave', () => {
                 ssoBtn.style.background = '#2d2d2d';
             });
-            ssoBtn.addEventListener('click', () => {
-                chrome.tabs.create({ url: 'https://app.five9.com/appsvcs/saml/sp/137928/Acure/alias/agent' });
+            ssoBtn.addEventListener('click', async () => {
+                // Check if a Five9/SSO tab is already open to prevent duplicates
+                const existingTabs = await chrome.tabs.query({ url: ["https://app.five9.com/*", "https://app-scl.five9.com/*", "https://login.microsoftonline.com/*"] });
+                if (existingTabs.length > 0) {
+                    // Focus the existing tab instead of opening a new one
+                    chrome.tabs.update(existingTabs[0].id, { active: true });
+                    chrome.windows.update(existingTabs[0].windowId, { focused: true });
+                    return;
+                }
+                const newTab = await chrome.tabs.create({ url: 'https://app.five9.com/appsvcs/saml/sp/137928/Acure/alias/agent' });
+                chrome.windows.update(newTab.windowId, { focused: true });
             });
         }
     }
