@@ -7,6 +7,7 @@ import { resolveStudentData } from '../student-renderer.js';
 // Drag and drop state
 let draggedElement = null;
 let draggedIndex = null;
+let currentOnReorder = null;
 
 /**
  * Opens the queue management modal
@@ -38,6 +39,7 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
     if (!elements.queueList || !elements.queueCount) return;
 
     elements.queueList.innerHTML = '';
+    currentOnReorder = onReorder;
 
     // Determine which students are still pending (current + future, not skipped)
     const currentIndex = automationState?.currentIndex || 0;
@@ -87,12 +89,9 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
             </div>
         `;
 
-        // Drag events
+        // Drag start/end on individual items
         li.addEventListener('dragstart', (e) => handleDragStart(e));
         li.addEventListener('dragend', (e) => handleDragEnd(e));
-        li.addEventListener('dragover', (e) => handleDragOver(e));
-        li.addEventListener('drop', (e) => handleDrop(e, onReorder));
-        li.addEventListener('dragleave', (e) => handleDragLeave(e));
 
         // Remove button (not present for current call)
         const removeBtn = li.querySelector('.queue-remove-btn');
@@ -107,6 +106,14 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
 
         elements.queueList.appendChild(li);
     });
+
+    // Attach drag events to the container so gaps between items are covered
+    elements.queueList.removeEventListener('dragover', handleContainerDragOver);
+    elements.queueList.removeEventListener('dragleave', handleContainerDragLeave);
+    elements.queueList.removeEventListener('drop', handleContainerDrop);
+    elements.queueList.addEventListener('dragover', handleContainerDragOver);
+    elements.queueList.addEventListener('dragleave', handleContainerDragLeave);
+    elements.queueList.addEventListener('drop', handleContainerDrop);
 }
 
 function handleDragStart(e) {
@@ -119,47 +126,69 @@ function handleDragStart(e) {
 
 function handleDragEnd(e) {
     e.currentTarget.classList.remove('dragging');
+    clearAllIndicators();
+}
+
+/**
+ * Finds the closest queue item to the cursor's Y position
+ */
+function getClosestItem(y) {
+    const items = [...document.querySelectorAll('.queue-item-draggable:not(.dragging)')];
+    let closest = null;
+    let closestDist = Infinity;
+    let position = 'bottom';
+
+    for (const item of items) {
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        const dist = Math.abs(y - midY);
+
+        if (dist < closestDist) {
+            closestDist = dist;
+            closest = item;
+            position = y < midY ? 'top' : 'bottom';
+        }
+    }
+
+    return { item: closest, position };
+}
+
+function clearAllIndicators() {
     document.querySelectorAll('.queue-item-draggable').forEach(item => {
         item.classList.remove('drag-over-top', 'drag-over-bottom');
     });
 }
 
-function handleDragOver(e) {
-    if (e.preventDefault) {
-        e.preventDefault();
-    }
+function handleContainerDragOver(e) {
+    e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    const afterElement = e.currentTarget;
-    if (afterElement !== draggedElement) {
-        const rect = afterElement.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
+    clearAllIndicators();
 
-        afterElement.classList.remove('drag-over-top', 'drag-over-bottom');
-        if (e.clientY < midY) {
-            afterElement.classList.add('drag-over-top');
-        } else {
-            afterElement.classList.add('drag-over-bottom');
+    const { item, position } = getClosestItem(e.clientY);
+    if (item && item !== draggedElement) {
+        item.classList.add(position === 'top' ? 'drag-over-top' : 'drag-over-bottom');
+    }
+}
+
+function handleContainerDragLeave(e) {
+    // Only clear if actually leaving the container (not entering a child)
+    if (!elements.queueList.contains(e.relatedTarget)) {
+        clearAllIndicators();
+    }
+}
+
+function handleContainerDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const { item } = getClosestItem(e.clientY);
+    if (item) {
+        const dropIndex = parseInt(item.dataset.index);
+        if (draggedIndex !== dropIndex && currentOnReorder) {
+            currentOnReorder(draggedIndex, dropIndex);
         }
     }
 
-    return false;
-}
-
-function handleDragLeave(e) {
-    e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom');
-}
-
-function handleDrop(e, onReorder) {
-    if (e.stopPropagation) {
-        e.stopPropagation();
-    }
-
-    const dropIndex = parseInt(e.currentTarget.dataset.index);
-
-    if (draggedIndex !== dropIndex && onReorder) {
-        onReorder(draggedIndex, dropIndex);
-    }
-
-    return false;
+    clearAllIndicators();
 }
