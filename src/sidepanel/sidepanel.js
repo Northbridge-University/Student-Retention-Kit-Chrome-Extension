@@ -1037,6 +1037,14 @@ function setupEventListeners() {
         });
     }
 
+    if (elements.pauseAutomationBtn) {
+        elements.pauseAutomationBtn.addEventListener('click', () => {
+            if (callManager) {
+                callManager.togglePause();
+            }
+        });
+    }
+
     // Disposition buttons
     const dispositionContainer = document.querySelector('.disposition-grid');
     if (dispositionContainer) {

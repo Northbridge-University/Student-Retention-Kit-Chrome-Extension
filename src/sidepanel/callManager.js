@@ -23,6 +23,7 @@ export default class CallManager {
         this.uiCallbacks = uiCallbacks; // Callbacks for UI updates
         this.waitingForDisposition = false; // Track if call ended but waiting for disposition
         this._dispositionInProgress = false; // Guard against double-clicks during disposition
+        this.isPaused = false; // Track if automation is paused between calls
     }
 
     /**
@@ -220,6 +221,14 @@ export default class CallManager {
         this.automationMode = true;
         this.currentAutomationIndex = 0;
         this.skippedIndices.clear(); // Reset skipped indices
+        this.isPaused = false;
+
+        // Show pause button
+        if (this.elements.pauseAutomationBtn) {
+            this.elements.pauseAutomationBtn.style.display = 'block';
+            this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-pause"></i> Pause After This Call';
+            this.elements.pauseAutomationBtn.classList.remove('paused');
+        }
 
         // Start calling the first student
         this.callNextStudentInQueue();
@@ -392,10 +401,14 @@ export default class CallManager {
         this.automationMode = false;
         this.currentAutomationIndex = 0;
 
-        // Hide "Up Next" card
+        // Hide "Up Next" card and pause button
         if (this.elements.upNextCard) {
             this.elements.upNextCard.style.display = 'none';
         }
+        if (this.elements.pauseAutomationBtn) {
+            this.elements.pauseAutomationBtn.style.display = 'none';
+        }
+        this.isPaused = false;
 
         // Reset call UI to regular mode
         if (this.elements.dialBtn) {
@@ -432,6 +445,55 @@ export default class CallManager {
     }
 
     /**
+     * Toggles the pause state for automation
+     */
+    togglePause() {
+        if (!this.automationMode) return;
+
+        this.isPaused = !this.isPaused;
+
+        if (this.elements.pauseAutomationBtn) {
+            if (this.isPaused) {
+                this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-play"></i> Resume Automation';
+                this.elements.pauseAutomationBtn.classList.add('paused');
+            } else {
+                this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-pause"></i> Pause After This Call';
+                this.elements.pauseAutomationBtn.classList.remove('paused');
+
+                // If we're not in a call (paused between calls), resume immediately
+                if (!this.isCallActive && !this.waitingForDisposition) {
+                    this.callNextStudentInQueue();
+                }
+            }
+        }
+    }
+
+    /**
+     * Shows the paused state UI between calls
+     */
+    showPausedState() {
+        if (this.elements.dialBtn) {
+            this.elements.dialBtn.style.background = `${CONFIG.COLORS.WARNING}`;
+            this.elements.dialBtn.style.transform = 'rotate(0deg)';
+            this.elements.dialBtn.disabled = true;
+            this.elements.dialBtn.style.cursor = 'not-allowed';
+            this.elements.dialBtn.style.opacity = '0.6';
+        }
+
+        if (this.elements.callStatusText) {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Paused`;
+        }
+
+        // Hide disposition section
+        if (this.elements.callDispositionSection) {
+            this.elements.callDispositionSection.style.display = 'none';
+        }
+
+        // Update Up Next card
+        this.updateUpNextCard();
+    }
+
+    /**
      * Cancels the automation sequence and returns to normal calling mode
      * Keeps only the current student being called
      */
@@ -449,10 +511,14 @@ export default class CallManager {
         this.automationMode = false;
         this.currentAutomationIndex = 0;
         this.skippedIndices.clear();
+        this.isPaused = false;
 
-        // Hide "Up Next" card
+        // Hide "Up Next" card and pause button
         if (this.elements.upNextCard) {
             this.elements.upNextCard.style.display = 'none';
+        }
+        if (this.elements.pauseAutomationBtn) {
+            this.elements.pauseAutomationBtn.style.display = 'none';
         }
 
         // Reset call UI to regular mode
@@ -602,6 +668,13 @@ export default class CallManager {
         // If in automation mode, move to next student
         if (this.automationMode) {
             this.currentAutomationIndex++;
+
+            // Check if paused — wait instead of calling next
+            if (this.isPaused) {
+                this.showPausedState();
+                return;
+            }
+
             this.callNextStudentInQueue();
         }
     }
@@ -749,6 +822,13 @@ export default class CallManager {
         if (this.automationMode) {
             // Move to next student
             this.currentAutomationIndex++;
+
+            // Check if paused — wait instead of calling next
+            if (this.isPaused) {
+                this.showPausedState();
+                this._dispositionInProgress = false;
+                return;
+            }
 
             // Hide disposition section
             if (this.elements.callDispositionSection) {
@@ -1025,8 +1105,12 @@ export default class CallManager {
             this.automationMode = false;
             this.currentAutomationIndex = 0;
             this.skippedIndices.clear();
+            this.isPaused = false;
             if (this.elements.upNextCard) {
                 this.elements.upNextCard.style.display = 'none';
+            }
+            if (this.elements.pauseAutomationBtn) {
+                this.elements.pauseAutomationBtn.style.display = 'none';
             }
         }
 
