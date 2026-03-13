@@ -129,6 +129,7 @@ import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
 import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
+import { initErrorBlanket } from './modals/error-blanket.js';
 
 import {
     shouldShowLatestUpdatesModal,
@@ -184,6 +185,7 @@ async function resendAllHighlightPings(targetTabId = null) {
 document.addEventListener('DOMContentLoaded', () => {
     blockTextSelection();
     cacheDomElements();
+    initErrorBlanket();
     initializeApp();
 });
 

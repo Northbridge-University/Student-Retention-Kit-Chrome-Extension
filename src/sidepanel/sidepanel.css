@@ -1464,3 +1464,20 @@ input:focus, textarea:focus, select:focus {
     color: var(--text-secondary);
     margin-top: 2px;
 }
+
+/* Error Blanket Overlay */
+#errorBlanket {
+    z-index: 9999;
+}
+
+@keyframes errorShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    40% { transform: translateX(4px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+}
+
+#errorBlanket .modal-content {
+    animation: fadeIn 0.3s, errorShake 0.4s 0.3s;
+}
