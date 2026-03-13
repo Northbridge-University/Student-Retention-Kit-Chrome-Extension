@@ -364,69 +364,146 @@ async function handleFive9DisposeOnly(dispositionType, sendResponse) {
 }
 
 /**
- * Handles restarting the Five9 station to re-establish connection
- * Tries to click the native Five9 button first, falls back to API
+ * Dispatches a proper click event on an element (mousedown → mouseup → click)
+ * to trigger framework event handlers (Angular/React) that may not fire from .click()
+ * @param {HTMLElement} el - The element to click
+ */
+function dispatchRealClick(el) {
+    const opts = { bubbles: true, cancelable: true, view: window };
+    el.dispatchEvent(new MouseEvent('mousedown', opts));
+    el.dispatchEvent(new MouseEvent('mouseup', opts));
+    el.dispatchEvent(new MouseEvent('click', opts));
+}
+
+/**
+ * Polls the Five9 station/agent endpoint to verify the station reconnected.
+ * Checks every 2s for up to maxWaitMs. Sends progress updates back to the extension.
+ * @param {number} maxWaitMs - Maximum time to wait (default 20s)
+ * @returns {Promise<{connected: boolean}>}
+ */
+async function waitForStationReconnect(maxWaitMs = 20000) {
+    const pollInterval = 2000;
+    const maxAttempts = Math.ceil(maxWaitMs / pollInterval);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        await new Promise(r => setTimeout(r, pollInterval));
+
+        try {
+            const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
+            if (!metadataResp.ok) continue;
+            const metadata = await metadataResp.json();
+
+            // Check station status — if we can fetch the agent's station info,
+            // and the stationId/type exists, the station is connected
+            const stationResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station`);
+            if (stationResp.ok) {
+                const station = await stationResp.json();
+                console.log(`SRK: Station poll #${attempt} — station:`, station);
+
+                // Station has reconnected if it has a valid type and id
+                if (station && (station.stationType || station.stationId || station.type)) {
+                    console.log("SRK: Station reconnected confirmed!");
+                    return { connected: true };
+                }
+            }
+        } catch (e) {
+            console.log(`SRK: Station poll #${attempt} error:`, e.message);
+        }
+
+        // Send progress update to sidepanel
+        try {
+            chrome.runtime.sendMessage({
+                type: 'FIVE9_RESTART_PROGRESS',
+                attempt,
+                maxAttempts
+            });
+        } catch (_) { /* ignore if sidepanel isn't listening */ }
+    }
+
+    console.warn("SRK: Station reconnect verification timed out");
+    return { connected: false };
+}
+
+/**
+ * Handles restarting the Five9 station to re-establish connection.
+ * Uses proper event dispatch for button clicks and actively polls to
+ * verify the station reconnected before reporting success.
  */
 async function handleFive9RestartStation(sendResponse) {
     try {
         console.log("SRK: Restarting Five9 station...");
 
-        // First, try to click the native Five9 restart button (triggers full SIP re-registration)
+        let restartTriggered = false;
+        let method = 'none';
+
+        // --- STRATEGY 1: Click the native restart button ---
         const restartButton = document.getElementById('StationConnectedPopover-restart_station-button');
         if (restartButton) {
-            console.log("SRK: Found native restart button, clicking...");
-            restartButton.click();
-            // Give it a moment to process
-            await new Promise(r => setTimeout(r, 500));
-            console.log("SRK: Native restart button clicked");
-            sendResponse({ success: true, method: 'button' });
-            return;
+            console.log("SRK: Found native restart button, dispatching click...");
+            dispatchRealClick(restartButton);
+            restartTriggered = true;
+            method = 'button';
         }
 
-        // If button not found (popover not open), try to open the station popover first
-        const stationIndicator = document.querySelector('[data-f9-template="station-connected-indicator"]') ||
-                                 document.querySelector('.station-connected-indicator') ||
-                                 document.querySelector('#station-indicator');
+        // --- STRATEGY 2: Open the station popover first, then click ---
+        if (!restartTriggered) {
+            const stationIndicator = document.querySelector('[data-f9-template="station-connected-indicator"]') ||
+                                     document.querySelector('.station-connected-indicator') ||
+                                     document.querySelector('#station-indicator');
 
-        if (stationIndicator) {
-            console.log("SRK: Opening station popover...");
-            stationIndicator.click();
-            await new Promise(r => setTimeout(r, 300));
-
-            // Now try to find the restart button again
-            const restartBtnAfterOpen = document.getElementById('StationConnectedPopover-restart_station-button');
-            if (restartBtnAfterOpen) {
-                console.log("SRK: Found restart button after opening popover, clicking...");
-                restartBtnAfterOpen.click();
+            if (stationIndicator) {
+                console.log("SRK: Opening station popover...");
+                dispatchRealClick(stationIndicator);
                 await new Promise(r => setTimeout(r, 500));
-                console.log("SRK: Native restart button clicked");
-                sendResponse({ success: true, method: 'button' });
+
+                const restartBtnAfterOpen = document.getElementById('StationConnectedPopover-restart_station-button');
+                if (restartBtnAfterOpen) {
+                    console.log("SRK: Found restart button after opening popover, dispatching click...");
+                    dispatchRealClick(restartBtnAfterOpen);
+                    restartTriggered = true;
+                    method = 'button';
+                }
+            }
+        }
+
+        // --- STRATEGY 3: Fallback to REST API ---
+        if (!restartTriggered) {
+            console.log("SRK: Native button not found, falling back to API...");
+
+            const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
+            if (!metadataResp.ok) throw new Error("Could not fetch User Metadata");
+            const metadata = await metadataResp.json();
+
+            const restartUrl = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station/restart`;
+
+            const restartResp = await fetch(restartUrl, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ value: null })
+            });
+
+            if (restartResp.ok || restartResp.status === 204) {
+                restartTriggered = true;
+                method = 'api';
+            } else {
+                const errorText = await restartResp.text();
+                console.error("SRK Station Restart API Error:", restartResp.status, errorText);
+                sendResponse({ success: false, error: `${restartResp.status} - ${errorText}` });
                 return;
             }
         }
 
-        // Fallback to API call if button not found
-        console.log("SRK: Native button not found, falling back to API...");
+        console.log(`SRK: Restart triggered via ${method}, now verifying reconnection...`);
 
-        const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
-        if (!metadataResp.ok) throw new Error("Could not fetch User Metadata");
-        const metadata = await metadataResp.json();
+        // --- ACTIVELY POLL to verify station reconnected ---
+        const result = await waitForStationReconnect(20000);
 
-        const restartUrl = `https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station/restart`;
-
-        const restartResp = await fetch(restartUrl, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ value: null })
-        });
-
-        if (restartResp.ok || restartResp.status === 204) {
-            console.log("SRK: Station restart API call successful");
-            sendResponse({ success: true, method: 'api' });
+        if (result.connected) {
+            console.log("SRK: Station restart verified — connection confirmed");
+            sendResponse({ success: true, method, verified: true });
         } else {
-            const errorText = await restartResp.text();
-            console.error("SRK Station Restart Error:", restartResp.status, errorText);
-            sendResponse({ success: false, error: `${restartResp.status} - ${errorText}` });
+            console.warn("SRK: Station restart sent but could not verify reconnection");
+            sendResponse({ success: true, method, verified: false, warning: "Restart triggered but reconnection not confirmed within timeout" });
         }
 
     } catch (error) {
