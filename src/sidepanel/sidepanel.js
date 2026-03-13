@@ -1,5 +1,5 @@
 // Sidepanel Main - Orchestrates all modules and manages app lifecycle
-import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES } from '../constants/index.js';
+import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
@@ -140,6 +140,8 @@ import { QueueManager } from './queue-manager.js';
 
 import {
     updateFive9ConnectionIndicator,
+    checkFive9Connection,
+    getCachedDebugMode,
     startFive9ConnectionMonitor,
     stopFive9ConnectionMonitor,
     setupFive9StatusListeners,
@@ -1998,6 +2000,16 @@ async function handleSelectedStudentsMessage(msg) {
 
         // Auto-initiate the call if requested (ribbon call button)
         if (autoCall) {
+            // Check Five9 readiness before auto-calling (skip check in demo mode)
+            const isDebugMode = getCachedDebugMode();
+            if (!isDebugMode) {
+                const connectionState = await checkFive9Connection();
+                if (connectionState !== FIVE9_CONNECTION_STATES.ACTIVE_CONNECTION) {
+                    console.log(`%c [Sidepanel] Five9 not ready (${connectionState}) — skipping auto-call from ribbon`, 'color: orange; font-weight: bold');
+                    return;
+                }
+            }
+
             // Small delay to let the UI render the new student before dialing
             setTimeout(() => {
                 console.log('%c [Sidepanel] Auto-initiating call from ribbon', 'color: green; font-weight: bold');
