@@ -24,10 +24,14 @@ export const RELEASE_NOTES = {
     // The key should match the version in manifest.json
 	'13.1': {
         title: 'Latest Updates',
-        date: 'March 10, 2026',
+        date: 'March 13, 2026',
         updates: [
 			'Improved Update Master List Process',
-			'Created the Call Button support for Excel Add In',
+			'Created the Call Button on the Excel Ribbon',
+			'Improved connection relability with Five9',
+			'Added SSO Microsoft login button for Five9',
+			'Improved automation sequence in calls',
+			'Added a pause feature for call automations'
         ]
     },
 	'13.0': {
