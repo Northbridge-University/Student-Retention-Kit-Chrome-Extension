@@ -81,9 +81,9 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
                         ${data.daysOut != null ? `<div style="font-size: 0.8em; color: var(--text-secondary);">${data.daysOut} Days Out</div>` : ''}
                     </div>
                 </div>
-                <button class="queue-remove-btn" data-index="${entry.originalIndex}" title="Remove from queue">
+                ${isCurrent ? '' : `<button class="queue-remove-btn" data-index="${entry.originalIndex}" title="Remove from queue">
                     <i class="fas fa-trash-can"></i>
-                </button>
+                </button>`}
             </div>
         `;
 
@@ -94,14 +94,16 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
         li.addEventListener('drop', (e) => handleDrop(e, onReorder));
         li.addEventListener('dragleave', (e) => handleDragLeave(e));
 
-        // Remove button
+        // Remove button (not present for current call)
         const removeBtn = li.querySelector('.queue-remove-btn');
-        removeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (onRemove) {
-                onRemove(entry.originalIndex);
-            }
-        });
+        if (removeBtn) {
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (onRemove) {
+                    onRemove(entry.originalIndex);
+                }
+            });
+        }
 
         elements.queueList.appendChild(li);
     });
@@ -118,7 +120,7 @@ function handleDragStart(e) {
 function handleDragEnd(e) {
     e.currentTarget.classList.remove('dragging');
     document.querySelectorAll('.queue-item-draggable').forEach(item => {
-        item.classList.remove('drag-over');
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
     });
 }
 
@@ -130,14 +132,22 @@ function handleDragOver(e) {
 
     const afterElement = e.currentTarget;
     if (afterElement !== draggedElement) {
-        afterElement.classList.add('drag-over');
+        const rect = afterElement.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+
+        afterElement.classList.remove('drag-over-top', 'drag-over-bottom');
+        if (e.clientY < midY) {
+            afterElement.classList.add('drag-over-top');
+        } else {
+            afterElement.classList.add('drag-over-bottom');
+        }
     }
 
     return false;
 }
 
 function handleDragLeave(e) {
-    e.currentTarget.classList.remove('drag-over');
+    e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom');
 }
 
 function handleDrop(e, onReorder) {

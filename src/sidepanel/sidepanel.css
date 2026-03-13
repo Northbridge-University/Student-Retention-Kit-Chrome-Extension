@@ -663,8 +663,12 @@ input:focus, textarea:focus, select:focus {
     opacity: 0.5;
 }
 
-.queue-item-draggable.drag-over {
+.queue-item-draggable.drag-over-top {
     border-top: 3px solid var(--primary-color);
+}
+
+.queue-item-draggable.drag-over-bottom {
+    border-bottom: 3px solid var(--primary-color);
 }
 
 .queue-remove-btn {
