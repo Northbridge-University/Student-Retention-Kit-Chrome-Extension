@@ -206,8 +206,9 @@ export async function setActiveStudent(rawEntry, callManager) {
 /**
  * Sets the automation mode UI with gray styling
  * @param {number} queueLength - Number of students in queue
+ * @param {Array} [queue] - The full queue array, used to show "Up Next" preview
  */
-export function setAutomationModeUI(queueLength) {
+export function setAutomationModeUI(queueLength, queue) {
     const contactTab = document.getElementById('contact');
     if (!contactTab) return;
 
@@ -251,6 +252,18 @@ export function setAutomationModeUI(queueLength) {
     // Show Manage Queue Button
     if (elements.manageQueueBtn) {
         elements.manageQueueBtn.style.display = 'block';
+    }
+
+    // Show "Up Next" preview with the first student in queue
+    if (queue && queue.length > 0 && elements.upNextCard && elements.upNextName) {
+        const firstName = queue[0].name || 'Unknown Student';
+        elements.upNextCard.style.display = 'block';
+        elements.upNextName.textContent = firstName;
+
+        // Hide the skip button in pre-automation preview
+        if (elements.skipStudentBtn) {
+            elements.skipStudentBtn.style.display = 'none';
+        }
     }
 }
 
