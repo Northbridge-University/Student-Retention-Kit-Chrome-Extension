@@ -426,12 +426,41 @@ async function waitForStationReconnect(maxWaitMs = 20000) {
 
 /**
  * Handles restarting the Five9 station to re-establish connection.
+ * First checks if the station is already connected (common after SSO re-login),
+ * and if so skips the restart and just notifies the background.
  * Uses proper event dispatch for button clicks and actively polls to
  * verify the station reconnected before reporting success.
  */
 async function handleFive9RestartStation(sendResponse) {
     try {
         console.log("SRK: Restarting Five9 station...");
+
+        // --- PRE-CHECK: Is the station already connected? ---
+        // This handles the case where the user closed the Five9 tab, reopened via SSO,
+        // and the agent session is still active — no restart needed.
+        try {
+            const metadataResp = await fetch("https://app-scl.five9.com/appsvcs/rs/svc/auth/metadata");
+            if (metadataResp.ok) {
+                const metadata = await metadataResp.json();
+                const stationResp = await fetch(`https://app-scl.five9.com/appsvcs/rs/svc/agents/${metadata.userId}/station`);
+                if (stationResp.ok) {
+                    const station = await stationResp.json();
+                    if (station && (station.stationType || station.stationId || station.type)) {
+                        console.log("SRK: Station is already connected, skipping restart:", station);
+
+                        // Notify background so it updates connection state
+                        try {
+                            chrome.runtime.sendMessage({ type: 'FIVE9_STATION_RESTART_VERIFIED' });
+                        } catch (_) { /* ignore */ }
+
+                        sendResponse({ success: true, method: 'already_connected', verified: true });
+                        return;
+                    }
+                }
+            }
+        } catch (e) {
+            console.log("SRK: Pre-check failed, proceeding with restart:", e.message);
+        }
 
         let restartTriggered = false;
         let method = 'none';
