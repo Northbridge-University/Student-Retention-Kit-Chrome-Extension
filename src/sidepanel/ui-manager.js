@@ -43,6 +43,7 @@ export function cacheDomElements() {
     elements.upNextCard = document.getElementById('upNextCard');
     elements.upNextName = document.getElementById('upNextName');
     elements.skipStudentBtn = document.getElementById('skipStudentBtn');
+    elements.pauseAutomationBtn = document.getElementById('pauseAutomationBtn');
 
     // Call Tab - Student Card & Placeholder Logic
     const contactTab = document.getElementById('contact');

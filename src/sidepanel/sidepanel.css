@@ -729,6 +729,40 @@ input:focus, textarea:focus, select:focus {
     opacity: 0.3;
 }
 
+/* Pause Automation Button */
+.pause-automation-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(107, 114, 128, 0.3);
+    border-radius: 0.75rem;
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.pause-automation-btn:hover {
+    background: rgba(107, 114, 128, 0.2);
+    border-color: rgba(107, 114, 128, 0.5);
+}
+
+.pause-automation-btn.paused {
+    background: rgba(234, 179, 8, 0.15);
+    border-color: rgba(234, 179, 8, 0.4);
+    color: #b45309;
+}
+
+.pause-automation-btn.paused:hover {
+    background: rgba(234, 179, 8, 0.25);
+    border-color: rgba(234, 179, 8, 0.6);
+}
+
 /* Context Menu */
 .context-menu {
     position: absolute;

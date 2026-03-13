@@ -184,6 +184,11 @@ export class QueueManager {
         if (elements.contactAvatar) {
             elements.contactAvatar.textContent = count;
         }
+
+        // Update "Up Next" preview with the current first student
+        if (elements.upNextCard && elements.upNextName && this.selectedQueue.length > 0) {
+            elements.upNextName.textContent = this.selectedQueue[0].name || 'Unknown Student';
+        }
     }
 
     /**
