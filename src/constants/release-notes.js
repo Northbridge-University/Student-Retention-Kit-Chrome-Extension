@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'13.2': {
+        title: 'Latest Updates',
+        date: 'March 16, 2026',
+        updates: [
+			'Hotfix Five9 tab not being detected',
+			'Report any bugs via the settings section'
+        ]
+    },
 	'13.1': {
         title: 'Latest Updates',
         date: 'March 13, 2026',
