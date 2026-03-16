@@ -612,7 +612,7 @@ export default class CallManager {
      */
     async focusFive9Tab() {
         try {
-            const tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
+            const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
             if (tabs.length > 0) {
                 await chrome.tabs.update(tabs[0].id, { active: true });
                 await chrome.windows.update(tabs[0].windowId, { focused: true });

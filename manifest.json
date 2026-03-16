@@ -22,7 +22,7 @@
     "https://*.officeapps.live.com/*",
     "https://*.sharepoint.com/*",
     "https://vsblanco.github.io/*",
-    "https://app-scl.five9.com/*",
+    "https://*.five9.com/*",
     "https://*.five9.net/*",
     "https://m365.cloud.microsoft/*"
   ],
@@ -62,7 +62,7 @@
       "all_frames": true
     },
     {
-      "matches": ["https://app-scl.five9.com/*"],
+      "matches": ["https://*.five9.com/*"],
       "js": ["src/content/five9Connector.js"],
       "run_at": "document_idle"
     }
