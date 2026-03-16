@@ -630,7 +630,7 @@ export async function updateFive9Status() {
             return;
         }
 
-        const five9Tabs = await chrome.tabs.query({ url: "https://app-scl.five9.com/*" });
+        const five9Tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
 
         if (five9Tabs.length === 0) {
             elements.five9StatusText.textContent = 'Not connected';
