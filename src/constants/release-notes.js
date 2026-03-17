@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'14.0': {
+        title: 'Latest Updates',
+        date: 'March 17, 2026',
+        updates: [
+			'Prepping before biggest update',
+			'Added Generate Report Button on Excel'
+        ]
+    },
 	'13.2': {
         title: 'Latest Updates',
         date: 'March 16, 2026',
