@@ -89,6 +89,22 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
+                <Control xsi:type="Button" id="GenerateReportButton">
+                  <Label resid="GenerateReportButton.Label"/>
+                  <Supertip>
+                    <Title resid="GenerateReportButton.Label"/>
+                    <Description resid="GenerateReportButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="ReportIcon.16x16"/>
+                    <bt:Image size="32" resid="ReportIcon.32x32"/>
+                    <bt:Image size="80" resid="ReportIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ReportGenerationPane</TaskpaneId>
+                    <SourceLocation resid="ReportGeneration.Url"/>
+                  </Action>
+                </Control>
                 <Control xsi:type="Button" id="CreateLdaButton">
                   <Label resid="CreateLdaButton.Label"/>
                   <Supertip>
@@ -186,6 +202,9 @@
         <bt:Image id="CallIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/call-icon.png"/>
         <bt:Image id="CallIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/call-icon.png"/>
         <bt:Image id="CallIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/call-icon.png"/>
+        <bt:Image id="ReportIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-16.png"/>
+        <bt:Image id="ReportIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-32.png"/>
+        <bt:Image id="ReportIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
@@ -195,6 +214,7 @@
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=create-lda"/>
         <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
         <bt:Url id="PersonalizedEmail.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=personalized-email"/>
+        <bt:Url id="ReportGeneration.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=report-generation"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -207,6 +227,7 @@
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
         <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Emails"/>
         <bt:String id="CallQueueButton.Label" DefaultValue="Call"/>
+        <bt:String id="GenerateReportButton.Label" DefaultValue="Generate Report"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
@@ -215,6 +236,7 @@
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
         <bt:String id="CallQueueButton.Tooltip" DefaultValue="Sends selected student(s) to the Chrome Extension call queue."/>
+        <bt:String id="GenerateReportButton.Tooltip" DefaultValue="Opens the report generation panel to create and export retention reports."/>
       </bt:LongStrings>
     </Resources>
 
