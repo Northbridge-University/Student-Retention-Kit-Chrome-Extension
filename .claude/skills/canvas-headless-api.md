@@ -1,5 +1,5 @@
 ---
-name: Canvas Headless API
+name: canvas-headless-api
 description: How we interact with the Canvas LMS REST API v1 using session cookies (headless/cookie-based auth) — no OAuth tokens
 ---
 
