@@ -1,3 +1,8 @@
+---
+name: five9-communication
+description: How the Chrome extension communicates with Five9 — detecting login state, starting/ending calls, and setting dispositions
+---
+
 # Five9 Communication
 
 How the Chrome extension detects Five9 login state, starts/ends calls, and sets dispositions.
