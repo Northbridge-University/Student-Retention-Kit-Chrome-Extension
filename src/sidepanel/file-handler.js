@@ -342,9 +342,16 @@ for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
     }
 }
 // Also pre-compute normalized names for MASTER_LIST_COLUMNS fields without aliases
+// and register each column's header text as an alias for its field
 for (const col of MASTER_LIST_COLUMNS) {
     if (!_normalizedFieldNames[col.field]) {
         _normalizedFieldNames[col.field] = normalizeFieldName(col.field);
+    }
+    // Register the column header (e.g. "Student Name" → "studentname" → field "name")
+    // so headers match even if FIELD_ALIASES doesn't cover them
+    const normalizedHeader = normalizeFieldName(col.header);
+    if (normalizedHeader && !_normalizedAliasToField[normalizedHeader]) {
+        _normalizedAliasToField[normalizedHeader] = col.field;
     }
 }
 
@@ -360,12 +367,18 @@ for (const col of MASTER_LIST_COLUMNS) {
 function findColumnIndex(normalizedHeaders, rawHeaders, fieldName) {
     const normalizedFieldName = _normalizedFieldNames[fieldName] || normalizeFieldName(fieldName);
 
+    // Also get the normalized MASTER_LIST_COLUMNS header for this field (e.g. "studentname" for "name")
+    const colDef = MASTER_LIST_COLUMNS.find(c => c.field === fieldName);
+    const normalizedColHeader = colDef ? normalizeFieldName(colDef.header) : '';
+
     for (let i = 0; i < normalizedHeaders.length; i++) {
         const nh = normalizedHeaders[i];
         // Direct match against the target field name
         if (nh === normalizedFieldName) return i;
         // Alias match: check if this header is a known alias for the target field
         if (_normalizedAliasToField[nh] === fieldName) return i;
+        // Header label match: compare against the MASTER_LIST_COLUMNS header text
+        if (normalizedColHeader && nh === normalizedColHeader) return i;
     }
     return -1;
 }
