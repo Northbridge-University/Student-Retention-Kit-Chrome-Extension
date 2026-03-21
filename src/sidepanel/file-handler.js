@@ -548,6 +548,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         }
 
         if (rows.length < 2) {
+            console.warn(`File parse: file has only ${rows.length} row(s) — need at least a header row and one data row.`);
             return { students: [], referenceDate: null };
         }
 
@@ -576,6 +577,14 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         }
 
         if (headerRowIndex === -1) {
+            // Log the first few rows so the user can see what headers were found
+            const sampleRows = rows.slice(0, 5).map((r, idx) => `  Row ${idx}: [${(r || []).join(', ')}]`).join('\n');
+            const acceptedNames = ['Name', 'StudentName', 'Student', ...(FIELD_ALIASES.name || [])];
+            console.warn(
+                `File parse: no header row found containing a "Name" column.\n` +
+                `Accepted header names (case-insensitive): ${acceptedNames.join(', ')}\n` +
+                `First rows in file:\n${sampleRows}`
+            );
             return { students: [], referenceDate: null };
         }
 
@@ -626,6 +635,11 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
 
         // Ensure we have at least a name column
         if (!columnMapping.name) {
+            console.warn(
+                `File parse: header row found at row ${headerRowIndex}, but no "Name" column could be mapped.\n` +
+                `Headers found: [${headers.join(', ')}]\n` +
+                `Normalized headers: [${normalizedHeaders.join(', ')}]`
+            );
             return { students: [], referenceDate: null };
         }
 
@@ -694,12 +708,21 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
 
         // Parse data rows
         let students = [];
+        let skippedEmptyRows = 0;
+        let skippedInvalidNames = 0;
+        const invalidNameSamples = [];
         for (let i = headerRowIndex + 1; i < rows.length; i++) {
             const row = rows[i];
-            if (!row || row.length === 0) continue;
+            if (!row || row.length === 0) { skippedEmptyRows++; continue; }
 
             const studentName = row[columnMapping.name];
-            if (!isValidStudentName(studentName)) continue;
+            if (!isValidStudentName(studentName)) {
+                skippedInvalidNames++;
+                if (invalidNameSamples.length < 5) {
+                    invalidNameSamples.push({ row: i, value: studentName });
+                }
+                continue;
+            }
 
             // Create entry with ONLY whitelisted columns from MASTER_LIST_COLUMNS
             const entry = {};
@@ -810,6 +833,20 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
             }
 
             students.push(entry);
+        }
+
+        if (students.length === 0 && (skippedEmptyRows > 0 || skippedInvalidNames > 0)) {
+            const totalDataRows = rows.length - headerRowIndex - 1;
+            const sampleInfo = invalidNameSamples.length > 0
+                ? `\nSample invalid name values: ${invalidNameSamples.map(s => `Row ${s.row}: ${JSON.stringify(s.value)}`).join(', ')}`
+                : '';
+            console.warn(
+                `File parse: header row found at row ${headerRowIndex} with "Name" in column ${columnMapping.name}, ` +
+                `but all ${totalDataRows} data row(s) were skipped.\n` +
+                `  Empty rows: ${skippedEmptyRows}\n` +
+                `  Invalid name values: ${skippedInvalidNames} (empty, all-digits, or contains "/")` +
+                sampleInfo
+            );
         }
 
         // Detect Academic report and deduplicate by SyStudentId
@@ -1405,6 +1442,16 @@ export async function handleFileImport(files, onSuccess) {
             const isAttendanceReport = result.isAttendanceReport;
 
             if (students.length === 0) {
+                // Detailed diagnostics were already logged by parseFileWithSheetJS above.
+                // Add file-level context here so the user can identify the problem.
+                console.error(
+                    `Upload failed for "${file.name}" (${isCSV ? 'CSV' : 'XLSX'}, ${(file.size / 1024).toFixed(1)} KB).\n` +
+                    `No students were extracted. Common causes:\n` +
+                    `  1. Missing "Name" column — the header row must include one of: Name, StudentName, Student\n` +
+                    `  2. File has fewer than 2 rows (need a header row + at least one data row)\n` +
+                    `  3. All student name values are empty, purely numeric, or contain "/" characters\n` +
+                    `Check the warnings above for which specific check failed.`
+                );
                 throw new Error("No valid student data found (Check header row).");
             }
 
