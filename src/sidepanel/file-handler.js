@@ -248,8 +248,10 @@ export async function sendMasterListWithMissingAssignmentsToExcel(students, targ
  */
 function isValidStudentName(name) {
     if (!name) return false;
-    if (/^\d+$/.test(name)) return false;  // All digits
-    if (name.includes('/')) return false;   // Contains date-like patterns
+    const str = String(name).trim();
+    if (!str) return false;
+    if (/^\d+$/.test(str)) return false;  // All digits (e.g. student ID in wrong column)
+    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str)) return false;  // Date pattern like "3/21/2026"
     return true;
 }
 
@@ -535,6 +537,8 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         const worksheet = workbook.Sheets[firstSheetName];
         const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
+        console.log(`File parse: ${isCSV ? 'CSV' : 'XLSX'}, sheet "${firstSheetName}", ${rows.length} rows, ${rows[0] ? rows[0].length : 0} columns.`);
+
         // Determine reference date for daysOut calculation
         // For Excel files, try to get creation date from workbook properties
         // Otherwise use file modified time or current date
@@ -549,7 +553,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
 
         if (rows.length < 2) {
             console.warn(`File parse: file has only ${rows.length} row(s) — need at least a header row and one data row.`);
-            return { students: [], referenceDate: null };
+            return { students: [], referenceDate: null, _failReason: 'too_few_rows', _rowCount: rows.length };
         }
 
         // Find header row
@@ -577,6 +581,27 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
         }
 
         if (headerRowIndex === -1) {
+            // Fuzzy fallback: look for any header containing "name" as a substring
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+                const nameColIdx = row.findIndex(cell => {
+                    if (!cell) return false;
+                    const normalized = normalizeFieldName(cell);
+                    return normalized.includes('name');
+                });
+                if (nameColIdx !== -1) {
+                    headerRowIndex = i;
+                    headers = row;
+                    console.warn(
+                        `File parse: no exact "Name" header match, but found "${row[nameColIdx]}" in row ${i} via fuzzy match.`
+                    );
+                    break;
+                }
+            }
+        }
+
+        if (headerRowIndex === -1) {
             // Log the first few rows so the user can see what headers were found
             const sampleRows = rows.slice(0, 5).map((r, idx) => `  Row ${idx}: [${(r || []).join(', ')}]`).join('\n');
             const acceptedNames = ['Name', 'StudentName', 'Student', ...(FIELD_ALIASES.name || [])];
@@ -585,7 +610,7 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 `Accepted header names (case-insensitive): ${acceptedNames.join(', ')}\n` +
                 `First rows in file:\n${sampleRows}`
             );
-            return { students: [], referenceDate: null };
+            return { students: [], referenceDate: null, _failReason: 'no_header' };
         }
 
         // Pre-normalize all headers once for efficient column matching
@@ -606,6 +631,11 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 }
             }
         });
+
+        const mappedFields = Object.keys(columnMapping);
+        const unmappedHeaders = headers.filter((h, idx) => h && !Object.values(columnMapping).includes(idx));
+        console.log(`File parse: header at row ${headerRowIndex}. Mapped ${mappedFields.length} columns: [${mappedFields.join(', ')}].` +
+            (unmappedHeaders.length > 0 ? ` Unmapped headers: [${unmappedHeaders.join(', ')}].` : ''));
 
         // Guard: if the mapped "grade" column contains year-level classification values
         // (0-4, possibly with descriptive text like "3 - 3rd year/junior"), skip it
@@ -635,12 +665,21 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
 
         // Ensure we have at least a name column
         if (!columnMapping.name) {
-            console.warn(
-                `File parse: header row found at row ${headerRowIndex}, but no "Name" column could be mapped.\n` +
-                `Headers found: [${headers.join(', ')}]\n` +
-                `Normalized headers: [${normalizedHeaders.join(', ')}]`
-            );
-            return { students: [], referenceDate: null };
+            // Fuzzy fallback: find a header containing "name" and use it as the name column
+            const fuzzyNameIdx = normalizedHeaders.findIndex(nh => nh.includes('name'));
+            if (fuzzyNameIdx !== -1) {
+                columnMapping.name = fuzzyNameIdx;
+                console.warn(
+                    `File parse: no exact "name" column mapping, using fuzzy match "${headers[fuzzyNameIdx]}" (column ${fuzzyNameIdx}).`
+                );
+            } else {
+                console.warn(
+                    `File parse: header row found at row ${headerRowIndex}, but no "Name" column could be mapped.\n` +
+                    `Headers found: [${headers.join(', ')}]\n` +
+                    `Normalized headers: [${normalizedHeaders.join(', ')}]`
+                );
+                return { students: [], referenceDate: null, _failReason: 'no_name_column', _headers: headers.filter(Boolean) };
+            }
         }
 
         // Locate FinalNumericGrade column for internal use (Last Course Grade derivation)
@@ -1442,17 +1481,23 @@ export async function handleFileImport(files, onSuccess) {
             const isAttendanceReport = result.isAttendanceReport;
 
             if (students.length === 0) {
-                // Detailed diagnostics were already logged by parseFileWithSheetJS above.
-                // Add file-level context here so the user can identify the problem.
+                // Build a specific error message based on the failure reason from parseFileWithSheetJS
+                const reason = result._failReason;
+                let detail;
+                if (reason === 'too_few_rows') {
+                    detail = `File has only ${result._rowCount} row(s) — need at least a header row and one data row.`;
+                } else if (reason === 'no_header') {
+                    detail = `No header row found with a "Name" column. Accepted names: Name, Student Name, StudentName, Student.`;
+                } else if (reason === 'no_name_column') {
+                    detail = `Header row found but no "Name" column recognized. Headers in file: ${(result._headers || []).join(', ')}`;
+                } else {
+                    detail = `Header row and "Name" column found, but all student name values were empty, purely numeric, or contained "/" characters.`;
+                }
                 console.error(
                     `Upload failed for "${file.name}" (${isCSV ? 'CSV' : 'XLSX'}, ${(file.size / 1024).toFixed(1)} KB).\n` +
-                    `No students were extracted. Common causes:\n` +
-                    `  1. Missing "Name" column — the header row must include one of: Name, StudentName, Student\n` +
-                    `  2. File has fewer than 2 rows (need a header row + at least one data row)\n` +
-                    `  3. All student name values are empty, purely numeric, or contain "/" characters\n` +
-                    `Check the warnings above for which specific check failed.`
+                    `Reason: ${detail}`
                 );
-                throw new Error("No valid student data found (Check header row).");
+                throw new Error(`No valid student data found: ${detail}`);
             }
 
             // If supplementary files were selected, merge their extra columns
