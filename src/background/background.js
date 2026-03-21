@@ -385,7 +385,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 });
 
-chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // IMPORTANT: Don't handle SRK_GET_MANIFEST_XML here — it's handled by the
+  // dedicated synchronous listener above. An async listener always returns a
+  // Promise (truthy), which can cause Chrome to close the sendResponse port
+  // before the sync listener's fetch completes, resulting in an undefined
+  // response on the content-script side.
+  if (msg.type === MESSAGE_TYPES.SRK_GET_MANIFEST_XML) return false;
+
+  // Wrap in async IIFE so the outer function stays synchronous and can
+  // return false/true correctly to Chrome's messaging system.
+  const _handleAsync = (async () => {
   if (msg.type === MESSAGE_TYPES.REQUEST_STORED_LOGS) {
       if (logBuffer.length > 0) {
           safeSendMessage({ type: MESSAGE_TYPES.STORED_LOGS, payload: logBuffer }, 'stored logs');
@@ -409,13 +419,6 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
       await sendHighlightStudentRowPayload(entry, msg.targetTabId || null);
     }
     console.log('Resent all highlight pings for', foundEntries.length, 'students');
-  } else if (msg.type === 'GET_FIVE9_CONNECTION_STATE') {
-    // Return current Five9 connection state
-    sendResponse({
-      state: five9ConnectionState,
-      lastAgentConnectionTime: lastAgentConnectionTime
-    });
-    return true; // Keep channel open for async response
   } else if (msg.type === 'FIVE9_STATION_RESTART_VERIFIED') {
     // Content script verified station reconnected after restart —
     // update state immediately since the webRequest listener may not fire
@@ -794,7 +797,6 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
               }
           });
       })();
-      return true;
   }
   else if (msg.type === 'triggerFive9Hangup') {
       (async () => {
@@ -821,7 +823,6 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
               }
           });
       })();
-      return true;
   }
   else if (msg.type === 'triggerFive9DisposeOnly') {
       (async () => {
@@ -848,8 +849,25 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
               }
           });
       })();
-      return true;
   }
+  })(); // end _handleAsync IIFE
+
+  // Synchronous handlers that need sendResponse — must live outside the async IIFE
+  if (msg.type === 'GET_FIVE9_CONNECTION_STATE') {
+    sendResponse({
+      state: five9ConnectionState,
+      lastAgentConnectionTime: lastAgentConnectionTime
+    });
+    return true;
+  }
+
+  // For triggerFive9* messages the async IIFE calls sendResponse via callbacks,
+  // so we must keep the port open.
+  if (msg.type === 'triggerFive9Call' || msg.type === 'triggerFive9Hangup' || msg.type === 'triggerFive9DisposeOnly') {
+    return true;
+  }
+
+  return false; // No sendResponse needed for all other message types
 });
 
 // --- HIGHLIGHT STUDENT ROW HANDLING ---

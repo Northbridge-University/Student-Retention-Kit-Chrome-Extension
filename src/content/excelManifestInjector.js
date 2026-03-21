@@ -10,16 +10,26 @@ let MANIFEST_XML = null;
 
 async function loadManifestXML() {
     if (MANIFEST_XML) return MANIFEST_XML;
-    try {
-        const response = await chrome.runtime.sendMessage({ type: 'SRK_GET_MANIFEST_XML' });
-        if (!response?.success) {
-            throw new Error(response?.error || 'Background script returned failure');
+    // Retry up to 3 times with increasing delay — the background service worker
+    // may not be ready on the first attempt (race condition on extension startup).
+    const MAX_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const response = await chrome.runtime.sendMessage({ type: 'SRK_GET_MANIFEST_XML' });
+            if (!response?.success) {
+                throw new Error(response?.error || 'Background script returned failure');
+            }
+            MANIFEST_XML = response.xml;
+            return MANIFEST_XML;
+        } catch (error) {
+            console.warn(`[SRK Injector] Manifest XML load attempt ${attempt}/${MAX_RETRIES} failed:`, error.message);
+            if (attempt < MAX_RETRIES) {
+                await new Promise(r => setTimeout(r, 500 * attempt));
+            } else {
+                console.error('[SRK Injector] Failed to load manifest XML after all retries:', error);
+                throw error;
+            }
         }
-        MANIFEST_XML = response.xml;
-        return MANIFEST_XML;
-    } catch (error) {
-        console.error('[SRK Injector] Failed to load manifest XML via background script:', error);
-        throw error;
     }
 }
 
