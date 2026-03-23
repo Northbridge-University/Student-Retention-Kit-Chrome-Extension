@@ -24,10 +24,11 @@ export const RELEASE_NOTES = {
     // The key should match the version in manifest.json
 	'14.0': {
         title: 'Latest Updates',
-        date: 'March 17, 2026',
+        date: 'March 23, 2026',
         updates: [
-			'Prepping before biggest update',
-			'Added Generate Report Button on Excel'
+			'Fixed Numerous Bugs',
+			'Improved Update Master List Process',
+			'Improved Calling Five9 Feature',
         ]
     },
 	'13.2': {
