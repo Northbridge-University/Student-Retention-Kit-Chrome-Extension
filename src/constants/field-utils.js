@@ -63,10 +63,12 @@ export function formatDateToMMDDYY(date) {
  * @returns {boolean} True if value appears to be an Excel date number
  */
 export function isExcelDateNumber(value) {
-    if (typeof value !== 'number') return false;
-    if (!Number.isInteger(value)) return false;
+    const num = typeof value === 'number' ? value
+        : (typeof value === 'string' && /^\d+$/.test(value.trim())) ? Number(value.trim())
+        : NaN;
+    if (!Number.isInteger(num)) return false;
     // Reasonable range: 1 (1/1/1900) to 100000 (~year 2173)
-    if (value < 1 || value > 100000) return false;
+    if (num < 1 || num > 100000) return false;
     return true;
 }
 
@@ -80,7 +82,10 @@ export function isExcelDateNumber(value) {
 export function convertExcelDate(value) {
     if (isExcelDateNumber(value)) {
         const jsDate = excelDateToJSDate(value);
-        return formatDateToMMDDYY(jsDate);
+        const month = String(jsDate.getMonth() + 1).padStart(2, '0');
+        const day = String(jsDate.getDate()).padStart(2, '0');
+        const year = jsDate.getFullYear();
+        return `${month}-${day}-${year}`;
     }
     return value;
 }

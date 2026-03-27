@@ -868,9 +868,12 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 if (!attendanceRowsBySyId.has(syId)) {
                     attendanceRowsBySyId.set(syId, []);
                 }
-                const attDateVal = attDateColIndex !== -1 && attDateColIndex < row.length
-                    ? String(row[attDateColIndex] || '').trim()
+                const attDateRaw = attDateColIndex !== -1 && attDateColIndex < row.length
+                    ? row[attDateColIndex]
                     : '';
+                const attDateVal = attDateRaw instanceof Date
+                    ? attDateRaw
+                    : String(attDateRaw || '').trim();
                 const startTimeVal = attStartTimeColIndex !== -1 && attStartTimeColIndex < row.length
                     ? String(row[attStartTimeColIndex] || '').trim()
                     : '';
@@ -1376,9 +1379,12 @@ function mergeSupplementaryFile(students, data, isCSV) {
             if (!student._attendanceRows) {
                 student._attendanceRows = [];
             }
-            const attDateVal = suppAttDateCol !== -1 && suppAttDateCol < row.length
-                ? String(row[suppAttDateCol] || '').trim()
+            const attDateRaw = suppAttDateCol !== -1 && suppAttDateCol < row.length
+                ? row[suppAttDateCol]
                 : '';
+            const attDateVal = attDateRaw instanceof Date
+                ? attDateRaw
+                : String(attDateRaw || '').trim();
             const startTimeVal = suppStartTimeCol !== -1 && suppStartTimeCol < row.length
                 ? String(row[suppStartTimeCol] || '').trim()
                 : '';
@@ -2425,7 +2431,7 @@ export async function exportAttendanceOnly() {
             const dayName = DAY_ABBR[d.getDay()];
             const month = MONTH_ABBR[d.getMonth()];
             const day = d.getDate();
-            const yr = String(d.getFullYear()).slice(-2);
+            const yr = d.getFullYear();
             return `${month} ${day}, ${yr} (${dayName})`;
         }
 
@@ -3260,7 +3266,7 @@ export async function exportMasterListCSV() {
             const DAY_ABBR_ATT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             const MONTH_ABBR_ATT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             function fmtDateLabel(d) {
-                return `${MONTH_ABBR_ATT[d.getMonth()]} ${d.getDate()}, ${String(d.getFullYear()).slice(-2)} (${DAY_ABBR_ATT[d.getDay()]})`;
+                return `${MONTH_ABBR_ATT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} (${DAY_ABBR_ATT[d.getDay()]})`;
             }
 
             const dailyRows = [...dailyAgg.entries()]
