@@ -2531,7 +2531,7 @@ export async function exportAttendanceOnly() {
                 startRow: 1,
                 totalsRowFunctions: totalsFunctions4,
                 totalsRowLabels: totalsLabels4,
-                totalsCustomFormulas: { 3: `ROUND(${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                totalsCustomFormulas: { 3: `ROUND(${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
             });
             condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: instructorRows.length, startRow: 1, type: 'attendance' });
 
@@ -2550,7 +2550,7 @@ export async function exportAttendanceOnly() {
                     startRow: dailyStartRow1,
                     totalsRowFunctions: totalsFunctions4,
                     totalsRowLabels: totalsLabels4,
-                    totalsCustomFormulas: { 3: `ROUND(${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                    totalsCustomFormulas: { 3: `ROUND(${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
                 });
                 condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: dailyRows.length, startRow: dailyStartRow1, type: 'attendance' });
             }
@@ -2569,7 +2569,7 @@ export async function exportAttendanceOnly() {
                 startRow: studStartRow1,
                 totalsRowFunctions: totalsFunctions4,
                 totalsRowLabels: totalsLabels4,
-                totalsCustomFormulas: { 3: `ROUND(${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                totalsCustomFormulas: { 3: `ROUND(${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
             });
             condFmtSheets.push({ sheetIndex: 0, colIndex: 3, rowCount: studentRows.length, startRow: studStartRow1, type: 'attendance' });
 
@@ -2587,7 +2587,7 @@ export async function exportAttendanceOnly() {
                 startCol: RIGHT_START_COL,
                 totalsRowFunctions: totalsFunctions5,
                 totalsRowLabels: totalsLabels5,
-                totalsCustomFormulas: { 4: `ROUND(${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                totalsCustomFormulas: { 4: `ROUND(${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
             });
             condFmtSheets.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, rowCount: instructorShiftRows.length, startRow: 1, type: 'attendance' });
 
@@ -2607,7 +2607,7 @@ export async function exportAttendanceOnly() {
                     startCol: RIGHT_START_COL,
                     totalsRowFunctions: totalsFunctions5,
                     totalsRowLabels: totalsLabels5,
-                    totalsCustomFormulas: { 4: `ROUND(${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                    totalsCustomFormulas: { 4: `ROUND(${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
                 });
                 condFmtSheets.push({ sheetIndex: 0, colIndex: RIGHT_START_COL + 4, rowCount: dailyShiftRows.length, startRow: dailyShiftStartRow1, type: 'attendance' });
             }
@@ -3400,7 +3400,7 @@ export async function exportMasterListCSV() {
                 sheetIndex: attendanceSheetIndex, displayName: instName,
                 columns: attCols4('Instructor Name'), dataRowCount: attendanceInstructorRowCount,
                 startRow: 1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
-                totalsCustomFormulas: { 3: `ROUND(${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                totalsCustomFormulas: { 3: `ROUND(${instName}[[#Totals],[Total Attended Minutes]]/${instName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
             });
             condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: attendanceInstructorRowCount, startRow: 1, type: 'attendance' });
 
@@ -3412,7 +3412,7 @@ export async function exportMasterListCSV() {
                     sheetIndex: attendanceSheetIndex, displayName: dailyName,
                     columns: attCols4('Date'), dataRowCount: layout.dailyRowCount,
                     startRow: dailyStartRow1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
-                    totalsCustomFormulas: { 3: `ROUND(${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                    totalsCustomFormulas: { 3: `ROUND(${dailyName}[[#Totals],[Total Attended Minutes]]/${dailyName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
                 });
                 condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: layout.dailyRowCount, startRow: dailyStartRow1, type: 'attendance' });
             }
@@ -3424,7 +3424,7 @@ export async function exportMasterListCSV() {
                 sheetIndex: attendanceSheetIndex, displayName: studName,
                 columns: attCols4('Student Name'), dataRowCount: attendanceStudentRowCount,
                 startRow: studStartRow1, totalsRowFunctions: attTotalsFunctions4, totalsRowLabels: attTotalsLabels4,
-                totalsCustomFormulas: { 3: `ROUND(${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                totalsCustomFormulas: { 3: `ROUND(${studName}[[#Totals],[Total Attended Minutes]]/${studName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
             });
             condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: 3, rowCount: attendanceStudentRowCount, startRow: studStartRow1, type: 'attendance' });
 
@@ -3434,7 +3434,7 @@ export async function exportMasterListCSV() {
                 sheetIndex: attendanceSheetIndex, displayName: instShiftName,
                 columns: attCols5('Instructor Name'), dataRowCount: layout.instructorShiftRowCount,
                 startRow: 1, startCol: layout.rightCol, totalsRowFunctions: attTotalsFunctions5, totalsRowLabels: attTotalsLabels5,
-                totalsCustomFormulas: { 4: `ROUND(${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                totalsCustomFormulas: { 4: `ROUND(${instShiftName}[[#Totals],[Total Attended Minutes]]/${instShiftName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
             });
             condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: layout.rightCol + 4, rowCount: layout.instructorShiftRowCount, startRow: 1, type: 'attendance' });
 
@@ -3446,7 +3446,7 @@ export async function exportMasterListCSV() {
                     sheetIndex: attendanceSheetIndex, displayName: dailyShiftName,
                     columns: attCols5('Date'), dataRowCount: layout.dailyShiftRowCount,
                     startRow: dailyShiftStartRow1, startCol: layout.rightCol, totalsRowFunctions: attTotalsFunctions5, totalsRowLabels: attTotalsLabels5,
-                    totalsCustomFormulas: { 4: `ROUND(${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]*100,0)` }
+                    totalsCustomFormulas: { 4: `ROUND(${dailyShiftName}[[#Totals],[Total Attended Minutes]]/${dailyShiftName}[[#Totals],[Total Scheduled Minutes]]*100,1)` }
                 });
                 condFmtSheets.push({ sheetIndex: attendanceSheetIndex, colIndex: layout.rightCol + 4, rowCount: layout.dailyShiftRowCount, startRow: dailyShiftStartRow1, type: 'attendance' });
             }
