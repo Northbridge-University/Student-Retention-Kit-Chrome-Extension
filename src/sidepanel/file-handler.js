@@ -2720,7 +2720,7 @@ export async function exportMasterListCSV() {
                     const num = parseFloat(value);
                     if (!isNaN(num)) {
                         // Attendance values are stored as decimals (0-1); convert to whole percentages (0-100)
-                        value = (col.conditionalFormatting === 'attendance' && num <= 1) ? Math.round(num * 100) : num;
+                        value = (col.conditionalFormatting === 'attendance' && num <= 1) ? Math.round(num * 1000) / 10 : num;
                     }
                 } else if (col.field === 'lda') {
                     if (value) {
@@ -3032,7 +3032,7 @@ export async function exportMasterListCSV() {
                         const num = parseFloat(value);
                         if (!isNaN(num)) {
                             // Attendance values are stored as decimals (0-1); convert to whole percentages (0-100)
-                            value = (col.conditionalFormatting === 'attendance' && num <= 1) ? Math.round(num * 100) : num;
+                            value = (col.conditionalFormatting === 'attendance' && num <= 1) ? Math.round(num * 1000) / 10 : num;
                         }
                     } else if (col.field === 'lda') {
                         if (value) {
