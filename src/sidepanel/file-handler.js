@@ -2425,7 +2425,7 @@ export async function exportAttendanceOnly() {
             const dayName = DAY_ABBR[d.getDay()];
             const month = MONTH_ABBR[d.getMonth()];
             const day = d.getDate();
-            const yr = String(d.getFullYear()).slice(-2);
+            const yr = d.getFullYear();
             return `${month} ${day}, ${yr} (${dayName})`;
         }
 
@@ -3260,7 +3260,7 @@ export async function exportMasterListCSV() {
             const DAY_ABBR_ATT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             const MONTH_ABBR_ATT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             function fmtDateLabel(d) {
-                return `${MONTH_ABBR_ATT[d.getMonth()]} ${d.getDate()}, ${String(d.getFullYear()).slice(-2)} (${DAY_ABBR_ATT[d.getDay()]})`;
+                return `${MONTH_ABBR_ATT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} (${DAY_ABBR_ATT[d.getDay()]})`;
             }
 
             const dailyRows = [...dailyAgg.entries()]
