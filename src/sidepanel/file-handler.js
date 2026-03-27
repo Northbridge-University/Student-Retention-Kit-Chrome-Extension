@@ -2345,7 +2345,7 @@ export async function exportAttendanceOnly() {
 
         const instructorRows = [...instructorAgg.entries()]
             .map(([name, agg]) => {
-                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                 return [name, agg.attMin, agg.schedMin, pct];
             })
             .sort((a, b) => b[3] - a[3]); // highest attendance % first
@@ -2368,7 +2368,7 @@ export async function exportAttendanceOnly() {
 
         const instructorShiftRows = [...instructorShiftAgg.values()]
             .map(agg => {
-                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                 return [agg.name, agg.shift, agg.attMin, agg.schedMin, pct];
             })
             .sort((a, b) => b[4] - a[4]); // highest attendance % first
@@ -2382,7 +2382,7 @@ export async function exportAttendanceOnly() {
                     totalAttMin += row.attMin;
                     totalSchedMin += row.schedMin;
                 }
-                const pct = totalSchedMin > 0 ? Math.round((totalAttMin / totalSchedMin) * 100) : 0;
+                const pct = totalSchedMin > 0 ? Math.round((totalAttMin / totalSchedMin) * 1000) / 10 : 0;
                 return [name, totalAttMin, totalSchedMin, pct];
             })
             .sort((a, b) => a[3] - b[3]); // lowest attendance % first
@@ -2438,14 +2438,14 @@ export async function exportAttendanceOnly() {
         const dailyRows = [...dailyAgg.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([, agg]) => {
-                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                 return [formatDateLabel(agg.dateObj), agg.attMin, agg.schedMin, pct];
             });
 
         const dailyShiftRows = [...dailyShiftAgg.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([, agg]) => {
-                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                 return [formatDateLabel(agg.dateObj), agg.shift, agg.attMin, agg.schedMin, pct];
             });
 
@@ -3190,7 +3190,7 @@ export async function exportMasterListCSV() {
 
             const instructorRows = [...instructorAgg.entries()]
                 .map(([name, agg]) => {
-                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                     return [name, agg.attMin, agg.schedMin, pct];
                 })
                 .sort((a, b) => b[3] - a[3]);
@@ -3212,7 +3212,7 @@ export async function exportMasterListCSV() {
             }
             const instructorShiftRows = [...instructorShiftAgg.values()]
                 .map(agg => {
-                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                     return [agg.name, agg.shift, agg.attMin, agg.schedMin, pct];
                 })
                 .sort((a, b) => b[4] - a[4]);
@@ -3226,7 +3226,7 @@ export async function exportMasterListCSV() {
                         totalAttMin += row.attMin;
                         totalSchedMin += row.schedMin;
                     }
-                    const pct = totalSchedMin > 0 ? Math.round((totalAttMin / totalSchedMin) * 100) : 0;
+                    const pct = totalSchedMin > 0 ? Math.round((totalAttMin / totalSchedMin) * 1000) / 10 : 0;
                     return [name, totalAttMin, totalSchedMin, pct];
                 })
                 .sort((a, b) => a[3] - b[3]);
@@ -3272,14 +3272,14 @@ export async function exportMasterListCSV() {
             const dailyRows = [...dailyAgg.entries()]
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([, agg]) => {
-                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                     return [fmtDateLabel(agg.dateObj), agg.attMin, agg.schedMin, pct];
                 });
 
             const dailyShiftRows = [...dailyShiftAgg.entries()]
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([, agg]) => {
-                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 100) : 0;
+                    const pct = agg.schedMin > 0 ? Math.round((agg.attMin / agg.schedMin) * 1000) / 10 : 0;
                     return [fmtDateLabel(agg.dateObj), agg.shift, agg.attMin, agg.schedMin, pct];
                 });
 
