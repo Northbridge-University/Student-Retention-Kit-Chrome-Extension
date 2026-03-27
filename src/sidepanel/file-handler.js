@@ -868,9 +868,12 @@ export function parseFileWithSheetJS(data, isCSV, fileModifiedTime = null) {
                 if (!attendanceRowsBySyId.has(syId)) {
                     attendanceRowsBySyId.set(syId, []);
                 }
-                const attDateVal = attDateColIndex !== -1 && attDateColIndex < row.length
-                    ? String(row[attDateColIndex] || '').trim()
+                const attDateRaw = attDateColIndex !== -1 && attDateColIndex < row.length
+                    ? row[attDateColIndex]
                     : '';
+                const attDateVal = attDateRaw instanceof Date
+                    ? attDateRaw
+                    : String(attDateRaw || '').trim();
                 const startTimeVal = attStartTimeColIndex !== -1 && attStartTimeColIndex < row.length
                     ? String(row[attStartTimeColIndex] || '').trim()
                     : '';
@@ -1376,9 +1379,12 @@ function mergeSupplementaryFile(students, data, isCSV) {
             if (!student._attendanceRows) {
                 student._attendanceRows = [];
             }
-            const attDateVal = suppAttDateCol !== -1 && suppAttDateCol < row.length
-                ? String(row[suppAttDateCol] || '').trim()
+            const attDateRaw = suppAttDateCol !== -1 && suppAttDateCol < row.length
+                ? row[suppAttDateCol]
                 : '';
+            const attDateVal = attDateRaw instanceof Date
+                ? attDateRaw
+                : String(attDateRaw || '').trim();
             const startTimeVal = suppStartTimeCol !== -1 && suppStartTimeCol < row.length
                 ? String(row[suppStartTimeCol] || '').trim()
                 : '';
