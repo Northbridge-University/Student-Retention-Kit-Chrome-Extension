@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'14.2': {
+        title: 'Latest Updates',
+        date: 'March 30, 2026',
+        updates: [
+			'Fixed Date issue with Attendance Reports',
+			'Included .1 Decimal in attendance %',
+        ]
+    },
 	'14.1': {
         title: 'Latest Updates',
         date: 'March 27, 2026',
