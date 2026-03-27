@@ -22,6 +22,13 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'14.1': {
+        title: 'Latest Updates',
+        date: 'March 27, 2026',
+        updates: [
+			'Fixed Office Add In not loading for some users',
+        ]
+    },
 	'14.0': {
         title: 'Latest Updates',
         date: 'March 23, 2026',
