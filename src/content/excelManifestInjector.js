@@ -4,14 +4,29 @@
 console.log('%c [SRK] Excel Manifest Injector Script LOADED', 'background: #FF9800; color: white; font-size: 14px; font-weight: bold; padding: 2px 4px;');
 
 // Loads manifest XML from the single source of truth: assets/Excel Add-In Manifest.xml
+// Primary: read from chrome.storage.local (pre-cached by background on install/startup).
+// Fallback: ask the background script via messaging (for backward compatibility).
 // Content scripts in cross-origin iframes can't use chrome.runtime.getURL() (returns
-// chrome-extension://invalid/), so we ask the background script to fetch it for us.
+// chrome-extension://invalid/), so direct fetch is not an option here.
 let MANIFEST_XML = null;
 
 async function loadManifestXML() {
     if (MANIFEST_XML) return MANIFEST_XML;
-    // Retry up to 3 times with increasing delay — the background service worker
-    // may not be ready on the first attempt (race condition on extension startup).
+
+    // Strategy 1: Read from chrome.storage.local (most reliable — no messaging needed)
+    try {
+        const result = await chrome.storage.local.get('_manifestXmlCache');
+        if (result._manifestXmlCache) {
+            console.log('[SRK Injector] Loaded manifest XML from storage cache');
+            MANIFEST_XML = result._manifestXmlCache;
+            return MANIFEST_XML;
+        }
+    } catch (e) {
+        console.warn('[SRK Injector] Storage read failed:', e.message);
+    }
+
+    // Strategy 2: Ask background script (fallback with retries)
+    console.log('[SRK Injector] Cache miss — falling back to background script messaging');
     const MAX_RETRIES = 3;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
