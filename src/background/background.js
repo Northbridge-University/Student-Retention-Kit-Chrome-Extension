@@ -370,6 +370,19 @@ chrome.webRequest.onCompleted.addListener(
   { urls: ["https://*.five9.net/*"] }
 );
 
+// Pre-cache the manifest XML into chrome.storage.local so content scripts
+// (especially those in cross-origin iframes) can read it without messaging.
+async function cacheManifestXml() {
+    try {
+        const response = await fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'));
+        const xml = await response.text();
+        await chrome.storage.local.set({ _manifestXmlCache: xml });
+        console.log('[SRK] Manifest XML cached in storage');
+    } catch (err) {
+        console.warn('[SRK] Failed to cache manifest XML:', err.message);
+    }
+}
+
 // Separate non-async listener for manifest XML requests.
 // Must NOT be async — Chrome only honors `return true` (keep sendResponse open)
 // from synchronous listeners. The main listener below is async, which breaks sendResponse.
@@ -379,7 +392,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // so the background script fetches the manifest XML on their behalf.
         fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'))
             .then(response => response.text())
-            .then(xml => sendResponse({ success: true, xml }))
+            .then(xml => {
+                // Also update the cache for future use
+                chrome.storage.local.set({ _manifestXmlCache: xml });
+                sendResponse({ success: true, xml });
+            })
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Keep sendResponse channel open for async response
     }
@@ -1111,6 +1128,9 @@ async function injectScriptIntoTab(tabId, url) {
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[SRK] Extension installed/updated. Running storage migration...");
 
+  // Pre-cache manifest XML so content scripts can read it from storage
+  cacheManifestXml();
+
   // Run storage migration to convert old flat keys to new nested structure
   await migrateStorage();
 
@@ -1134,6 +1154,9 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // 2. On Browser Startup
 chrome.runtime.onStartup.addListener(async () => {
+  // Pre-cache manifest XML so content scripts can read it from storage
+  cacheManifestXml();
+
   const tabs = await chrome.tabs.query({ url: TARGET_URL_PATTERNS });
   for (const tab of tabs) {
     injectScriptIntoTab(tab.id, tab.url);
