@@ -524,6 +524,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // the autoCall logic twice (call then immediate hangup).
   }
 
+  // --- IMPORT STATUS FROM EXCEL ADD-IN ---
+  else if (msg.type === MESSAGE_TYPES.SRK_IMPORT_STATUS) {
+      console.log(`%c [Background] Import Status: ${msg.data?.status}`, 'background: #217346; color: white; font-weight: bold; padding: 2px 4px;', msg.data?.message);
+
+      // Forward to sidepanel
+      safeSendMessage({
+          type: MESSAGE_TYPES.SRK_IMPORT_STATUS,
+          data: msg.data
+      }, 'import status');
+  }
+
   // --- HIGHLIGHT CONFIRMATION FROM EXCEL ADD-IN ---
   else if (msg.type === MESSAGE_TYPES.SRK_HIGHLIGHT_CONFIRMATION) {
       const { syStudentId, status, message } = msg.data || {};

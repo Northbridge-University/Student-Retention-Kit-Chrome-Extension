@@ -1068,6 +1068,83 @@
         </div>
     </div>
 
+    <!-- Import Status Modal -->
+    <div id="importStatusModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 380px;">
+            <div class="modal-header">
+                <h3 id="importStatusTitle"><i class="fas fa-file-import" style="color: #217346;"></i> Importing to Excel</h3>
+                <button class="icon-btn" id="importStatusCloseBtn" title="Close"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="modal-body" style="padding: 20px;">
+                <!-- Status Icon -->
+                <div id="importStatusIconContainer" style="text-align: center; margin-bottom: 16px;">
+                    <i id="importStatusIcon" class="fas fa-spinner fa-spin" style="font-size: 2.2em; color: #217346;"></i>
+                </div>
+
+                <!-- Main Status Text -->
+                <div id="importStatusText" style="text-align: center; font-size: 1.05em; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
+                    Sending payload to Excel
+                </div>
+
+                <!-- Sub Status Text -->
+                <div id="importStatusSubtext" style="text-align: center; font-size: 0.85em; color: var(--text-secondary); margin-bottom: 20px;">
+                    Delivering data to Office Add-in...
+                </div>
+
+                <!-- Step Progress List -->
+                <div id="importStatusSteps" style="display: flex; flex-direction: column; gap: 6px; padding: 0 10px;">
+                    <div class="import-step" data-step="send">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Send payload</span>
+                    </div>
+                    <div class="import-step" data-step="received">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Excel received</span>
+                    </div>
+                    <div class="import-step" data-step="reading_data">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Read existing data</span>
+                    </div>
+                    <div class="import-step" data-step="preserving_data">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Preserve assigned values</span>
+                    </div>
+                    <div class="import-step" data-step="writing_data">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Write student data</span>
+                    </div>
+                    <div class="import-step" data-step="formatting">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Apply conditional formatting</span>
+                    </div>
+                    <div class="import-step" data-step="highlighting">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Highlight new students</span>
+                    </div>
+                    <div class="import-step" data-step="missing_assignments">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Import missing assignments</span>
+                    </div>
+                    <div class="import-step" data-step="autofitting">
+                        <i class="fas fa-circle import-step-icon" style="font-size: 0.5em;"></i>
+                        <span class="import-step-label">Finalize</span>
+                    </div>
+                </div>
+
+                <!-- Retry Button (hidden by default) -->
+                <div id="importStatusRetryContainer" style="display: none; text-align: center; margin-top: 18px;">
+                    <button class="btn-primary" id="importStatusRetryBtn" style="padding: 10px 30px; font-size: 0.95em;">
+                        <i class="fas fa-redo"></i> Retry Import
+                    </button>
+                    <div id="importStatusRetrySubtext" style="font-size: 0.8em; color: var(--text-secondary); margin-top: 8px;">
+                        This will refresh the Excel tab and re-send the payload
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Campus Selection Modal -->
     <div id="campusSelectionModal" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width: 400px;">

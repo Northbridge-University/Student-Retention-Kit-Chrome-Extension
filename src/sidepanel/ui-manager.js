@@ -182,6 +182,19 @@ export function cacheDomElements() {
     elements.excelInstanceList = document.getElementById('excelInstanceList');
     elements.excelInstanceMessage = document.getElementById('excelInstanceMessage');
 
+    // Import Status Modal
+    elements.importStatusModal = document.getElementById('importStatusModal');
+    elements.importStatusTitle = document.getElementById('importStatusTitle');
+    elements.importStatusIcon = document.getElementById('importStatusIcon');
+    elements.importStatusIconContainer = document.getElementById('importStatusIconContainer');
+    elements.importStatusText = document.getElementById('importStatusText');
+    elements.importStatusSubtext = document.getElementById('importStatusSubtext');
+    elements.importStatusSteps = document.getElementById('importStatusSteps');
+    elements.importStatusRetryContainer = document.getElementById('importStatusRetryContainer');
+    elements.importStatusRetryBtn = document.getElementById('importStatusRetryBtn');
+    elements.importStatusRetrySubtext = document.getElementById('importStatusRetrySubtext');
+    elements.importStatusCloseBtn = document.getElementById('importStatusCloseBtn');
+
     // Campus Selection Modal
     elements.campusSelectionModal = document.getElementById('campusSelectionModal');
     elements.closeCampusSelectionBtn = document.getElementById('closeCampusSelectionBtn');
