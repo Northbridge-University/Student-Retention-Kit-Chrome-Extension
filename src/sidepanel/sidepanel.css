@@ -643,6 +643,54 @@ input:focus, textarea:focus, select:focus {
 
 .modal-header h3 { margin: 0; font-size: 1.2em; color: var(--primary-color); }
 
+/* Import Status Modal Steps */
+.import-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 0;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    transition: color 0.3s ease;
+}
+.import-step-icon {
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+    transition: color 0.3s ease, font-size 0.3s ease;
+}
+.import-step.completed .import-step-icon {
+    color: #28a745;
+    font-size: 0.85em !important;
+}
+.import-step.completed .import-step-label {
+    color: var(--text-primary);
+}
+.import-step.active .import-step-icon {
+    color: #217346;
+    font-size: 0.75em !important;
+}
+.import-step.active .import-step-label {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.import-step.pending .import-step-icon {
+    color: #ccc;
+}
+.import-step.error .import-step-icon {
+    color: #dc3545;
+}
+.import-step.error .import-step-label {
+    color: #dc3545;
+}
+.import-step.skipped .import-step-icon {
+    color: #aaa;
+}
+.import-step.skipped .import-step-label {
+    color: #aaa;
+    text-decoration: line-through;
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }

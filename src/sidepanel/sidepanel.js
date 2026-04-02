@@ -129,6 +129,7 @@ import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
 import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
+import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
 import {
     shouldShowLatestUpdatesModal,
@@ -1279,6 +1280,9 @@ function setupEventListeners() {
     // Initialize backup modal event listeners
     initBackupModal();
 
+    // Initialize import status modal event listeners
+    initImportStatusModal();
+
     // Right-click context menu on the tab bar and header area
     const tabBar = document.querySelector('.tabs');
     const headerArea = document.querySelector('.header');
@@ -2028,6 +2032,16 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
     // Handle logs from background script
     if (msg.type === MESSAGE_TYPES.LOG_TO_PANEL) {
         addConsoleMessage(msg.level, msg.args);
+    }
+
+    // Handle import status updates from Excel Add-in
+    if (msg.type === MESSAGE_TYPES.SRK_IMPORT_STATUS) {
+        updateImportStatus(msg.data);
+    }
+
+    // Handle Office Add-in reconnection (for retry flow)
+    if (msg.type === MESSAGE_TYPES.SRK_OFFICE_ADDIN_CONNECTED || msg.type === MESSAGE_TYPES.SRK_PONG) {
+        onAddinReconnected();
     }
 
     // Handle Canvas auth error from looper (background)

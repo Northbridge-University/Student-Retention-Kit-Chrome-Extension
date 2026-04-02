@@ -20,6 +20,7 @@ import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { elements } from './ui-manager.js';
 import { formatDuration, updateTotalTime } from './canvas-api.js';
+import { openImportStatusModal } from './modals/import-status-modal.js';
 
 // --- Update cancellation flag ---
 let _updateCancelled = false;
@@ -118,6 +119,9 @@ export async function sendMasterListToExcel(students, targetTabId = null) {
                 data: data
             }
         };
+
+        // Show import status modal
+        openImportStatusModal(payload, targetTabId);
 
         // Send message to background script to forward to Excel
         chrome.runtime.sendMessage({
@@ -221,6 +225,9 @@ export async function sendMasterListWithMissingAssignmentsToExcel(students, targ
                 students: studentsWithMissingAssignments
             }
         };
+
+        // Show import status modal
+        openImportStatusModal(payload, targetTabId);
 
         // Send message to background script to forward to Excel
         chrome.runtime.sendMessage({

@@ -372,6 +372,17 @@ if (window.hasSRKConnectorRun) {
           });
       }
 
+      // Handle Import Status updates from Excel Add-in
+      else if (event.data.type === "SRK_IMPORT_STATUS") {
+          console.log("%c SRK Connector: Import Status update from Office Add-in", "color: #217346; font-weight: bold", event.data.data?.status);
+
+          // Forward status to extension background
+          safeSendMessage({
+              type: "SRK_IMPORT_STATUS",
+              data: event.data.data
+          });
+      }
+
       // Handle Links Request from Excel Add-in
       else if (event.data.type === "SRK_LINKS") {
           console.log("%c SRK Connector: Links Received!", "color: blue; font-weight: bold");
