@@ -16,7 +16,7 @@ import {
     trimCommonPrefix,
     numericToLetterGrade
 } from '../constants/field-utils.js';
-import { storageGet } from '../utils/storage.js';
+import { storageGet, storageSet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { elements } from './ui-manager.js';
 import { formatDuration, updateTotalTime } from './canvas-api.js';
@@ -1011,8 +1011,8 @@ export function updateCampusFilter(students) {
             .filter(c => c && c.trim() !== '')
     )].sort();
 
-    // If no campuses found, hide the filter
-    if (campuses.length === 0) {
+    // If zero or only one campus, hide the filter (nothing to choose between)
+    if (campuses.length <= 1) {
         container.style.display = 'none';
         select.value = ''; // Reset selection
         return;
@@ -1561,9 +1561,14 @@ export async function handleFileImport(files, onSuccess) {
                 minute: '2-digit'
             });
 
+            // LAST_UPDATED is a nested path ('timestamps.lastUpdated'), so it must be
+            // written via storageSet (nested-aware) so that storageGet can read it back.
+            // Using raw chrome.storage.local.set with a nested key string stores it as
+            // a literal flat key, causing the sidepanel to read "Never" on reopen.
+            await storageSet({ [STORAGE_KEYS.LAST_UPDATED]: lastUpdated });
+
             chrome.storage.local.set({
                 [STORAGE_KEYS.MASTER_ENTRIES]: students,
-                [STORAGE_KEYS.LAST_UPDATED]: lastUpdated,
                 [STORAGE_KEYS.REFERENCE_DATE]: referenceDate ? referenceDate.toISOString() : null
             }, async () => {
                 const durationSeconds = (Date.now() - startTime) / 1000;

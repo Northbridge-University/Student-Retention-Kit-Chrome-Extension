@@ -332,7 +332,15 @@ if (window.hasSRKConnectorRun) {
       // Handle Master List Data
       else if (event.data.type === "SRK_MASTER_LIST_DATA") {
           console.log("%c SRK Connector: Master List Data Received!", "color: green; font-weight: bold");
-          handleMasterListData(event.data.data);
+          // Block if import status modal is open - prevents accidental overwrite
+          // when Excel tab is refreshed during retry flow
+          chrome.storage.session.get(['importStatusModalOpen'], (result) => {
+              if (result.importStatusModalOpen) {
+                  console.log("%c SRK Connector: Import status modal is open - ignoring incoming master list data to prevent overwrite", "color: orange; font-weight: bold");
+                  return;
+              }
+              handleMasterListData(event.data.data);
+          });
       }
 
       // Handle Selected Students
@@ -401,8 +409,25 @@ if (window.hasSRKConnectorRun) {
    * @param {MessageEventSource} source - The event source to send response to
    */
   function checkIfShouldAcceptMasterList(source) {
-      // Get both nested 'settings' and legacy flat keys, plus 'timestamps' for lastUpdated
-      chrome.storage.local.get(['settings', 'timestamps', 'autoUpdateMasterList', 'lastUpdated'], (result) => {
+      // Block if import status modal is open - prevents accidental overwrite
+      // when Excel tab is refreshed during retry flow
+      chrome.storage.session.get(['importStatusModalOpen'], (sessionResult) => {
+          if (sessionResult.importStatusModalOpen) {
+              console.log("%c Import status modal is open. Rejecting master list to prevent overwrite.", "color: orange; font-weight: bold");
+              try {
+                  source.postMessage({
+                      type: "SRK_MASTER_LIST_RESPONSE",
+                      wantsData: false,
+                      reason: "import_in_progress"
+                  }, "*");
+              } catch (e) {
+                  console.warn("Failed to send master list response:", e);
+              }
+              return;
+          }
+
+          // Get both nested 'settings' and legacy flat keys, plus 'timestamps' for lastUpdated
+          chrome.storage.local.get(['settings', 'timestamps', 'autoUpdateMasterList', 'lastUpdated'], (result) => {
           const setting = getSettingValue(result, 'autoUpdateMasterList', 'always');
           // Check for lastUpdated in nested path first
           const lastUpdated = result.timestamps?.lastUpdated || result.lastUpdated;
@@ -434,6 +459,7 @@ if (window.hasSRKConnectorRun) {
                   wantsData: wantsData
               }, "*");
           }
+      });
       });
   }
 

@@ -42,6 +42,14 @@ export function openImportStatusModal(payload, targetTabId = null) {
     _lastTargetTabId = targetTabId;
     _currentStatus = 'sending';
 
+    // Set session flag so content script blocks any incoming master list data
+    // while the modal is open (prevents overwrite from refreshed Excel tab)
+    try {
+        chrome.storage.session.set({ importStatusModalOpen: true });
+    } catch (e) {
+        console.warn('Failed to set importStatusModalOpen flag:', e);
+    }
+
     if (!elements.importStatusModal) return;
 
     // Reset UI
@@ -194,6 +202,13 @@ export function closeImportStatusModal() {
     clearTimeoutTimer();
     clearRetryTimer();
     _currentStatus = null;
+
+    // Clear session flag so content script resumes accepting master list data
+    try {
+        chrome.storage.session.remove('importStatusModalOpen');
+    } catch (e) {
+        console.warn('Failed to clear importStatusModalOpen flag:', e);
+    }
 }
 
 /**

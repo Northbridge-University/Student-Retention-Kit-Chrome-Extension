@@ -1529,7 +1529,7 @@ function setupEventListeners() {
                     // Re-enable buttons after the entire process completes
                     setUpdateButtonsDisabled(false);
                     // Create backup after the entire update process completes
-                    const lastUpdatedData = await chrome.storage.local.get([STORAGE_KEYS.LAST_UPDATED]);
+                    const lastUpdatedData = await storageGet([STORAGE_KEYS.LAST_UPDATED]);
                     const totalTimeEl = document.getElementById('queueTotalTime');
                     const totalDuration = totalTimeEl?.dataset.processStartTime
                         ? (Date.now() - parseInt(totalTimeEl.dataset.processStartTime)) / 1000
