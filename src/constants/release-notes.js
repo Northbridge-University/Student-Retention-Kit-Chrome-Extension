@@ -22,6 +22,17 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'14.3': {
+        title: 'Latest Updates',
+        date: 'April 6, 2026',
+        updates: [
+			'New popup shows live progress when sending data to Excel',
+			'Retry button refreshes Excel and tries again if it gets stuck',
+			'Excel can no longer overwrite your data during an import',
+			'Campus dropdown is now hidden if you only have one campus',
+			'Fixed "Last Updated" showing "Never" after closing the panel',
+        ]
+    },
 	'14.2': {
         title: 'Latest Updates',
         date: 'March 30, 2026',
