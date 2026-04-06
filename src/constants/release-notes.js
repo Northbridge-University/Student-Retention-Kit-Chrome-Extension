@@ -22,6 +22,15 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'14.4': {
+        title: 'Latest Updates',
+        date: 'April 6, 2026',
+        updates: [
+			'Submission checker now batches rapid submissions into one bulk update for faster highlighting',
+			'Call button now ignores rows hidden by filters',
+			'Fixed an extra comment being added when the student view is open during a submission',
+		]
+    },
 	'14.3': {
         title: 'Latest Updates',
         date: 'April 6, 2026',

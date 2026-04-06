@@ -79,13 +79,54 @@ console.info = function(...args) {
 
 // --- CALLBACKS FOR LOOPER ---
 
+// Submission highlight debounce: batches rapid-fire submissions into a single
+// bulk payload for the Office Add-in, which is dramatically more efficient
+// than one Excel.run per student.
+const SUBMISSION_HIGHLIGHT_DEBOUNCE_MS = 1000;
+const SUBMISSION_HIGHLIGHT_MAX_BATCH = 10;
+let pendingSubmissionHighlights = [];
+let submissionHighlightFlushTimer = null;
+
+function scheduleSubmissionHighlightFlush() {
+    if (submissionHighlightFlushTimer) return;
+    submissionHighlightFlushTimer = setTimeout(() => {
+        submissionHighlightFlushTimer = null;
+        flushPendingSubmissionHighlights();
+    }, SUBMISSION_HIGHLIGHT_DEBOUNCE_MS);
+}
+
+async function flushPendingSubmissionHighlights() {
+    if (submissionHighlightFlushTimer) {
+        clearTimeout(submissionHighlightFlushTimer);
+        submissionHighlightFlushTimer = null;
+    }
+    if (pendingSubmissionHighlights.length === 0) return;
+    const batch = pendingSubmissionHighlights;
+    pendingSubmissionHighlights = [];
+
+    if (batch.length === 1) {
+        await sendHighlightStudentRowPayload(batch[0]);
+    } else {
+        await sendBulkHighlightStudentRowPayload(batch);
+    }
+}
+
 // Handle found submissions (Submission Mode)
 async function onSubmissionFound(entry) {
     console.log('%c [SRK] onSubmissionFound triggered', 'background: #2196F3; color: white; font-weight: bold; padding: 2px 4px;', entry);
 
     await addStudentToFoundList(entry);
     await sendConnectionPings(entry);
-    await sendHighlightStudentRowPayload(entry);
+
+    // Buffer highlight and debounce — if more submissions arrive within 1s they
+    // will be sent as a single bulk payload to the Office Add-in.
+    pendingSubmissionHighlights.push(entry);
+    if (pendingSubmissionHighlights.length >= SUBMISSION_HIGHLIGHT_MAX_BATCH) {
+        await flushPendingSubmissionHighlights();
+    } else {
+        scheduleSubmissionHighlightFlush();
+    }
+
     await sendPowerAutomateRequest(entry);
 
     const logPayload = { type: 'SUBMISSION', ...entry };
@@ -1010,6 +1051,118 @@ async function sendHighlightStudentRowPayload(entry, overrideTabId = null) {
         }
     } catch (err) {
         console.error('[SRK] Failed to query Excel tabs:', err);
+    }
+}
+
+// --- BULK HIGHLIGHT STUDENT ROW HANDLING ---
+// Sends a batched SRK_HIGHLIGHT_STUDENT_ROW payload containing multiple
+// students. Shared formatting settings are resolved once; each student carries
+// its own targetSheet and editText. The Office Add-in applies all highlights
+// in a single Excel.run, avoiding per-student round-trips.
+async function sendBulkHighlightStudentRowPayload(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return;
+
+    console.log('%c [SRK] Bulk submission highlight - sending batch to Office Add-in',
+        'background: #4CAF50; color: white; font-weight: bold; padding: 2px 4px;',
+        `(${entries.length} students)`);
+
+    const isEnabled = await storageGetValue(STORAGE_KEYS.HIGHLIGHT_STUDENT_ROW_ENABLED, true);
+    if (!isEnabled) {
+        console.log('[SRK] Student row highlighting is disabled - skipping bulk highlight payload');
+        return;
+    }
+
+    // Load shared highlight settings once
+    const settings = await storageGet([
+        STORAGE_KEYS.HIGHLIGHT_START_COL,
+        STORAGE_KEYS.HIGHLIGHT_END_COL,
+        STORAGE_KEYS.HIGHLIGHT_EDIT_COLUMN,
+        STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT,
+        STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET,
+        STORAGE_KEYS.HIGHLIGHT_ROW_COLOR
+    ]);
+
+    const targetSheetSetting = settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
+    const editTextTemplate = settings[STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT] || 'Submitted {assignment}';
+    const now = new Date();
+    const month = String(now.getMonth() + 1);
+    const day = String(now.getDate());
+    const year = now.getFullYear();
+
+    const resolveTargetSheet = (entry) => {
+        if (targetSheetSetting === 'Campus') {
+            return entry.campus || `LDA ${month}-${day}-${year}`;
+        }
+        return targetSheetSetting.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
+    };
+
+    // Filter out entries without syStudentId (can't highlight without it)
+    const validEntries = entries.filter(entry => {
+        if (!entry.syStudentId) {
+            console.warn('[SRK] Skipping highlight for entry without SyStudentId:', entry.name);
+            return false;
+        }
+        return true;
+    });
+
+    if (validEntries.length === 0) return;
+
+    // Group entries by resolved targetSheet — the add-in's bulk handler
+    // operates on a single sheet per payload.
+    const groups = new Map();
+    for (const entry of validEntries) {
+        const sheet = resolveTargetSheet(entry);
+        if (!groups.has(sheet)) groups.set(sheet, []);
+        groups.get(sheet).push(entry);
+    }
+
+    const targetTabId = await storageGetValue(STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID, null);
+
+    for (const [targetSheet, groupEntries] of groups.entries()) {
+        const students = groupEntries.map(entry => ({
+            studentName: entry.name,
+            syStudentId: entry.syStudentId,
+            editText: entry.assignment
+                ? editTextTemplate.replace(/{assignment}/g, entry.assignment)
+                : editTextTemplate
+        }));
+
+        const payload = {
+            type: 'SRK_HIGHLIGHT_STUDENT_ROW',
+            data: {
+                students,
+                startCol: settings[STORAGE_KEYS.HIGHLIGHT_START_COL] || 'Student Name',
+                endCol: settings[STORAGE_KEYS.HIGHLIGHT_END_COL] || 'Outreach',
+                targetSheet,
+                color: settings[STORAGE_KEYS.HIGHLIGHT_ROW_COLOR] || '#92d050',
+                editColumn: settings[STORAGE_KEYS.HIGHLIGHT_EDIT_COLUMN] || 'Outreach'
+            }
+        };
+
+        console.log(`[SRK] Sending bulk highlight payload (${students.length} students, sheet "${targetSheet}"):`, payload);
+
+        try {
+            if (targetTabId) {
+                try {
+                    await chrome.tabs.sendMessage(targetTabId, { action: 'postToPage', message: payload });
+                    console.log(`[SRK] Sent bulk highlight payload to selected tab ${targetTabId}`);
+                    continue;
+                } catch (err) {
+                    console.warn(`[SRK] Failed to send bulk highlight payload to selected tab ${targetTabId}:`, err.message);
+                }
+            }
+            const tabs = await chrome.tabs.query({ url: TARGET_URL_PATTERNS });
+            for (const tab of tabs) {
+                try {
+                    await chrome.tabs.sendMessage(tab.id, { action: 'postToPage', message: payload });
+                    console.log(`[SRK] Sent bulk highlight payload to tab ${tab.id}`);
+                } catch (err) {
+                    console.warn(`[SRK] Failed to send bulk highlight payload to tab ${tab.id}:`, err.message);
+                }
+            }
+        } catch (err) {
+            console.error('[SRK] Failed to send bulk highlight payload:', err);
+        }
     }
 }
 
