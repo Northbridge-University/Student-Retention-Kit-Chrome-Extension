@@ -1011,8 +1011,8 @@ export function updateCampusFilter(students) {
             .filter(c => c && c.trim() !== '')
     )].sort();
 
-    // If no campuses found, hide the filter
-    if (campuses.length === 0) {
+    // If zero or only one campus, hide the filter (nothing to choose between)
+    if (campuses.length <= 1) {
         container.style.display = 'none';
         select.value = ''; // Reset selection
         return;
