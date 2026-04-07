@@ -333,14 +333,26 @@ if (window.hasSRKConnectorRun) {
       else if (event.data.type === "SRK_MASTER_LIST_DATA") {
           console.log("%c SRK Connector: Master List Data Received!", "color: green; font-weight: bold");
           // Block if import status modal is open - prevents accidental overwrite
-          // when Excel tab is refreshed during retry flow
-          chrome.storage.session.get(['importStatusModalOpen'], (result) => {
-              if (result.importStatusModalOpen) {
-                  console.log("%c SRK Connector: Import status modal is open - ignoring incoming master list data to prevent overwrite", "color: orange; font-weight: bold");
-                  return;
-              }
+          // when Excel tab is refreshed during retry flow. Guarded so a storage
+          // error (e.g. session storage access level not set) falls through
+          // to the normal data handling path.
+          try {
+              chrome.storage.session.get(['importStatusModalOpen'], (result) => {
+                  if (chrome.runtime.lastError) {
+                      console.warn('[SRK] session storage get failed, proceeding with master list data:', chrome.runtime.lastError.message);
+                      handleMasterListData(event.data.data);
+                      return;
+                  }
+                  if (result && result.importStatusModalOpen) {
+                      console.log("%c SRK Connector: Import status modal is open - ignoring incoming master list data to prevent overwrite", "color: orange; font-weight: bold");
+                      return;
+                  }
+                  handleMasterListData(event.data.data);
+              });
+          } catch (e) {
+              console.warn('[SRK] session storage threw, proceeding with master list data:', e);
               handleMasterListData(event.data.data);
-          });
+          }
       }
 
       // Handle Selected Students
@@ -409,24 +421,12 @@ if (window.hasSRKConnectorRun) {
    * @param {MessageEventSource} source - The event source to send response to
    */
   function checkIfShouldAcceptMasterList(source) {
-      // Block if import status modal is open - prevents accidental overwrite
-      // when Excel tab is refreshed during retry flow
-      chrome.storage.session.get(['importStatusModalOpen'], (sessionResult) => {
-          if (sessionResult.importStatusModalOpen) {
-              console.log("%c Import status modal is open. Rejecting master list to prevent overwrite.", "color: orange; font-weight: bold");
-              try {
-                  source.postMessage({
-                      type: "SRK_MASTER_LIST_RESPONSE",
-                      wantsData: false,
-                      reason: "import_in_progress"
-                  }, "*");
-              } catch (e) {
-                  console.warn("Failed to send master list response:", e);
-              }
-              return;
-          }
-
-          // Get both nested 'settings' and legacy flat keys, plus 'timestamps' for lastUpdated
+      // Step 1: decide whether the import-status modal is blocking imports.
+      // chrome.storage.session requires TRUSTED_AND_UNTRUSTED_CONTEXTS access
+      // level (set from the background service worker) for content scripts to
+      // read it. If the check fails for any reason, fall through to the
+      // normal accept path so the master list request handler never breaks.
+      const runLocalCheck = () => {
           chrome.storage.local.get(['settings', 'timestamps', 'autoUpdateMasterList', 'lastUpdated'], (result) => {
           const setting = getSettingValue(result, 'autoUpdateMasterList', 'always');
           // Check for lastUpdated in nested path first
@@ -459,8 +459,35 @@ if (window.hasSRKConnectorRun) {
                   wantsData: wantsData
               }, "*");
           }
-      });
-      });
+          });
+      };
+
+      try {
+          chrome.storage.session.get(['importStatusModalOpen'], (sessionResult) => {
+              if (chrome.runtime.lastError) {
+                  console.warn('[SRK] session storage get failed, proceeding without import block:', chrome.runtime.lastError.message);
+                  runLocalCheck();
+                  return;
+              }
+              if (sessionResult && sessionResult.importStatusModalOpen) {
+                  console.log("%c Import status modal is open. Rejecting master list to prevent overwrite.", "color: orange; font-weight: bold");
+                  try {
+                      source.postMessage({
+                          type: "SRK_MASTER_LIST_RESPONSE",
+                          wantsData: false,
+                          reason: "import_in_progress"
+                      }, "*");
+                  } catch (e) {
+                      console.warn("Failed to send master list response:", e);
+                  }
+                  return;
+              }
+              runLocalCheck();
+          });
+      } catch (e) {
+          console.warn('[SRK] session storage access threw, proceeding without import block:', e);
+          runLocalCheck();
+      }
   }
 
   /**

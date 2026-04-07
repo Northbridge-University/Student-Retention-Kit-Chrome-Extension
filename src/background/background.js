@@ -342,6 +342,14 @@ async function onMissingCheckCompleted() {
 
 // --- CORE LISTENERS ---
 
+// Allow content scripts to read chrome.storage.session (import-modal flag).
+// Runs on every service-worker wake, not just install/startup.
+try {
+  chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+} catch (e) {
+  console.warn('[SRK] setAccessLevel (top-level) failed:', e);
+}
+
 chrome.action.onClicked.addListener((tab) => chrome.sidePanel.open({ tabId: tab.id }));
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === '_execute_action') chrome.sidePanel.open({ tabId: tab.id });
@@ -1292,6 +1300,14 @@ async function injectScriptIntoTab(tabId, url) {
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[SRK] Extension installed/updated. Running storage migration...");
 
+  // Allow content scripts to read chrome.storage.session (needed for the
+  // import status modal overwrite-block flag checked in excelConnector.js).
+  try {
+    await chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+  } catch (e) {
+    console.warn('[SRK] Failed to set session storage access level:', e);
+  }
+
   // Pre-cache manifest XML so content scripts can read it from storage
   cacheManifestXml();
 
@@ -1318,6 +1334,12 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // 2. On Browser Startup
 chrome.runtime.onStartup.addListener(async () => {
+  try {
+    await chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+  } catch (e) {
+    console.warn('[SRK] Failed to set session storage access level on startup:', e);
+  }
+
   // Pre-cache manifest XML so content scripts can read it from storage
   cacheManifestXml();
 
