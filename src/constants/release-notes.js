@@ -24,7 +24,7 @@ export const RELEASE_NOTES = {
     // The key should match the version in manifest.json
 	'14.4': {
         title: 'Latest Updates',
-        date: 'April 6, 2026',
+        date: 'April 11, 2026',
         updates: [
 			'Submission checker now batches rapid submissions into one bulk update for faster highlighting',
 			'Call button now ignores rows hidden by filters',
