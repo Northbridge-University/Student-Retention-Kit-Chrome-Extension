@@ -1,0 +1,1 @@
+(()=>{let o=25;const n=()=>{var e,t=window?.getTnData()?.userInfo,a=t?.email||t?.forward_email,t=t?.username;a||t?((e=document.createElement("div")).dataset.textNowUserEmail=a,e.dataset.textNowUserName=t,e.id="btp-variables",document.body.appendChild(e)):o--&&(console.log("BTP: TextNow variables not found, trying again."),setTimeout(n,200))};n()})();
