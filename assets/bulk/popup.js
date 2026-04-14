@@ -1,1 +1,0 @@
-function showVersionNumber(){var e=chrome.runtime.getManifest();document.getElementById("version-number").innerText="v"+e.version}document.addEventListener("DOMContentLoaded",()=>{showVersionNumber()});
