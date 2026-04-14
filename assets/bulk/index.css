@@ -1,1 +1,69 @@
-let btpSecrets;{let t;"undefined"!=typeof browser?t=browser:"undefined"!=typeof chrome&&(t=chrome);const b=3e5,c=e=>{return btoa(String.fromCharCode(...e)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")},d=async(e,r)=>{var t=new TextEncoder,e=await crypto.subtle.importKey("raw",t.encode(e),{name:"HMAC",hash:"SHA-256"},!1,["sign"]),e=await crypto.subtle.sign("HMAC",e,t.encode(r));return new Uint8Array(e)},e=async()=>{var e=(await t.storage.sync.get("BulkTexterPro_AppToken"))?.BulkTexterPro_AppToken,r=(await t.storage.sync.get("BulkTexterPro_AppSecret"))?.BulkTexterPro_AppSecret;if(e&&r)return e={appToken:e,iat:e=Date.now(),exp:e+b,nonce:crypto.randomUUID()},e=(new TextEncoder).encode(JSON.stringify(e)),e=c(e),r=await d(r,e),e+"."+c(r);throw new Error("Missing credentials")};btpSecrets={generateToken:e}}
+body {
+  background-color: rgb(229, 246, 253);
+  text-align: center;
+  color: #003e4f;
+  font-weight: 400;
+  font-size: 1.125rem;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  display: none;
+}
+
+div.text-wrapper {
+  align-self: center;
+  padding: 32px;
+  border-radius: 32px;
+  background-color: #fff;
+}
+
+h1 {
+  font-size: 2.125rem;
+}
+h1 img {
+  height: 48px;
+  margin-right: 16px;
+}
+
+/*********************************
+********* Loading screen *********
+*********************************/
+#loading-screen {
+  text-align: center;
+}
+.lds-ring {
+  display: inline-block;
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+.lds-ring div {
+  box-sizing: border-box;
+  display: block;
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: 8px;
+  border: 8px solid rgb(137, 108, 232);
+  border-radius: 50%;
+  animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  border-color: rgb(137, 108, 232) transparent transparent transparent;
+}
+.lds-ring div:nth-child(1) {
+  animation-delay: -0.45s;
+}
+.lds-ring div:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.lds-ring div:nth-child(3) {
+  animation-delay: -0.15s;
+}
+@keyframes lds-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

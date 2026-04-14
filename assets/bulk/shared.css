@@ -1,1 +1,70 @@
-{var browser_polyfill;"undefined"!=typeof browser?browser_polyfill=browser:"undefined"!=typeof chrome&&(browser_polyfill=chrome);const a=new URLSearchParams(window.location.search);let r=a.get("permissions");if(r)try{r=JSON.parse(r)}catch(e){console.error(e),r=void 0}const c=async()=>{var o='Sorry, this permission is required in order for Bulk Texter Pro to function.\n\nPlease click the "Authorize" button.';try{var e={origins:["https://app.bulktexterpro.com/*"]},t=(r?.origins?.length&&(e.origins=[...e.origins,...r?.origins]),await browser_polyfill.permissions.request(e));if(t)return f();alert(o)}catch(e){alert(o)}},d=()=>{var e=document.querySelector("body");e&&(e.style.display="flex")},e=()=>{var e;document.getElementById("permissions-issue").style.display="block",document.getElementById("authorize-button").onclick=c,r&&(document.getElementById("app-permissions-link").style.display="none",(e=document.getElementById("permissions-url")).innerText=r?.origins.join(",")||e.innerText),d()},f=()=>{document.getElementById("permissions-issue").style.display="none",document.getElementById("redirect").style.display="block",window.location.href="https://app.bulktexterpro.com",setTimeout(d,1e3)},g=(document.getElementById("authorize-button").onclick=c,async()=>{((await browser_polyfill.permissions.getAll())?.origins?.includes("https://app.bulktexterpro.com/*")&&!r?f:e)()});g()}
+body {
+  font-family: Roboto, Helvetica, Arial, sans-serif;
+}
+
+h1 {
+  font-size: 24px;
+  width: 100%;
+  margin-top: 0;
+  font-weight: 400;
+  line-height: 1.235;
+  letter-spacing: 0.00735em;
+  margin-bottom: 8px;
+}
+h1 img {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+a {
+  text-decoration: none;
+  color: #896ce8;
+}
+
+button {
+  display: inline-flex;
+  -webkit-box-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  outline: 0px;
+  border: 0px;
+  margin: 0px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+  appearance: none;
+  text-decoration: none;
+  font-family: Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.75;
+  letter-spacing: 0.02857em;
+  text-transform: uppercase;
+  min-width: 64px;
+  padding: 6px 16px;
+  border-radius: 4px;
+  transition:
+    background-color 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+    box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+    border-color 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+    color 250ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+  color: rgb(255, 255, 255);
+  background-color: #896ce8;
+  box-shadow:
+    rgba(0, 0, 0, 0.2) 0px 3px 1px -2px,
+    rgba(0, 0, 0, 0.14) 0px 2px 2px 0px,
+    rgba(0, 0, 0, 0.12) 0px 1px 5px 0px;
+}
+
+button:hover {
+  text-decoration: none;
+  background-color: #7b61d1;
+  box-shadow:
+    rgba(0, 0, 0, 0.2) 0px 2px 4px -1px,
+    rgba(0, 0, 0, 0.14) 0px 4px 5px 0px,
+    rgba(0, 0, 0, 0.12) 0px 1px 10px 0px;
+}
