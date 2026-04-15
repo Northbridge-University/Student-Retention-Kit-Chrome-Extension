@@ -22,6 +22,13 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'14.5': {
+        title: 'Latest Updates',
+        date: 'April 15, 2026',
+        updates: [
+			'Fixed "Campus" target sheet setting silently falling back to LDA MM-DD-YYYY when highlighting rows',
+        ]
+    },
 	'14.4': {
         title: 'Latest Updates',
         date: 'April 11, 2026',
