@@ -94,7 +94,8 @@ if (window.hasSRKConnectorRun) {
     SyStudentId: ['studentsis'],
     daysOut: ['daysinactive', 'days'],
     url: ['gradebook', 'gradebookurl', 'canvasurl', 'studenturl'],
-    lda: ['lastdayofattendance', 'lastattendance', 'lastdateofattendance', 'lastdayattended']
+    lda: ['lastdayofattendance', 'lastattendance', 'lastdateofattendance', 'lastdayattended'],
+    campus: ['location', 'site', 'school', 'campusname']
   };
 
   /**
@@ -604,6 +605,15 @@ if (window.hasSRKConnectorRun) {
               const lda = getFieldWithAlias(student, 'lda');
               if (lda !== null && lda !== undefined) {
                   transformedStudent.lda = lda;
+              }
+
+              // Campus - use aliases (Campus, Location, Site, School, CampusName) to find it.
+              // The Excel workbook header is "Campus" (title case) but all downstream consumers
+              // read the lowercase `campus` field — without this normalization, selecting the
+              // "Campus" target sheet in settings silently falls back to LDA MM-DD-YYYY.
+              const campus = getFieldWithAlias(student, 'campus');
+              if (campus !== null && campus !== undefined && String(campus).trim() !== '') {
+                  transformedStudent.campus = String(campus).trim();
               }
 
               // Assignments - initialize if not present
