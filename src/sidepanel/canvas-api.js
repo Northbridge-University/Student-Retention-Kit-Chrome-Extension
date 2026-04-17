@@ -16,7 +16,7 @@ import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
-import { fetchCanvasDetailsGraphQL, fetchCourseGroupDataGraphQL, resolveStudentsViaGraphQL } from './canvas-graphql.js';
+import { fetchCourseGroupDataGraphQL } from './canvas-graphql.js';
 
 // Custom error for cancelled updates
 class UpdateCancelledError extends Error {
@@ -893,14 +893,13 @@ async function _processStep2(students, renderCallback) {
 
         const { cacheEnabled, useNonApiFetch, courseReferenceDate, apiType } = await loadPipelineSettings();
 
-        // --- GraphQL fast path: resolve all students in one pass, grouped by ClassSectionId ---
+        // Note: Step 2 always uses REST regardless of apiType. Canvas GraphQL
+        // redacts sisId/email/loginId for sessions without :read_sis, so there
+        // is no reliable way to map SyStudentId → canvasUserId in GraphQL under
+        // a normal browser session. REST /users/sis_user_id:{id} works
+        // regardless of admin scope. GraphQL is still used for Step 3.
         if (apiType === CANVAS_API_TYPES.GRAPHQL) {
-            timeSpan.textContent = '15%';
-            await resolveStudentsViaGraphQL(students);
-            timeSpan.textContent = '100%';
-            await chrome.storage.local.set({ [STORAGE_KEYS.MASTER_ENTRIES]: students });
-            console.log(`[Step 2] GraphQL complete - ${students.length} students processed`);
-            return students;
+            console.log('[Step 2] GraphQL mode: using REST for ID resolution (see canvas-graphql.js for rationale)');
         }
 
         // --- Separate students into cached vs uncached groups ---
@@ -949,9 +948,7 @@ async function _processStep2(students, renderCallback) {
             timeSpan.textContent = `${pct}%`;
         };
 
-        const fetchFn = apiType === CANVAS_API_TYPES.GRAPHQL
-            ? (student) => fetchCanvasDetailsGraphQL(student)
-            : (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
+        const fetchFn = (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
 
         // --- Process cached students first (fast, no API delay needed) ---
         await processBatches({
