@@ -27,6 +27,7 @@ export const RELEASE_NOTES = {
         date: 'April 17, 2026',
         updates: [
 			'Massive improvements to Canvas fetching speed and Settings UI',
+			'Try the new faster method: Canvas Settings → Advanced → API Mode → switch to GraphQL',
         ]
     },
 	'14.5': {
