@@ -132,7 +132,7 @@ query CourseUsersBySisId($sisId: String!) {
     name
     sisId
     usersConnection(first: ${USERS_PAGE_SIZE}, filter: { enrollmentTypes: [StudentEnrollment], enrollmentStates: [active] }) {
-      nodes { _id sisId name }
+      nodes { _id sisId integrationId name email loginId }
     }
     enrollmentsConnection {
       nodes {
@@ -169,20 +169,35 @@ export async function resolveStudentsViaGraphQL(students) {
 
     console.log(`[GraphQL] Step 2: ${byClassSection.size} course(s), ${unresolved.length} unresolved`);
 
+    let totalMatched = 0;
+    let totalGroup = 0;
+    let diagnosticLogged = false;
     for (const [sisCourseId, group] of byClassSection.entries()) {
         try {
             const data = await graphqlRequest(COURSE_USERS_QUERY, { sisId: sisCourseId });
             const course = data && data.course;
             if (!course) {
-                console.warn(`[GraphQL] Course ${sisCourseId} not found`);
+                console.warn(`[GraphQL] Course sisId=${sisCourseId} not found`);
                 continue;
             }
-            applyCourseDataToStudents(course, group);
+            if (!diagnosticLogged) {
+                const sample = (course.usersConnection && course.usersConnection.nodes) || [];
+                console.log(`[GraphQL] Sample course ${sisCourseId}: ${sample.length} users returned, first:`, sample[0]);
+                diagnosticLogged = true;
+            }
+            const matched = applyCourseDataToStudents(course, group);
+            totalMatched += matched;
+            totalGroup += group.length;
+            if (matched === 0) {
+                const sample = (course.usersConnection && course.usersConnection.nodes) || [];
+                console.warn(`[GraphQL] Course ${sisCourseId}: matched 0/${group.length} students. Roster SyStudentIds: [${group.slice(0, 3).map(s => s.SyStudentId).join(', ')}]. Canvas nodes had sisId/email: [${sample.slice(0, 3).map(u => `${u.sisId}|${u.email}`).join(', ')}]`);
+            }
         } catch (e) {
             if (e && e.isCanvasAuth) throw e;
             console.warn(`[GraphQL] Course ${sisCourseId} failed:`, e.message);
         }
     }
+    console.log(`[GraphQL] Step 2 matched ${totalMatched}/${totalGroup} students across ${byClassSection.size} courses`);
 
     // Fallback: students without ClassSectionId resolve individually via REST,
     // which seeds student.ClassSectionId for next run and sets url/grade.
@@ -199,20 +214,37 @@ export async function resolveStudentsViaGraphQL(students) {
 
 function applyCourseDataToStudents(course, group) {
     const canvasCourseId = course._id;
-    const usersByCanvasSisId = new Map();
-    for (const u of (course.usersConnection && course.usersConnection.nodes) || []) {
-        if (u.sisId) usersByCanvasSisId.set(String(u.sisId), u);
+    const users = (course.usersConnection && course.usersConnection.nodes) || [];
+
+    const bySisId = new Map();
+    const byIntegrationId = new Map();
+    const byEmail = new Map();
+    const byLoginId = new Map();
+    for (const u of users) {
+        if (u.sisId) bySisId.set(String(u.sisId), u);
+        if (u.integrationId) byIntegrationId.set(String(u.integrationId), u);
+        if (u.email) byEmail.set(String(u.email).toLowerCase(), u);
+        if (u.loginId) byLoginId.set(String(u.loginId).toLowerCase(), u);
     }
+
     const gradesByUserId = new Map();
     for (const e of (course.enrollmentsConnection && course.enrollmentsConnection.nodes) || []) {
         if (e.user && e.user._id) gradesByUserId.set(String(e.user._id), e.grades || {});
     }
 
+    let matched = 0;
     for (const student of group) {
         const syId = String(student.SyStudentId || '');
-        const user = usersByCanvasSisId.get(syId);
+        const email = student.studentEmail ? String(student.studentEmail).toLowerCase() : '';
+
+        const user =
+            (syId && bySisId.get(syId)) ||
+            (syId && byIntegrationId.get(syId)) ||
+            (email && byEmail.get(email)) ||
+            (email && byLoginId.get(email));
         if (!user) continue;
 
+        matched++;
         student.url = `${CANVAS_DOMAIN}/courses/${canvasCourseId}/grades/${user._id}`;
         if (!student.name && user.name) student.name = user.name;
 
@@ -225,6 +257,7 @@ function applyCourseDataToStudents(course, group) {
             student.grade = String(grades.currentGrade);
         }
     }
+    return matched;
 }
 
 async function resolveUnknownStudent(student) {
