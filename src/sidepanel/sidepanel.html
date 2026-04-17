@@ -783,73 +783,86 @@
                     </div>
                 </div>
 
-                <!-- Canvas User ID Cache -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-database" style="color:var(--primary-color);"></i> Canvas User ID Cache
-                        </label>
-                        <i id="canvasCacheToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
-                    </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom: 12px;">
-                        Remembers each student's Canvas user ID after the first lookup so subsequent runs skip the <code>sis_user_id:</code> REST call. Canvas user IDs never change, so entries have no expiration.
-                    </div>
-                    <div id="cacheSettingsContainer">
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 8px;">
-                            <span style="font-size:0.9em;">Cached Student IDs</span>
-                            <span id="cacheStatsTextModal" style="font-size:0.9em; color:var(--text-secondary);">Loading...</span>
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button id="clearCacheBtnModal" class="btn-secondary" style="flex: 1;">
-                                <i class="fas fa-trash-alt" style="margin-right: 5px;"></i>
-                                Clear Cache
-                            </button>
-                            <button id="downloadCacheBtnModal" class="btn-secondary" style="flex: 0 0 auto;" title="Download cache as CSV">
-                                <i class="fas fa-download"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Non API Course Fetch -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-globe" style="color:var(--primary-color);"></i> Non API Course Fetch
-                        </label>
-                        <i id="nonApiCourseFetchToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
-                    </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary);">
-                        When enabled, fetches course data by scraping the Canvas web page instead of using the API. Use this if the API returns unauthorized errors for course lists.
-                    </div>
-                </div>
-
                 <!-- Next Assignment -->
                 <div style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-calendar-alt" style="color:var(--primary-color);"></i> Next Assignment
+                            <i class="fas fa-calendar-alt" style="color:var(--primary-color);"></i> Next Assignment Due
                         </label>
-                        <i id="nextAssignmentToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                        <i id="nextAssignmentToggle" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
                     </div>
                     <div style="font-size:0.8em; color:var(--text-secondary);">
                         When enabled, identifies the next upcoming assignment due for each student during master list updates. Shows the nearest assignment that hasn't been submitted yet.
                     </div>
                 </div>
 
-                <!-- API Mode -->
+                <!-- Advanced (collapsed by default) -->
                 <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-plug" style="color:var(--primary-color);"></i> API Mode
+                    <div id="canvasAdvancedToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="canvasAdvancedContent" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; cursor: pointer; border-top: 1px solid rgba(0,0,0,0.08); user-select: none;">
+                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main); cursor: pointer;">
+                            <i class="fas fa-cog" style="color:var(--primary-color); margin-right: 4px;"></i> Advanced
                         </label>
-                        <div id="canvasApiTypeToggle" role="radiogroup" aria-label="Canvas API Mode" style="display:inline-flex; border:1px solid rgba(0,0,0,0.1); border-radius:6px; overflow:hidden;">
-                            <button type="button" data-api-type="rest" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:var(--primary-color); color:#fff; border:none; cursor:pointer;">REST</button>
-                            <button type="button" data-api-type="graphql" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:transparent; color:var(--text-main); border:none; cursor:pointer;">GraphQL</button>
-                        </div>
+                        <i id="canvasAdvancedChevron" class="fas fa-chevron-down" style="color:var(--text-secondary); font-size:0.9em; transition: transform 0.2s;"></i>
                     </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary);">
-                        Choose how the Master List fetches Canvas data. GraphQL is faster for large rosters but requires a <strong>ClassSectionId</strong> column in your import (falls back to a lookup when missing).
+                    <div id="canvasAdvancedContent" style="display: none; margin-top: 12px;">
+
+                        <!-- Canvas User ID Cache -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                                    <i class="fas fa-database" style="color:var(--primary-color);"></i> Canvas User ID Cache
+                                </label>
+                                <i id="canvasCacheToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
+                            </div>
+                            <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom: 12px;">
+                                Remembers each student's Canvas user ID after the first lookup so subsequent runs skip the <code>sis_user_id:</code> REST call. Canvas user IDs never change, so entries have no expiration.
+                            </div>
+                            <div id="cacheSettingsContainer">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 8px;">
+                                    <span style="font-size:0.9em;">Cached Student IDs</span>
+                                    <span id="cacheStatsTextModal" style="font-size:0.9em; color:var(--text-secondary);">Loading...</span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="clearCacheBtnModal" class="btn-secondary" style="flex: 1;">
+                                        <i class="fas fa-trash-alt" style="margin-right: 5px;"></i>
+                                        Clear Cache
+                                    </button>
+                                    <button id="downloadCacheBtnModal" class="btn-secondary" style="flex: 0 0 auto;" title="Download cache as CSV">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Non API Course Fetch -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                                    <i class="fas fa-globe" style="color:var(--primary-color);"></i> Non API Course Fetch
+                                </label>
+                                <i id="nonApiCourseFetchToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                            </div>
+                            <div style="font-size:0.8em; color:var(--text-secondary);">
+                                When enabled, fetches course data by scraping the Canvas web page instead of using the API. Use this if the API returns unauthorized errors for course lists.
+                            </div>
+                        </div>
+
+                        <!-- API Mode -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                                    <i class="fas fa-plug" style="color:var(--primary-color);"></i> API Mode
+                                </label>
+                                <div id="canvasApiTypeToggle" role="radiogroup" aria-label="Canvas API Mode" style="display:inline-flex; border:1px solid rgba(0,0,0,0.1); border-radius:6px; overflow:hidden;">
+                                    <button type="button" data-api-type="rest" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:var(--primary-color); color:#fff; border:none; cursor:pointer;">REST</button>
+                                    <button type="button" data-api-type="graphql" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:transparent; color:var(--text-main); border:none; cursor:pointer;">GraphQL</button>
+                                </div>
+                            </div>
+                            <div style="font-size:0.8em; color:var(--text-secondary);">
+                                Choose how the Master List fetches Canvas data. GraphQL is faster for large rosters but requires a <strong>ClassSectionId</strong> column in your import (falls back to a lookup when missing).
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>

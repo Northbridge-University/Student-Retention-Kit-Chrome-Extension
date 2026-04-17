@@ -303,6 +303,9 @@ export function cacheDomElements() {
     elements.nonApiCourseFetchToggle = document.getElementById('nonApiCourseFetchToggle');
     elements.nextAssignmentToggle = document.getElementById('nextAssignmentToggle');
     elements.canvasApiTypeToggle = document.getElementById('canvasApiTypeToggle');
+    elements.canvasAdvancedToggle = document.getElementById('canvasAdvancedToggle');
+    elements.canvasAdvancedContent = document.getElementById('canvasAdvancedContent');
+    elements.canvasAdvancedChevron = document.getElementById('canvasAdvancedChevron');
     elements.cacheSettingsContainer = document.getElementById('cacheSettingsContainer');
     elements.cacheStatsTextModal = document.getElementById('cacheStatsTextModal');
     elements.clearCacheBtnModal = document.getElementById('clearCacheBtnModal');

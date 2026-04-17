@@ -79,6 +79,7 @@ import {
     toggleNonApiCourseFetch,
     toggleNextAssignment,
     initCanvasApiTypeToggle,
+    initCanvasAdvancedToggle,
     togglePowerAutomateEnabled,
     togglePowerAutomateDebug,
     toggleDebugModeModal,
@@ -677,6 +678,7 @@ function setupEventListeners() {
     }
 
     initCanvasApiTypeToggle();
+    initCanvasAdvancedToggle();
 
     if (elements.clearCacheBtnModal) {
         elements.clearCacheBtnModal.addEventListener('click', clearCacheFromModal);
