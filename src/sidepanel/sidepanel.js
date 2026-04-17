@@ -680,6 +680,17 @@ function setupEventListeners() {
     initCanvasApiTypeToggle();
     initCanvasAdvancedToggle();
 
+    if (elements.reportIssueBtn) {
+        // Regenerate a fresh 6-digit ticket number on every click so each
+        // report lands in a unique email thread. Synchronous update of href
+        // takes effect before the browser follows the mailto link.
+        elements.reportIssueBtn.addEventListener('click', () => {
+            const ticket = String(Math.floor(100000 + Math.random() * 900000));
+            const subject = encodeURIComponent(`Student Retention Kit Issue - ${ticket}`);
+            elements.reportIssueBtn.href = `mailto:vblanco1@northbridge.edu?subject=${subject}`;
+        });
+    }
+
     if (elements.clearCacheBtnModal) {
         elements.clearCacheBtnModal.addEventListener('click', clearCacheFromModal);
     }

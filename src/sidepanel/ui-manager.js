@@ -306,6 +306,7 @@ export function cacheDomElements() {
     elements.canvasAdvancedToggle = document.getElementById('canvasAdvancedToggle');
     elements.canvasAdvancedContent = document.getElementById('canvasAdvancedContent');
     elements.canvasAdvancedChevron = document.getElementById('canvasAdvancedChevron');
+    elements.reportIssueBtn = document.getElementById('reportIssueBtn');
     elements.cacheSettingsContainer = document.getElementById('cacheSettingsContainer');
     elements.cacheStatsTextModal = document.getElementById('cacheStatsTextModal');
     elements.clearCacheBtnModal = document.getElementById('clearCacheBtnModal');
