@@ -8,14 +8,15 @@
 //   5. Data Analysis (missing assignments, next assignment, grade extraction)
 //   6. Step Orchestrators (processStep2, processStep3, processStep4)
 
-import { STORAGE_KEYS, CANVAS_DOMAIN, LEGACY_CANVAS_SUBDOMAINS, GENERIC_AVATAR_URL, normalizeCanvasUrl } from '../constants/index.js';
+import { STORAGE_KEYS, CANVAS_DOMAIN, LEGACY_CANVAS_SUBDOMAINS, GENERIC_AVATAR_URL, CANVAS_API_TYPES, normalizeCanvasUrl } from '../constants/index.js';
 import { numericToLetterGrade } from '../constants/field-utils.js';
-import { getCachedData, getCache, stageCacheData, flushPendingCacheWrites } from '../utils/canvasCache.js';
 import { openCanvasAuthErrorModal, isCanvasAuthError } from './modals/canvas-auth-modal.js';
 import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
+import { fetchCourseGroupDataGraphQL } from './canvas-graphql.js';
+import { getCachedCanvasUserId, setCachedCanvasUserId, clearCachedCanvasUserId } from '../utils/canvasUserIdCache.js';
 
 // Custom error for cancelled updates
 class UpdateCancelledError extends Error {
@@ -164,15 +165,17 @@ export function updateTotalTime() {
  * Handles the active/spinner → completed/check or error/red transitions
  * so each processStepN doesn't need to repeat the boilerplate.
  *
- * @param {string} stepId - DOM element ID (e.g. 'step2', 'step3')
+ * @param {string} stepId - DOM element ID ('step1' or 'step2')
  * @param {function} work - Async function that receives { timeSpan, startTime } and returns a result
  * @returns {Promise<*>} The result of work()
  */
-async function withStepUI(stepId, work) {
+async function withStepUI(stepId, work, options = {}) {
     // Check if the update was cancelled before starting this step
     if (isUpdateCancelled()) {
         throw new UpdateCancelledError();
     }
+
+    const { final = true } = options;
 
     const stepEl = document.getElementById(stepId);
     const timeSpan = stepEl.querySelector('.step-time');
@@ -180,19 +183,28 @@ async function withStepUI(stepId, work) {
     stepEl.className = 'queue-item active';
     updateStepIcon(stepEl, 'spinner');
 
-    const startTime = Date.now();
+    // Re-use an in-flight startTime when successive phases share the same
+    // step element (e.g. Step 2+3+4 all map to the 'Fetch Canvas Data' row).
+    const existingStart = stepEl.dataset.startTime;
+    const startTime = existingStart ? parseInt(existingStart, 10) : Date.now();
+    if (!existingStart) stepEl.dataset.startTime = String(startTime);
 
     try {
         const result = await work({ timeSpan, startTime });
 
-        const durationSeconds = (Date.now() - startTime) / 1000;
-        stepEl.className = 'queue-item completed';
-        updateStepIcon(stepEl, 'check');
-        timeSpan.textContent = formatDuration(durationSeconds);
-        updateTotalTime();
+        if (final) {
+            const durationSeconds = (Date.now() - startTime) / 1000;
+            stepEl.className = 'queue-item completed';
+            updateStepIcon(stepEl, 'check');
+            timeSpan.textContent = formatDuration(durationSeconds);
+            delete stepEl.dataset.startTime;
+            updateTotalTime();
+        }
 
         return result;
     } catch (error) {
+        delete stepEl.dataset.startTime;
+
         if (error instanceof UpdateCancelledError) {
             console.log(`[${stepId}] Cancelled by user`);
             setUpdateButtonsDisabled(false);
@@ -628,16 +640,20 @@ function processCourseGroupResults(studentsInCourse, courseGroupData, referenceD
  * @returns {Promise<{ cacheEnabled: boolean, useNonApiFetch: boolean, courseReferenceDate: Date }>}
  */
 async function loadPipelineSettings() {
-    const [cacheSettings, nonApiSettings, timeMachineSettings] = await Promise.all([
+    const [cacheSettings, nonApiSettings, timeMachineSettings, apiTypeSettings] = await Promise.all([
         chrome.storage.local.get([STORAGE_KEYS.CANVAS_CACHE_ENABLED]),
         storageGet([STORAGE_KEYS.NON_API_COURSE_FETCH]),
-        chrome.storage.local.get([STORAGE_KEYS.USE_SPECIFIC_DATE, STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE])
+        chrome.storage.local.get([STORAGE_KEYS.USE_SPECIFIC_DATE, STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE]),
+        storageGet([STORAGE_KEYS.CANVAS_API_TYPE])
     ]);
 
     const cacheEnabled = cacheSettings[STORAGE_KEYS.CANVAS_CACHE_ENABLED] !== undefined
         ? cacheSettings[STORAGE_KEYS.CANVAS_CACHE_ENABLED]
         : true;
     const useNonApiFetch = nonApiSettings[STORAGE_KEYS.NON_API_COURSE_FETCH] !== undefined ? nonApiSettings[STORAGE_KEYS.NON_API_COURSE_FETCH] : true;
+    const apiType = apiTypeSettings[STORAGE_KEYS.CANVAS_API_TYPE] === CANVAS_API_TYPES.GRAPHQL
+        ? CANVAS_API_TYPES.GRAPHQL
+        : CANVAS_API_TYPES.REST;
 
     const useSpecificDate = timeMachineSettings[STORAGE_KEYS.USE_SPECIFIC_DATE] || false;
     const specificDateStr = timeMachineSettings[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
@@ -651,9 +667,9 @@ async function loadPipelineSettings() {
         courseReferenceDate = new Date();
     }
 
-    console.log(`[Settings] Cache: ${cacheEnabled}, Non-API: ${useNonApiFetch}`);
+    console.log(`[Settings] Cache: ${cacheEnabled}, Non-API: ${useNonApiFetch}, API Type: ${apiType}`);
 
-    return { cacheEnabled, useNonApiFetch, courseReferenceDate };
+    return { cacheEnabled, useNonApiFetch, courseReferenceDate, apiType };
 }
 
 /**
@@ -675,50 +691,59 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
     try {
         const syStudentId = String(student.SyStudentId);
 
-        // --- Resolve user data + courses (cache or API) ---
-        const cachedData = (cacheEnabled && !useNonApiFetch) ? await getCachedData(syStudentId) : null;
-
-        let userData;
-        let courses;
-
-        if (cachedData) {
-            userData = cachedData.userData;
-            courses = cachedData.courses;
-        } else {
-            // Fetch user profile
+        // --- Resolve Canvas user profile ---
+        // Prefer the permanently cached Canvas user ID when the ID cache is
+        // enabled; on 404 the cached entry is invalidated and we fall back to
+        // the SIS lookup. The previous expiring full-profile cache was
+        // removed — courses are always fetched fresh.
+        let userResp = null;
+        if (cacheEnabled) {
+            const cachedCanvasId = await getCachedCanvasUserId(syStudentId);
+            if (cachedCanvasId) {
+                const directUrl = `${getCanvasDomain()}/api/v1/users/${cachedCanvasId}`;
+                userResp = await fetchWithFallback(directUrl, { headers: { 'Accept': 'application/json' } });
+                if (isCanvasAuthError(userResp)) {
+                    await handleCanvasAuthError('fetching user data');
+                }
+                if (userResp.status === 404) {
+                    await clearCachedCanvasUserId(syStudentId);
+                    userResp = null;
+                }
+            }
+        }
+        if (!userResp) {
             const userUrl = `${getCanvasDomain()}/api/v1/users/sis_user_id:${student.SyStudentId}`;
-            const userResp = await fetchWithFallback(userUrl, { headers: { 'Accept': 'application/json' } });
-
+            userResp = await fetchWithFallback(userUrl, { headers: { 'Accept': 'application/json' } });
             if (isCanvasAuthError(userResp)) {
                 await handleCanvasAuthError('fetching user data');
             }
-            if (!userResp.ok) {
-                console.warn(`Failed to fetch user data for ${student.SyStudentId}: ${userResp.status}`);
-                return student;
-            }
-            userData = await userResp.json();
+        }
+        if (!userResp.ok) {
+            console.warn(`Failed to fetch user data for ${student.SyStudentId}: ${userResp.status}`);
+            return student;
+        }
+        const userData = await userResp.json();
+        if (cacheEnabled && userData && userData.id) {
+            await setCachedCanvasUserId(syStudentId, userData.id);
+        }
 
-            // Fetch courses (API or HTML scraping)
-            const canvasUserId = userData.id;
-            if (canvasUserId) {
-                if (useNonApiFetch) {
-                    courses = await fetchCoursesFromHtml(canvasUserId);
+        // --- Fetch courses (API or HTML scraping) ---
+        let courses;
+        const canvasUserId = userData.id;
+        if (canvasUserId) {
+            if (useNonApiFetch) {
+                courses = await fetchCoursesFromHtml(canvasUserId);
+            } else {
+                const coursesUrl = `${getCanvasDomain()}/api/v1/users/${canvasUserId}/courses?include[]=enrollments&per_page=100`;
+                const coursesResp = await fetchWithFallback(coursesUrl, { headers: { 'Accept': 'application/json' } });
+
+                if (isCanvasAuthError(coursesResp)) {
+                    await handleCanvasAuthError('fetching courses');
+                } else if (coursesResp.ok) {
+                    courses = await coursesResp.json();
                 } else {
-                    const coursesUrl = `${getCanvasDomain()}/api/v1/users/${canvasUserId}/courses?include[]=enrollments&per_page=100`;
-                    const coursesResp = await fetchWithFallback(coursesUrl, { headers: { 'Accept': 'application/json' } });
-
-                    if (isCanvasAuthError(coursesResp)) {
-                        await handleCanvasAuthError('fetching courses');
-                    } else if (coursesResp.ok) {
-                        courses = await coursesResp.json();
-                    } else {
-                        console.warn(`Failed to fetch courses for ${student.SyStudentId}: ${coursesResp.status}`);
-                        courses = [];
-                    }
-                }
-
-                if (cacheEnabled) {
-                    stageCacheData(syStudentId, userData, courses);
+                    console.warn(`Failed to fetch courses for ${student.SyStudentId}: ${coursesResp.status}`);
+                    courses = [];
                 }
             }
         }
@@ -741,7 +766,6 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
         }
 
         // --- Find active course and set gradebook URL ---
-        const canvasUserId = userData.id;
         if (canvasUserId && courses && courses.length > 0) {
             const now = courseReferenceDate || new Date();
             const validCourses = courses.filter(c => c.name && !c.name.toUpperCase().includes('CAPV'));
@@ -817,9 +841,8 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
  * @param {number} options.batchSize - Students per batch
  * @param {number} options.delayMs - Milliseconds to wait between batches (0 = no delay)
  * @param {function} options.onProgress - Called with (processedSoFar) after each batch
- * @param {boolean} options.flushCache - Whether to flush staged cache writes after each batch
  */
-async function processBatches({ students, updatedStudents, studentIndexMap, processFn, batchSize, delayMs, onProgress, flushCache }) {
+async function processBatches({ students, updatedStudents, studentIndexMap, processFn, batchSize, delayMs, onProgress }) {
     for (let i = 0; i < students.length; i += batchSize) {
         checkShutdown();
 
@@ -839,10 +862,6 @@ async function processBatches({ students, updatedStudents, studentIndexMap, proc
             const originalIndex = studentIndexMap.get(originalStudent);
             updatedStudents[originalIndex] = result.status === 'fulfilled' ? result.value : originalStudent;
         });
-
-        if (flushCache) {
-            await flushPendingCacheWrites();
-        }
 
         if (onProgress) {
             onProgress(Math.min(i + batchSize, students.length));
@@ -886,41 +905,21 @@ async function _processStep2(students, renderCallback) {
 
         console.log(`[Step 2] Pinging Canvas API: ${getCanvasDomain()}`);
 
-        const { cacheEnabled, useNonApiFetch, courseReferenceDate } = await loadPipelineSettings();
+        const { cacheEnabled, useNonApiFetch, courseReferenceDate, apiType } = await loadPipelineSettings();
 
-        // --- Separate students into cached vs uncached groups ---
-        const cachedStudents = [];
-        const uncachedStudents = [];
-
-        if (cacheEnabled) {
-            const cache = await getCache();
-            const now = new Date();
-
-            const validCachedIds = Object.keys(cache).filter(id => {
-                const entry = cache[id];
-                return entry && entry.expiresAt && new Date(entry.expiresAt) > now;
-            });
-
-            const studentBySyId = new Map();
-            students.forEach(s => {
-                if (s.SyStudentId) studentBySyId.set(String(s.SyStudentId), s);
-            });
-
-            for (const cachedId of validCachedIds) {
-                if (studentBySyId.has(cachedId)) {
-                    cachedStudents.push(studentBySyId.get(cachedId));
-                    studentBySyId.delete(cachedId);
-                }
-            }
-            uncachedStudents.push(...studentBySyId.values());
-        } else {
-            uncachedStudents.push(...students);
+        // Note: Step 2 always uses REST regardless of apiType. Canvas GraphQL
+        // redacts sisId/email/loginId for sessions without :read_sis, so there
+        // is no reliable way to map SyStudentId → canvasUserId in GraphQL under
+        // a normal browser session. REST /users/sis_user_id:{id} works
+        // regardless of admin scope. GraphQL is still used for Step 3.
+        if (apiType === CANVAS_API_TYPES.GRAPHQL) {
+            console.log('[Step 2] GraphQL mode: using REST for ID resolution (see canvas-graphql.js for rationale)');
         }
 
-        console.log(`[Step 2] ${cachedStudents.length} cached, ${uncachedStudents.length} uncached`);
-        timeSpan.textContent = '15%';
+        // Step 2 contributes the first half of the combined 'Fetch Canvas Data'
+        // progress bar (0-50%); Step 3 picks up from 50-100%.
+        timeSpan.textContent = '0%';
 
-        // --- Build shared state for batch processing ---
         const BATCH_SIZE = 20;
         const BATCH_DELAY_MS = 100;
 
@@ -930,39 +929,23 @@ async function _processStep2(students, renderCallback) {
 
         let processedCount = 0;
         const updateProgress = () => {
-            const pct = 15 + Math.round((processedCount / students.length) * 85);
+            const pct = Math.round((processedCount / students.length) * 50);
             timeSpan.textContent = `${pct}%`;
         };
 
         const fetchFn = (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
 
-        // --- Process cached students first (fast, no API delay needed) ---
+        // The expiring full-profile cache was removed, so every student
+        // takes the same API-backed path. Students with a cached Canvas user
+        // ID skip the sis_user_id: translation hop inside fetchCanvasDetails.
         await processBatches({
-            students: cachedStudents,
-            updatedStudents,
-            studentIndexMap,
-            processFn: fetchFn,
-            batchSize: BATCH_SIZE,
-            delayMs: 0,
-            onProgress: (n) => { processedCount = n; updateProgress(); },
-            flushCache: false
-        });
-
-        // --- Process uncached students (API calls, with delay between batches) ---
-        if (uncachedStudents.length > 0) {
-            console.log(`[Step 2] Now fetching fresh data for ${uncachedStudents.length} uncached students...`);
-        }
-
-        const cachedCount = cachedStudents.length;
-        await processBatches({
-            students: uncachedStudents,
+            students,
             updatedStudents,
             studentIndexMap,
             processFn: fetchFn,
             batchSize: BATCH_SIZE,
             delayMs: BATCH_DELAY_MS,
-            onProgress: (n) => { processedCount = cachedCount + n; updateProgress(); },
-            flushCache: true
+            onProgress: (n) => { processedCount = n; updateProgress(); }
         });
 
         await chrome.storage.local.set({ [STORAGE_KEYS.MASTER_ENTRIES]: updatedStudents });
@@ -970,7 +953,7 @@ async function _processStep2(students, renderCallback) {
         console.log(`[Step 2] Complete - ${students.length} students processed`);
 
         return updatedStudents;
-    });
+    }, { final: false });
 
     if (renderCallback) await renderCallback(updatedStudents);
     return updatedStudents;
@@ -1002,7 +985,12 @@ export async function processStep3(students, renderCallback) {
 }
 
 async function _processStep3(students, renderCallback) {
-    return withStepUI('step3', async ({ timeSpan }) => {
+    // Step 3 always finalizes the 'Fetch Canvas Data' row so the user sees
+    // a completed state even if Step 4's Excel instance modal blocks next.
+    // Whether we're mid-pipeline (Step 2 ran first) or standalone determines
+    // only the progress range — inferred from the shared dataset.startTime.
+    const pipelineMode = !!document.getElementById('step2')?.dataset.startTime;
+    return withStepUI('step2', async ({ timeSpan }) => {
         // Pre-check: ensure user is logged into Canvas before making any API calls.
         // This is critical when Step 3 runs standalone (e.g. "Check Grade Book Again")
         // without Step 2 having already verified the session.
@@ -1011,12 +999,16 @@ async function _processStep3(students, renderCallback) {
         const settings = await storageGet([
             STORAGE_KEYS.USE_SPECIFIC_DATE,
             STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE,
-            STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED
+            STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED,
+            STORAGE_KEYS.CANVAS_API_TYPE
         ]);
 
         const useSpecificDate = settings[STORAGE_KEYS.USE_SPECIFIC_DATE] || false;
         const specificDateStr = settings[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
         const nextAssignmentEnabled = settings[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] || false;
+        const apiType = settings[STORAGE_KEYS.CANVAS_API_TYPE] === CANVAS_API_TYPES.GRAPHQL
+            ? CANVAS_API_TYPES.GRAPHQL
+            : CANVAS_API_TYPES.REST;
 
         let referenceDate;
         if (useSpecificDate && specificDateStr) {
@@ -1073,7 +1065,9 @@ async function _processStep3(students, renderCallback) {
                 const studentIds = studentsInCourse.map(s => s.parsed.studentId);
 
                 try {
-                    const data = await fetchCourseGroupData(origin, courseId, studentIds);
+                    const data = apiType === CANVAS_API_TYPES.GRAPHQL
+                        ? await fetchCourseGroupDataGraphQL(origin, courseId, studentIds)
+                        : await fetchCourseGroupData(origin, courseId, studentIds);
                     const results = processCourseGroupResults(
                         studentsInCourse, data, referenceDate, nextAssignmentEnabled
                     );
@@ -1092,7 +1086,12 @@ async function _processStep3(students, renderCallback) {
                 }
 
                 processedStudents += studentsInCourse.length;
-                timeSpan.textContent = `${Math.round((processedStudents / students.length) * 100)}%`;
+                // Step 3 fills 50-100% in pipeline mode (Step 2 already filled 0-50%)
+                // and 0-100% when running standalone ("Check Grade Book Again").
+                const offset = pipelineMode ? 50 : 0;
+                const span = pipelineMode ? 50 : 100;
+                const pct = offset + Math.round((processedStudents / students.length) * span);
+                timeSpan.textContent = `${pct}%`;
             }
         }
 
@@ -1114,22 +1113,15 @@ async function _processStep3(students, renderCallback) {
 
 /** Process Step 4: Send the master list with missing assignments to Excel. */
 export async function processStep4(students) {
-    // Skip entirely when sending to Excel is disabled
+    // The Fetch Canvas Data row finalized at the end of Step 3, so this step
+    // doesn't touch any queue UI. Excel-specific user prompts (campus, tab
+    // picker) run inline and blocking the user on them no longer holds the
+    // pipeline status display in spinner state.
     const settings = await storageGet([STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]);
     const sendEnabled = settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL] !== undefined
         ? settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]
         : true;
     if (!sendEnabled) return students;
-
-    const step4 = document.getElementById('step4');
-    if (!step4) return students;
-
-    const timeSpan = step4.querySelector('.step-time');
-    step4.className = 'queue-item active';
-    updateStepIcon(step4, 'spinner');
-    step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-spinner"></i> Sending List to Excel';
-
-    const startTime = Date.now();
 
     try {
         // Dynamically import to avoid circular dependency
@@ -1143,18 +1135,7 @@ export async function processStep4(students) {
 
         if (campuses.length > 1) {
             const selectedCampus = await openCampusSelectionModal(campuses);
-
-            if (selectedCampus === null) {
-                // User cancelled
-                const durationSeconds = (Date.now() - startTime) / 1000;
-                step4.className = 'queue-item completed';
-                updateStepIcon(step4, 'check');
-                step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-check"></i> Sending List to Excel';
-                timeSpan.textContent = `${formatDuration(durationSeconds)} (skipped)`;
-                updateTotalTime();
-                return students;
-            }
-
+            if (selectedCampus === null) return students;
             if (selectedCampus !== '') {
                 studentsToSend = students.filter(s => s.campus === selectedCampus);
                 console.log(`[Step 4] Filtered to ${studentsToSend.length} students from campus: ${selectedCampus}`);
@@ -1169,39 +1150,17 @@ export async function processStep4(students) {
             // No tabs — will attempt to send when tabs open
         } else if (excelTabs.length > 1) {
             targetTabId = await openExcelInstanceModal(excelTabs);
-
-            if (targetTabId === null) {
-                // User cancelled
-                const durationSeconds = (Date.now() - startTime) / 1000;
-                step4.className = 'queue-item completed';
-                updateStepIcon(step4, 'check');
-                step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-check"></i> Sending List to Excel';
-                timeSpan.textContent = `${formatDuration(durationSeconds)} (skipped)`;
-                updateTotalTime();
-                return students;
-            }
+            if (targetTabId === null) return students;
         } else {
             targetTabId = excelTabs[0].id;
         }
 
-        // --- Send ---
         await sendMasterListWithMissingAssignmentsToExcel(studentsToSend, targetTabId);
-
-        const durationSeconds = (Date.now() - startTime) / 1000;
-        step4.className = 'queue-item completed';
-        updateStepIcon(step4, 'check');
-        step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-check"></i> Sending List to Excel';
-        timeSpan.textContent = formatDuration(durationSeconds);
-        console.log(`[Step 4] Complete in ${formatDuration(durationSeconds)}`);
-        updateTotalTime();
+        console.log(`[Step 4] Complete`);
         return students;
 
     } catch (error) {
         console.error("[Step 4 Error]", error);
-        updateStepIcon(step4, 'error');
-        step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-times"></i> Sending List to Excel';
-        step4.style.color = '#ef4444';
-        timeSpan.textContent = 'Error';
         return students;
     }
 }

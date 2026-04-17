@@ -1,5 +1,5 @@
 // Connections Modal - Handles settings for Excel, Power Automate, Canvas, and Five9
-import { STORAGE_KEYS, CANVAS_DOMAIN, FIVE9_CONNECTION_STATES, EXTENSION_STATES } from '../../constants/index.js';
+import { STORAGE_KEYS, CANVAS_DOMAIN, FIVE9_CONNECTION_STATES, EXTENSION_STATES, CANVAS_API_TYPES } from '../../constants/index.js';
 import { storageGet, storageSet, storageGetValue, sessionGetValue } from '../../utils/storage.js';
 import { encrypt, decrypt } from '../../utils/encryption.js';
 import { updateToggleUI, isToggleEnabled, setElementEnabled } from '../../utils/ui-helpers.js';
@@ -89,6 +89,7 @@ export async function openConnectionsModal(connectionType) {
         STORAGE_KEYS.CANVAS_CACHE_ENABLED,
         STORAGE_KEYS.NON_API_COURSE_FETCH,
         STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED,
+        STORAGE_KEYS.CANVAS_API_TYPE,
         STORAGE_KEYS.CALL_DEMO,
         STORAGE_KEYS.AUTO_SWITCH_TO_CALL_TAB,
         STORAGE_KEYS.HIGHLIGHT_START_COL,
@@ -151,6 +152,9 @@ export async function openConnectionsModal(connectionType) {
 
     const nextAssignmentEnabled = result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] !== undefined ? result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] : false;
     updateNextAssignmentUI(nextAssignmentEnabled);
+
+    const apiType = result[STORAGE_KEYS.CANVAS_API_TYPE] || CANVAS_API_TYPES.REST;
+    updateCanvasApiTypeUI(apiType);
 
     // Load Five9 settings (Call Demo mode, formerly debugMode)
     const callDemo = result[STORAGE_KEYS.CALL_DEMO] || false;
@@ -294,6 +298,10 @@ export async function saveConnectionsSettings() {
     settingsToSave[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] = nextAssignmentEnabled;
     console.log(`Next Assignment setting saved: ${nextAssignmentEnabled}`);
 
+    const apiType = getCanvasApiTypeFromUI();
+    settingsToSave[STORAGE_KEYS.CANVAS_API_TYPE] = apiType;
+    console.log(`Canvas API type setting saved: ${apiType}`);
+
     // Save Five9 settings (Call Demo mode)
     const callDemoEnabled = isToggleEnabled(elements.debugModeToggleModal);
     settingsToSave[STORAGE_KEYS.CALL_DEMO] = callDemoEnabled;
@@ -358,6 +366,36 @@ function updateNonApiCourseFetchUI(isEnabled) {
 
 function updateNextAssignmentUI(isEnabled) {
     updateToggleUI(elements.nextAssignmentToggle, isEnabled);
+}
+
+function updateCanvasApiTypeUI(apiType) {
+    if (!elements.canvasApiTypeToggle) return;
+    const normalized = apiType === CANVAS_API_TYPES.GRAPHQL ? CANVAS_API_TYPES.GRAPHQL : CANVAS_API_TYPES.REST;
+    const buttons = elements.canvasApiTypeToggle.querySelectorAll('.canvas-api-type-option');
+    buttons.forEach(btn => {
+        const isActive = btn.dataset.apiType === normalized;
+        btn.style.background = isActive ? 'var(--primary-color)' : 'transparent';
+        btn.style.color = isActive ? '#fff' : 'var(--text-main)';
+        btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+    });
+    elements.canvasApiTypeToggle.dataset.value = normalized;
+}
+
+function getCanvasApiTypeFromUI() {
+    if (!elements.canvasApiTypeToggle) return CANVAS_API_TYPES.REST;
+    return elements.canvasApiTypeToggle.dataset.value === CANVAS_API_TYPES.GRAPHQL
+        ? CANVAS_API_TYPES.GRAPHQL
+        : CANVAS_API_TYPES.REST;
+}
+
+export function initCanvasApiTypeToggle() {
+    if (!elements.canvasApiTypeToggle) return;
+    const buttons = elements.canvasApiTypeToggle.querySelectorAll('.canvas-api-type-option');
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateCanvasApiTypeUI(btn.dataset.apiType);
+        });
+    });
 }
 
 function updateDebugModeModalUI(isEnabled) {
@@ -684,8 +722,7 @@ async function loadCacheStatsForModal() {
     try {
         const { getCacheStats } = await import('../../utils/canvasCache.js');
         const stats = await getCacheStats();
-        elements.cacheStatsTextModal.textContent =
-            `Total: ${stats.totalEntries} | Valid: ${stats.validEntries} | Expired: ${stats.expiredEntries}`;
+        elements.cacheStatsTextModal.textContent = `${stats.totalEntries}`;
     } catch (error) {
         console.error('Error loading cache stats:', error);
         elements.cacheStatsTextModal.textContent = 'Error loading stats';
@@ -694,7 +731,7 @@ async function loadCacheStatsForModal() {
 
 export async function clearCacheFromModal() {
     try {
-        if (!confirm('Clear all Canvas API cached data? Next update will require fresh API calls.')) {
+        if (!confirm('Clear all cached Canvas user IDs? Next update will re-resolve each student\'s ID via REST.')) {
             return;
         }
 
@@ -702,10 +739,39 @@ export async function clearCacheFromModal() {
         await clearAllCache();
         await loadCacheStatsForModal();
 
-        alert('✓ Canvas API cache cleared successfully!');
-        console.log('Canvas API cache cleared from modal');
+        alert('✓ Canvas user ID cache cleared.');
+        console.log('Canvas user ID cache cleared from modal');
     } catch (error) {
         console.error('Error clearing cache from modal:', error);
         alert('Error clearing cache. Check console for details.');
+    }
+}
+
+export async function downloadCacheFromModal() {
+    try {
+        const { exportCacheAsCsv, getCacheStats } = await import('../../utils/canvasCache.js');
+        const stats = await getCacheStats();
+        if (stats.totalEntries === 0) {
+            alert('Cache is empty — nothing to download.');
+            return;
+        }
+
+        const csv = await exportCacheAsCsv();
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const filename = `canvas-user-id-cache-${new Date().toISOString().slice(0, 10)}.csv`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        console.log(`Canvas user ID cache downloaded: ${stats.totalEntries} entries → ${filename}`);
+    } catch (error) {
+        console.error('Error downloading cache:', error);
+        alert('Error downloading cache. Check console for details.');
     }
 }

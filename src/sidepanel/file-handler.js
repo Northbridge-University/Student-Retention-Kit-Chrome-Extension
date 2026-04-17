@@ -1604,7 +1604,7 @@ export async function handleFileImport(files, onSuccess) {
  * Resets the queue UI to default state
  */
 export function resetQueueUI() {
-    const steps = ['step1', 'step2', 'step3', 'step4'];
+    const steps = ['step1', 'step2'];
     steps.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -1612,6 +1612,7 @@ export function resetQueueUI() {
         updateStepIcon(el, 'pending');
         el.querySelector('.step-time').textContent = '';
         el.style.color = '';
+        delete el.dataset.startTime;
     });
     const totalTimeDisplay = document.getElementById('queueTotalTime');
     if (totalTimeDisplay) {
@@ -1629,22 +1630,14 @@ export function resetQueueUI() {
 export async function restoreDefaultQueueUI() {
     const s1 = document.getElementById('step1');
     const s2 = document.getElementById('step2');
-    const s3 = document.getElementById('step3');
-    const s4 = document.getElementById('step4');
 
     if (s1) {
         s1.style.display = '';
-        s1.querySelector('.queue-content').innerHTML = '<i class="far fa-circle"></i> Student Population Report';
+        s1.querySelector('.queue-content').innerHTML = '<i class="far fa-circle"></i> Format Report Data';
     }
-    if (s2) { s2.style.display = ''; }
-    if (s3) { s3.style.display = ''; }
-    if (s4) {
-        const settings = await chrome.storage.local.get([STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]);
-        const sendEnabled = settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL] !== undefined
-            ? settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]
-            : true;
-        s4.style.display = sendEnabled ? '' : 'none';
-        s4.querySelector('.queue-content').innerHTML = '<i class="far fa-circle"></i> Sending List to Excel';
+    if (s2) {
+        s2.style.display = '';
+        s2.querySelector('.queue-content').innerHTML = '<i class="far fa-circle"></i> Fetch Canvas Data';
     }
 }
 

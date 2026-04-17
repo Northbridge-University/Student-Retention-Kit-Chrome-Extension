@@ -78,6 +78,7 @@ import {
     toggleCanvasCacheModal,
     toggleNonApiCourseFetch,
     toggleNextAssignment,
+    initCanvasApiTypeToggle,
     togglePowerAutomateEnabled,
     togglePowerAutomateDebug,
     toggleDebugModeModal,
@@ -87,6 +88,7 @@ import {
     toggleReformatNameModal,
     toggleHighlightStudentRowModal,
     clearCacheFromModal,
+    downloadCacheFromModal,
     updateStartButtonForMasterList
 } from './modals/connections-modal.js';
 
@@ -674,8 +676,14 @@ function setupEventListeners() {
         elements.nextAssignmentToggle.addEventListener('click', toggleNextAssignment);
     }
 
+    initCanvasApiTypeToggle();
+
     if (elements.clearCacheBtnModal) {
         elements.clearCacheBtnModal.addEventListener('click', clearCacheFromModal);
+    }
+
+    if (elements.downloadCacheBtnModal) {
+        elements.downloadCacheBtnModal.addEventListener('click', downloadCacheFromModal);
     }
 
     // Power Automate Modal Settings
@@ -1187,22 +1195,17 @@ function setupEventListeners() {
             // Get step elements
             const step1 = document.getElementById('step1');
             const step2 = document.getElementById('step2');
-            const step3 = document.getElementById('step3');
-            const step4 = document.getElementById('step4');
             const queueTotalTime = document.getElementById('queueTotalTime');
 
-            // Hide steps 1, 2, and 4 - only show step 3
+            // Only show the Fetch Canvas Data row for a grade book recheck
             if (step1) step1.style.display = 'none';
-            if (step2) step2.style.display = 'none';
-            if (step4) step4.style.display = 'none';
 
-            // Reset step 3 to initial state
-            if (step3) {
-                step3.style.display = '';
-                step3.className = 'queue-item';
-                step3.style.color = '';
-                step3.querySelector('.queue-content').innerHTML = '<i class="far fa-circle"></i> Checking Student\'s Grade book';
-                step3.querySelector('.step-time').textContent = '';
+            if (step2) {
+                step2.style.display = '';
+                step2.className = 'queue-item';
+                step2.style.color = '';
+                step2.querySelector('.queue-content').innerHTML = '<i class="far fa-circle"></i> Fetch Canvas Data';
+                step2.querySelector('.step-time').textContent = '';
             }
 
             // Reset and show total time
@@ -1639,11 +1642,7 @@ function setupEventListeners() {
  */
 function enterAttendanceMode() {
     const s2 = document.getElementById('step2');
-    const s3 = document.getElementById('step3');
-    const s4 = document.getElementById('step4');
     if (s2) s2.style.display = 'none';
-    if (s3) s3.style.display = 'none';
-    if (s4) s4.style.display = 'none';
 }
 
 /**
@@ -1651,11 +1650,7 @@ function enterAttendanceMode() {
  */
 function exitAttendanceMode() {
     const s2 = document.getElementById('step2');
-    const s3 = document.getElementById('step3');
-    const s4 = document.getElementById('step4');
     if (s2) s2.style.display = '';
-    if (s3) s3.style.display = '';
-    if (s4) s4.style.display = '';
 }
 
 /**

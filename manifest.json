@@ -14,7 +14,8 @@
     "tabs",
     "sidePanel",
     "webRequest",
-    "scripting"
+    "scripting",
+    "cookies"
   ],
 "host_permissions": [
     "https://northbridge.instructure.com/*",
