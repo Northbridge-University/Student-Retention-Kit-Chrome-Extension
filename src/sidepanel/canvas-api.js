@@ -15,7 +15,7 @@ import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
-import { fetchCourseGroupDataGraphQL } from './canvas-graphql.js';
+import { fetchCourseGroupDataGraphQL, resolveCourseCanvasIds } from './canvas-graphql.js';
 import { getCachedCanvasUserId, setCachedCanvasUserId, clearCachedCanvasUserId } from '../utils/canvasUserIdCache.js';
 
 // Custom error for cancelled updates
@@ -706,7 +706,7 @@ async function loadPipelineSettings() {
  * @param {Date} courseReferenceDate - Pre-computed reference date for active course selection
  * @returns {Promise<Object>} The updated student object
  */
-export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApiFetch = false, courseReferenceDate = null) {
+export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApiFetch = false, courseReferenceDate = null, preResolvedCanvasCourseId = null) {
     checkShutdown();
 
     if (!student.SyStudentId) return student;
@@ -750,9 +750,36 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
             await setCachedCanvasUserId(syStudentId, userData.id);
         }
 
-        // --- Fetch courses (API or HTML scraping) ---
-        let courses;
+        // --- Apply user data to student object ---
+        if (userData.name) student.name = userData.name;
+        if (userData.sortable_name) student.sortable_name = userData.sortable_name;
+
+        if (userData.avatar_url && userData.avatar_url !== GENERIC_AVATAR_URL) {
+            student.Photo = userData.avatar_url;
+            preloadImage(userData.avatar_url);
+        }
+
+        if (userData.created_at) {
+            student.created_at = userData.created_at;
+            const daysSinceCreation = (new Date() - new Date(userData.created_at)) / (1000 * 3600 * 24);
+            if (daysSinceCreation < 60) {
+                student.isNew = true;
+            }
+        }
+
         const canvasUserId = userData.id;
+
+        // --- Fast path: ClassSectionId known, skip /users/{id}/courses entirely ---
+        // We already know which course is relevant (from the spreadsheet) and
+        // its Canvas ID (pre-resolved in bulk before Step 2 began).
+        // student.grade gets populated in Step 3 from the course enrollment.
+        if (canvasUserId && preResolvedCanvasCourseId && !useNonApiFetch) {
+            student.url = `${getCanvasDomain()}/courses/${preResolvedCanvasCourseId}/grades/${canvasUserId}`;
+            return student;
+        }
+
+        // --- Slow path: fetch all the student's courses, pick active ---
+        let courses;
         if (canvasUserId) {
             if (useNonApiFetch) {
                 courses = await fetchCoursesFromHtml(canvasUserId);
@@ -768,23 +795,6 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
                     console.warn(`Failed to fetch courses for ${student.SyStudentId}: ${coursesResp.status}`);
                     courses = [];
                 }
-            }
-        }
-
-        // --- Apply user data to student object ---
-        if (userData.name) student.name = userData.name;
-        if (userData.sortable_name) student.sortable_name = userData.sortable_name;
-
-        if (userData.avatar_url && userData.avatar_url !== GENERIC_AVATAR_URL) {
-            student.Photo = userData.avatar_url;
-            preloadImage(userData.avatar_url);
-        }
-
-        if (userData.created_at) {
-            student.created_at = userData.created_at;
-            const daysSinceCreation = (new Date() - new Date(userData.created_at)) / (1000 * 3600 * 24);
-            if (daysSinceCreation < 60) {
-                student.isNew = true;
             }
         }
 
@@ -943,6 +953,25 @@ async function _processStep2(students, renderCallback) {
         // progress bar (0-50%); Step 3 picks up from 50-100%.
         timeSpan.textContent = '0%';
 
+        // Pre-resolve every unique ClassSectionId to its Canvas course ID in
+        // bulk via GraphQL. Cached entries return instantly; misses get
+        // batched ~100 per request. With the map in hand, fetchCanvasDetails
+        // can skip the per-student /users/{id}/courses REST call entirely.
+        const uniqueSisCourseIds = Array.from(new Set(
+            students
+                .map(s => s.ClassSectionId && String(s.ClassSectionId).trim())
+                .filter(Boolean)
+        ));
+        let courseIdMap = new Map();
+        if (!useNonApiFetch && uniqueSisCourseIds.length > 0) {
+            try {
+                courseIdMap = await resolveCourseCanvasIds(uniqueSisCourseIds);
+                console.log(`[Step 2] Pre-resolved ${courseIdMap.size}/${uniqueSisCourseIds.length} course SIS IDs`);
+            } catch (e) {
+                console.warn(`[Step 2] Course SIS pre-resolve failed: ${e.message}`);
+            }
+        }
+
         // 50 was too aggressive on northbridge — Canvas started 429-ing.
         // 25 is a middle ground; the 429 backoff in fetchWithFallback
         // transparently smooths any remaining throttling.
@@ -959,7 +988,11 @@ async function _processStep2(students, renderCallback) {
             timeSpan.textContent = `${pct}%`;
         };
 
-        const fetchFn = (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
+        const fetchFn = (student) => {
+            const sis = student.ClassSectionId && String(student.ClassSectionId).trim();
+            const preResolvedCourseId = sis ? courseIdMap.get(sis) : null;
+            return fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate, preResolvedCourseId);
+        };
 
         // The expiring full-profile cache was removed, so every student
         // takes the same API-backed path. Students with a cached Canvas user

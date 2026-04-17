@@ -10,6 +10,7 @@
 
 import { CANVAS_DOMAIN } from '../constants/index.js';
 import { isCanvasAuthError } from './modals/canvas-auth-modal.js';
+import { getCachedCanvasCourseId, setCachedCanvasCourseIds } from '../utils/canvasCourseIdCache.js';
 
 const GRAPHQL_ENDPOINT = `${CANVAS_DOMAIN}/api/graphql`;
 const SUBMISSIONS_PAGE_SIZE = 500;
@@ -67,6 +68,124 @@ async function graphqlRequest(query, variables = {}) {
         throw new Error(`Canvas GraphQL error: ${msg}`);
     }
     return payload.data;
+}
+
+// --- Course SIS → Canvas ID bulk resolver ---------------------------------
+//
+// The plural `courses(sisIds:)` field on Canvas GraphQL only returns
+// courses the caller is enrolled in, so retention staff get zero hits.
+// The singular `course(sisId:)` uses a more permissive loader and works
+// for admin-like roles, so we fan that out with aliased queries per
+// request (~50 courses per round-trip).
+//
+// Results go through the permanent canvasCourseIdCache so warm runs do
+// zero network work.
+
+/**
+ * Resolves a list of ClassSectionIds (SIS course IDs) to Canvas numeric
+ * course IDs. Reads from the permanent course ID cache first, resolves
+ * misses via aliased GraphQL `course(sisId:)` queries in chunks of 50,
+ * and writes the resolved pairs back to the cache.
+ *
+ * @param {string[]} sisCourseIds
+ * @returns {Promise<Map<string, string>>} SIS ID → Canvas course ID
+ */
+export async function resolveCourseCanvasIds(sisCourseIds) {
+    const result = new Map();
+    if (!sisCourseIds || sisCourseIds.length === 0) return result;
+
+    const unique = Array.from(new Set(sisCourseIds.map(String).filter(Boolean)));
+    const misses = [];
+
+    for (const sis of unique) {
+        const cached = await getCachedCanvasCourseId(sis);
+        if (cached != null) {
+            result.set(sis, String(cached));
+        } else {
+            misses.push(sis);
+        }
+    }
+
+    if (misses.length === 0) return result;
+
+    // Try GraphQL first (cheap, one round-trip per 10 courses). Canvas's
+    // course(sisId:) routes through a loader that may return null for
+    // browser sessions lacking admin scope; for those misses we fall back
+    // to REST per-course in parallel.
+    const CHUNK = 10;
+    const pairsToCache = [];
+    const stillMissing = [];
+    let loggedSample = false;
+
+    for (let i = 0; i < misses.length; i += CHUNK) {
+        const batch = misses.slice(i, i + CHUNK);
+        const varDefs = batch.map((_, idx) => `$sis${idx}: String!`).join(', ');
+        const fields = batch.map((_, idx) =>
+            `  q${idx}: course(sisId: $sis${idx}) { _id sisId }`
+        ).join('\n');
+        const query = `query ResolveCourses(${varDefs}) {\n${fields}\n}`;
+        const variables = {};
+        batch.forEach((sis, idx) => { variables[`sis${idx}`] = sis; });
+
+        try {
+            const data = await graphqlRequest(query, variables);
+            if (!loggedSample && data && Object.keys(data).length > 0) {
+                const firstKey = Object.keys(data)[0];
+                console.log(`[GraphQL] course resolver sample (${firstKey}):`, JSON.stringify(data[firstKey]));
+                loggedSample = true;
+            }
+            if (data) {
+                for (let idx = 0; idx < batch.length; idx++) {
+                    const course = data[`q${idx}`];
+                    const sis = batch[idx];
+                    // Canvas may redact sisId in the response even when we
+                    // queried by it, so rely on _id alone — we already know
+                    // which SIS we asked for.
+                    if (course && course._id) {
+                        result.set(String(sis), String(course._id));
+                        pairsToCache.push([String(sis), String(course._id)]);
+                    } else {
+                        stillMissing.push(sis);
+                    }
+                }
+            } else {
+                stillMissing.push(...batch);
+            }
+        } catch (e) {
+            if (e && e.isCanvasAuth) throw e;
+            console.warn(`[GraphQL] course alias batch failed: ${e.message}`);
+            stillMissing.push(...batch);
+        }
+    }
+
+    // REST fallback for anything GraphQL couldn't resolve. Parallelized so
+    // this stays fast even when GraphQL gives us nothing.
+    if (stillMissing.length > 0) {
+        console.log(`[Course resolver] ${stillMissing.length} SIS IDs fell back to REST`);
+        const CONCURRENCY = 20;
+        for (let i = 0; i < stillMissing.length; i += CONCURRENCY) {
+            const chunk = stillMissing.slice(i, i + CONCURRENCY);
+            const responses = await Promise.all(chunk.map(sis =>
+                fetch(`${CANVAS_DOMAIN}/api/v1/courses/sis_course_id:${encodeURIComponent(sis)}`, {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' }
+                }).then(r => r.ok ? r.json() : null).catch(() => null)
+            ));
+            responses.forEach((course, idx) => {
+                const sis = chunk[idx];
+                if (course && course.id) {
+                    result.set(String(sis), String(course.id));
+                    pairsToCache.push([String(sis), String(course.id)]);
+                }
+            });
+        }
+    }
+
+    if (pairsToCache.length > 0) {
+        await setCachedCanvasCourseIds(pairsToCache);
+    }
+
+    return result;
 }
 
 // --- Step 3: per-course submissions + grades ------------------------------
