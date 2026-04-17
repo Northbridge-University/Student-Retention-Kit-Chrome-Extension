@@ -84,6 +84,14 @@ export const CONNECTION_TYPES = {
 };
 
 /**
+ * Canvas API modes used to build the Master List.
+ */
+export const CANVAS_API_TYPES = {
+    REST: 'rest',
+    GRAPHQL: 'graphql'
+};
+
+/**
  * An enum-like object for Five9 connection states.
  */
 export const FIVE9_CONNECTION_STATES = {
@@ -158,6 +166,8 @@ export const STORAGE_KEYS = {
     CANVAS_CACHE_ENABLED: 'settings.canvas.cacheEnabled',
     NON_API_COURSE_FETCH: 'settings.canvas.nonApiCourseFetch',
     NEXT_ASSIGNMENT_ENABLED: 'settings.canvas.nextAssignmentEnabled',
+    CANVAS_API_TYPE: 'settings.canvas.apiType',
+    CANVAS_SIS_COURSE_CACHE: 'settings.canvas.sisCourseCache',
 
     // Five9 settings (settings.five9.*)
     CALL_DEMO: 'settings.five9.callDemo',
@@ -247,6 +257,7 @@ export const DEFAULT_SETTINGS = {
     [STORAGE_KEYS.CANVAS_CACHE_ENABLED]: true,
     [STORAGE_KEYS.NON_API_COURSE_FETCH]: true,
     [STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED]: false,
+    [STORAGE_KEYS.CANVAS_API_TYPE]: 'rest',
 
     // Five9 settings
     [STORAGE_KEYS.CALL_DEMO]: false, // Call demo mode (was debugMode)
@@ -353,6 +364,7 @@ export const FIELD_ALIASES = {
     grade: ['gradelevel', 'level'],
     StudentNumber: ['studentid', 'sisid', 'printid'],
     SyStudentId: ['studentsis'],
+    ClassSectionId: ['sis_course_id', 'sis_section_id', 'sisCourseId', 'sisSectionId', 'classSection', 'classsectionsis'],
     daysOut: ['daysinactive', 'days'],
     url: ['gradebook', 'gradeBookUrl', 'canvasUrl', 'studentUrl'],
 	studentEmail: ['email', 'studentsemail', 'studentemails', 'studentsemails'],
@@ -395,6 +407,7 @@ export const MASTER_LIST_COLUMNS = [
     { header: 'Shift', field: 'shift', width: 10 },
     { header: 'Program Version', field: 'programVersion', width: 30 },
     { header: 'SyStudentId', field: 'SyStudentId', width: 10 },
+    { header: 'ClassSectionId', field: 'ClassSectionId', hidden: true, width: 12 },
     { header: 'Phone', field: 'phone', fallback: 'primaryPhone', width: 10 },
     { header: 'Other Phone', field: 'otherPhone', width: 10 },
     { header: 'Work Phone', field: 'workPhone', hidden: true , width: 8},

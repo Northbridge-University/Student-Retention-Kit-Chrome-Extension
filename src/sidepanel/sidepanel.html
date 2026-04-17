@@ -839,6 +839,22 @@
                         When enabled, identifies the next upcoming assignment due for each student during master list updates. Shows the nearest assignment that hasn't been submitted yet.
                     </div>
                 </div>
+
+                <!-- API Mode -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                            <i class="fas fa-plug" style="color:var(--primary-color);"></i> API Mode
+                        </label>
+                        <div id="canvasApiTypeToggle" role="radiogroup" aria-label="Canvas API Mode" style="display:inline-flex; border:1px solid rgba(0,0,0,0.1); border-radius:6px; overflow:hidden;">
+                            <button type="button" data-api-type="rest" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:var(--primary-color); color:#fff; border:none; cursor:pointer;">REST</button>
+                            <button type="button" data-api-type="graphql" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:transparent; color:var(--text-main); border:none; cursor:pointer;">GraphQL</button>
+                        </div>
+                    </div>
+                    <div style="font-size:0.8em; color:var(--text-secondary);">
+                        Choose how the Master List fetches Canvas data. GraphQL is faster for large rosters but requires a <strong>ClassSectionId</strong> column in your import (falls back to a lookup when missing).
+                    </div>
+                </div>
             </div>
 
             <!-- Five9 Configuration -->

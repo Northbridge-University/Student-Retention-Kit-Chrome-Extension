@@ -78,6 +78,7 @@ import {
     toggleCanvasCacheModal,
     toggleNonApiCourseFetch,
     toggleNextAssignment,
+    initCanvasApiTypeToggle,
     togglePowerAutomateEnabled,
     togglePowerAutomateDebug,
     toggleDebugModeModal,
@@ -673,6 +674,8 @@ function setupEventListeners() {
     if (elements.nextAssignmentToggle) {
         elements.nextAssignmentToggle.addEventListener('click', toggleNextAssignment);
     }
+
+    initCanvasApiTypeToggle();
 
     if (elements.clearCacheBtnModal) {
         elements.clearCacheBtnModal.addEventListener('click', clearCacheFromModal);

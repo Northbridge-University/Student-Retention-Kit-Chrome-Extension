@@ -302,6 +302,7 @@ export function cacheDomElements() {
     elements.canvasCacheToggleModal = document.getElementById('canvasCacheToggleModal');
     elements.nonApiCourseFetchToggle = document.getElementById('nonApiCourseFetchToggle');
     elements.nextAssignmentToggle = document.getElementById('nextAssignmentToggle');
+    elements.canvasApiTypeToggle = document.getElementById('canvasApiTypeToggle');
     elements.cacheSettingsContainer = document.getElementById('cacheSettingsContainer');
     elements.cacheStatsTextModal = document.getElementById('cacheStatsTextModal');
     elements.clearCacheBtnModal = document.getElementById('clearCacheBtnModal');

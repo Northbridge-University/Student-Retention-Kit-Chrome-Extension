@@ -1,5 +1,5 @@
 // Connections Modal - Handles settings for Excel, Power Automate, Canvas, and Five9
-import { STORAGE_KEYS, CANVAS_DOMAIN, FIVE9_CONNECTION_STATES, EXTENSION_STATES } from '../../constants/index.js';
+import { STORAGE_KEYS, CANVAS_DOMAIN, FIVE9_CONNECTION_STATES, EXTENSION_STATES, CANVAS_API_TYPES } from '../../constants/index.js';
 import { storageGet, storageSet, storageGetValue, sessionGetValue } from '../../utils/storage.js';
 import { encrypt, decrypt } from '../../utils/encryption.js';
 import { updateToggleUI, isToggleEnabled, setElementEnabled } from '../../utils/ui-helpers.js';
@@ -89,6 +89,7 @@ export async function openConnectionsModal(connectionType) {
         STORAGE_KEYS.CANVAS_CACHE_ENABLED,
         STORAGE_KEYS.NON_API_COURSE_FETCH,
         STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED,
+        STORAGE_KEYS.CANVAS_API_TYPE,
         STORAGE_KEYS.CALL_DEMO,
         STORAGE_KEYS.AUTO_SWITCH_TO_CALL_TAB,
         STORAGE_KEYS.HIGHLIGHT_START_COL,
@@ -151,6 +152,9 @@ export async function openConnectionsModal(connectionType) {
 
     const nextAssignmentEnabled = result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] !== undefined ? result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] : false;
     updateNextAssignmentUI(nextAssignmentEnabled);
+
+    const apiType = result[STORAGE_KEYS.CANVAS_API_TYPE] || CANVAS_API_TYPES.REST;
+    updateCanvasApiTypeUI(apiType);
 
     // Load Five9 settings (Call Demo mode, formerly debugMode)
     const callDemo = result[STORAGE_KEYS.CALL_DEMO] || false;
@@ -294,6 +298,10 @@ export async function saveConnectionsSettings() {
     settingsToSave[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] = nextAssignmentEnabled;
     console.log(`Next Assignment setting saved: ${nextAssignmentEnabled}`);
 
+    const apiType = getCanvasApiTypeFromUI();
+    settingsToSave[STORAGE_KEYS.CANVAS_API_TYPE] = apiType;
+    console.log(`Canvas API type setting saved: ${apiType}`);
+
     // Save Five9 settings (Call Demo mode)
     const callDemoEnabled = isToggleEnabled(elements.debugModeToggleModal);
     settingsToSave[STORAGE_KEYS.CALL_DEMO] = callDemoEnabled;
@@ -358,6 +366,36 @@ function updateNonApiCourseFetchUI(isEnabled) {
 
 function updateNextAssignmentUI(isEnabled) {
     updateToggleUI(elements.nextAssignmentToggle, isEnabled);
+}
+
+function updateCanvasApiTypeUI(apiType) {
+    if (!elements.canvasApiTypeToggle) return;
+    const normalized = apiType === CANVAS_API_TYPES.GRAPHQL ? CANVAS_API_TYPES.GRAPHQL : CANVAS_API_TYPES.REST;
+    const buttons = elements.canvasApiTypeToggle.querySelectorAll('.canvas-api-type-option');
+    buttons.forEach(btn => {
+        const isActive = btn.dataset.apiType === normalized;
+        btn.style.background = isActive ? 'var(--primary-color)' : 'transparent';
+        btn.style.color = isActive ? '#fff' : 'var(--text-main)';
+        btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+    });
+    elements.canvasApiTypeToggle.dataset.value = normalized;
+}
+
+function getCanvasApiTypeFromUI() {
+    if (!elements.canvasApiTypeToggle) return CANVAS_API_TYPES.REST;
+    return elements.canvasApiTypeToggle.dataset.value === CANVAS_API_TYPES.GRAPHQL
+        ? CANVAS_API_TYPES.GRAPHQL
+        : CANVAS_API_TYPES.REST;
+}
+
+export function initCanvasApiTypeToggle() {
+    if (!elements.canvasApiTypeToggle) return;
+    const buttons = elements.canvasApiTypeToggle.querySelectorAll('.canvas-api-type-option');
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateCanvasApiTypeUI(btn.dataset.apiType);
+        });
+    });
 }
 
 function updateDebugModeModalUI(isEnabled) {

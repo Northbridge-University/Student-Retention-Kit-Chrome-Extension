@@ -8,7 +8,7 @@
 //   5. Data Analysis (missing assignments, next assignment, grade extraction)
 //   6. Step Orchestrators (processStep2, processStep3, processStep4)
 
-import { STORAGE_KEYS, CANVAS_DOMAIN, LEGACY_CANVAS_SUBDOMAINS, GENERIC_AVATAR_URL, normalizeCanvasUrl } from '../constants/index.js';
+import { STORAGE_KEYS, CANVAS_DOMAIN, LEGACY_CANVAS_SUBDOMAINS, GENERIC_AVATAR_URL, CANVAS_API_TYPES, normalizeCanvasUrl } from '../constants/index.js';
 import { numericToLetterGrade } from '../constants/field-utils.js';
 import { getCachedData, getCache, stageCacheData, flushPendingCacheWrites } from '../utils/canvasCache.js';
 import { openCanvasAuthErrorModal, isCanvasAuthError } from './modals/canvas-auth-modal.js';
@@ -16,6 +16,7 @@ import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
+import { fetchCanvasDetailsGraphQL, fetchCourseGroupDataGraphQL } from './canvas-graphql.js';
 
 // Custom error for cancelled updates
 class UpdateCancelledError extends Error {
@@ -628,16 +629,20 @@ function processCourseGroupResults(studentsInCourse, courseGroupData, referenceD
  * @returns {Promise<{ cacheEnabled: boolean, useNonApiFetch: boolean, courseReferenceDate: Date }>}
  */
 async function loadPipelineSettings() {
-    const [cacheSettings, nonApiSettings, timeMachineSettings] = await Promise.all([
+    const [cacheSettings, nonApiSettings, timeMachineSettings, apiTypeSettings] = await Promise.all([
         chrome.storage.local.get([STORAGE_KEYS.CANVAS_CACHE_ENABLED]),
         storageGet([STORAGE_KEYS.NON_API_COURSE_FETCH]),
-        chrome.storage.local.get([STORAGE_KEYS.USE_SPECIFIC_DATE, STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE])
+        chrome.storage.local.get([STORAGE_KEYS.USE_SPECIFIC_DATE, STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE]),
+        storageGet([STORAGE_KEYS.CANVAS_API_TYPE])
     ]);
 
     const cacheEnabled = cacheSettings[STORAGE_KEYS.CANVAS_CACHE_ENABLED] !== undefined
         ? cacheSettings[STORAGE_KEYS.CANVAS_CACHE_ENABLED]
         : true;
     const useNonApiFetch = nonApiSettings[STORAGE_KEYS.NON_API_COURSE_FETCH] !== undefined ? nonApiSettings[STORAGE_KEYS.NON_API_COURSE_FETCH] : true;
+    const apiType = apiTypeSettings[STORAGE_KEYS.CANVAS_API_TYPE] === CANVAS_API_TYPES.GRAPHQL
+        ? CANVAS_API_TYPES.GRAPHQL
+        : CANVAS_API_TYPES.REST;
 
     const useSpecificDate = timeMachineSettings[STORAGE_KEYS.USE_SPECIFIC_DATE] || false;
     const specificDateStr = timeMachineSettings[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
@@ -651,9 +656,9 @@ async function loadPipelineSettings() {
         courseReferenceDate = new Date();
     }
 
-    console.log(`[Settings] Cache: ${cacheEnabled}, Non-API: ${useNonApiFetch}`);
+    console.log(`[Settings] Cache: ${cacheEnabled}, Non-API: ${useNonApiFetch}, API Type: ${apiType}`);
 
-    return { cacheEnabled, useNonApiFetch, courseReferenceDate };
+    return { cacheEnabled, useNonApiFetch, courseReferenceDate, apiType };
 }
 
 /**
@@ -886,7 +891,7 @@ async function _processStep2(students, renderCallback) {
 
         console.log(`[Step 2] Pinging Canvas API: ${getCanvasDomain()}`);
 
-        const { cacheEnabled, useNonApiFetch, courseReferenceDate } = await loadPipelineSettings();
+        const { cacheEnabled, useNonApiFetch, courseReferenceDate, apiType } = await loadPipelineSettings();
 
         // --- Separate students into cached vs uncached groups ---
         const cachedStudents = [];
@@ -934,7 +939,9 @@ async function _processStep2(students, renderCallback) {
             timeSpan.textContent = `${pct}%`;
         };
 
-        const fetchFn = (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
+        const fetchFn = apiType === CANVAS_API_TYPES.GRAPHQL
+            ? (student) => fetchCanvasDetailsGraphQL(student)
+            : (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
 
         // --- Process cached students first (fast, no API delay needed) ---
         await processBatches({
@@ -1011,12 +1018,16 @@ async function _processStep3(students, renderCallback) {
         const settings = await storageGet([
             STORAGE_KEYS.USE_SPECIFIC_DATE,
             STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE,
-            STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED
+            STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED,
+            STORAGE_KEYS.CANVAS_API_TYPE
         ]);
 
         const useSpecificDate = settings[STORAGE_KEYS.USE_SPECIFIC_DATE] || false;
         const specificDateStr = settings[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
         const nextAssignmentEnabled = settings[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] || false;
+        const apiType = settings[STORAGE_KEYS.CANVAS_API_TYPE] === CANVAS_API_TYPES.GRAPHQL
+            ? CANVAS_API_TYPES.GRAPHQL
+            : CANVAS_API_TYPES.REST;
 
         let referenceDate;
         if (useSpecificDate && specificDateStr) {
@@ -1073,7 +1084,9 @@ async function _processStep3(students, renderCallback) {
                 const studentIds = studentsInCourse.map(s => s.parsed.studentId);
 
                 try {
-                    const data = await fetchCourseGroupData(origin, courseId, studentIds);
+                    const data = apiType === CANVAS_API_TYPES.GRAPHQL
+                        ? await fetchCourseGroupDataGraphQL(origin, courseId, studentIds)
+                        : await fetchCourseGroupData(origin, courseId, studentIds);
                     const results = processCourseGroupResults(
                         studentsInCourse, data, referenceDate, nextAssignmentEnabled
                     );
