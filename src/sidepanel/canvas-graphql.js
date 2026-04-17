@@ -72,23 +72,20 @@ async function graphqlRequest(query, variables = {}) {
 
 // --- Course SIS → Canvas ID bulk resolver ---------------------------------
 //
-// Canvas user IDs and course IDs are both permanent. Cache both, and we
-// can skip the per-student /users/{id}/courses REST call when the roster
-// row already carries the ClassSectionId (most of the time).
-
-const COURSES_BY_SIS_QUERY = `
-query CoursesBySisIds($sisIds: [String!]!) {
-  courses(sisIds: $sisIds) {
-    _id
-    sisId
-  }
-}`;
+// The plural `courses(sisIds:)` field on Canvas GraphQL only returns
+// courses the caller is enrolled in, so retention staff get zero hits.
+// The singular `course(sisId:)` uses a more permissive loader and works
+// for admin-like roles, so we fan that out with aliased queries per
+// request (~50 courses per round-trip).
+//
+// Results go through the permanent canvasCourseIdCache so warm runs do
+// zero network work.
 
 /**
  * Resolves a list of ClassSectionIds (SIS course IDs) to Canvas numeric
- * course IDs. Reads from the permanent course ID cache first, issues one
- * GraphQL request per chunk of 100 SIS IDs for the misses, and writes the
- * resolved pairs back to the cache.
+ * course IDs. Reads from the permanent course ID cache first, resolves
+ * misses via aliased GraphQL `course(sisId:)` queries in chunks of 50,
+ * and writes the resolved pairs back to the cache.
  *
  * @param {string[]} sisCourseIds
  * @returns {Promise<Map<string, string>>} SIS ID → Canvas course ID
@@ -111,23 +108,32 @@ export async function resolveCourseCanvasIds(sisCourseIds) {
 
     if (misses.length === 0) return result;
 
-    // Canvas caps courses(sisIds:) at 100 per query.
-    const CHUNK = 100;
+    const CHUNK = 50;
     const pairsToCache = [];
     for (let i = 0; i < misses.length; i += CHUNK) {
         const batch = misses.slice(i, i + CHUNK);
+        const varDefs = batch.map((_, idx) => `$sis${idx}: String!`).join(', ');
+        const fields = batch.map((_, idx) =>
+            `  q${idx}: course(sisId: $sis${idx}) { _id sisId }`
+        ).join('\n');
+        const query = `query ResolveCourses(${varDefs}) {\n${fields}\n}`;
+        const variables = {};
+        batch.forEach((sis, idx) => { variables[`sis${idx}`] = sis; });
+
         try {
-            const data = await graphqlRequest(COURSES_BY_SIS_QUERY, { sisIds: batch });
-            const courses = (data && data.courses) || [];
-            for (const c of courses) {
-                if (c && c.sisId && c._id) {
-                    result.set(String(c.sisId), String(c._id));
-                    pairsToCache.push([String(c.sisId), String(c._id)]);
+            const data = await graphqlRequest(query, variables);
+            if (data) {
+                for (const key of Object.keys(data)) {
+                    const course = data[key];
+                    if (course && course.sisId && course._id) {
+                        result.set(String(course.sisId), String(course._id));
+                        pairsToCache.push([String(course.sisId), String(course._id)]);
+                    }
                 }
             }
         } catch (e) {
             if (e && e.isCanvasAuth) throw e;
-            console.warn(`[GraphQL] courses(sisIds:) batch failed: ${e.message}`);
+            console.warn(`[GraphQL] course alias batch failed: ${e.message}`);
         }
     }
 
