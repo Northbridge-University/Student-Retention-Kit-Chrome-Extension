@@ -783,26 +783,31 @@
                     </div>
                 </div>
 
-                <!-- Canvas API Cache -->
+                <!-- Canvas User ID Cache -->
                 <div style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-database" style="color:var(--primary-color);"></i> Canvas API Cache
+                            <i class="fas fa-database" style="color:var(--primary-color);"></i> Canvas User ID Cache
                         </label>
                         <i id="canvasCacheToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
                     </div>
                     <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom: 12px;">
-                        When enabled, Canvas API responses are cached until course end dates to reduce API calls. Disable to always fetch fresh data.
+                        Remembers each student's Canvas user ID after the first lookup so subsequent runs skip the <code>sis_user_id:</code> REST call. Canvas user IDs never change, so entries have no expiration.
                     </div>
                     <div id="cacheSettingsContainer">
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 8px;">
-                            <span style="font-size:0.9em;">Cached Entries</span>
+                            <span style="font-size:0.9em;">Cached Student IDs</span>
                             <span id="cacheStatsTextModal" style="font-size:0.9em; color:var(--text-secondary);">Loading...</span>
                         </div>
-                        <button id="clearCacheBtnModal" class="btn-secondary" style="width:100%;">
-                            <i class="fas fa-trash-alt" style="margin-right: 5px;"></i>
-                            Clear Cache
-                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="clearCacheBtnModal" class="btn-secondary" style="flex: 1;">
+                                <i class="fas fa-trash-alt" style="margin-right: 5px;"></i>
+                                Clear Cache
+                            </button>
+                            <button id="downloadCacheBtnModal" class="btn-secondary" style="flex: 0 0 auto;" title="Download cache as CSV">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

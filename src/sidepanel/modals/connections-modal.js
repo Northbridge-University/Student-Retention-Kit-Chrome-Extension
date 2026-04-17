@@ -722,8 +722,7 @@ async function loadCacheStatsForModal() {
     try {
         const { getCacheStats } = await import('../../utils/canvasCache.js');
         const stats = await getCacheStats();
-        elements.cacheStatsTextModal.textContent =
-            `Total: ${stats.totalEntries} | Valid: ${stats.validEntries} | Expired: ${stats.expiredEntries}`;
+        elements.cacheStatsTextModal.textContent = `${stats.totalEntries}`;
     } catch (error) {
         console.error('Error loading cache stats:', error);
         elements.cacheStatsTextModal.textContent = 'Error loading stats';
@@ -732,7 +731,7 @@ async function loadCacheStatsForModal() {
 
 export async function clearCacheFromModal() {
     try {
-        if (!confirm('Clear all Canvas API cached data? Next update will require fresh API calls.')) {
+        if (!confirm('Clear all cached Canvas user IDs? Next update will re-resolve each student\'s ID via REST.')) {
             return;
         }
 
@@ -740,10 +739,39 @@ export async function clearCacheFromModal() {
         await clearAllCache();
         await loadCacheStatsForModal();
 
-        alert('✓ Canvas API cache cleared successfully!');
-        console.log('Canvas API cache cleared from modal');
+        alert('✓ Canvas user ID cache cleared.');
+        console.log('Canvas user ID cache cleared from modal');
     } catch (error) {
         console.error('Error clearing cache from modal:', error);
         alert('Error clearing cache. Check console for details.');
+    }
+}
+
+export async function downloadCacheFromModal() {
+    try {
+        const { exportCacheAsCsv, getCacheStats } = await import('../../utils/canvasCache.js');
+        const stats = await getCacheStats();
+        if (stats.totalEntries === 0) {
+            alert('Cache is empty — nothing to download.');
+            return;
+        }
+
+        const csv = await exportCacheAsCsv();
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const filename = `canvas-user-id-cache-${new Date().toISOString().slice(0, 10)}.csv`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        console.log(`Canvas user ID cache downloaded: ${stats.totalEntries} entries → ${filename}`);
+    } catch (error) {
+        console.error('Error downloading cache:', error);
+        alert('Error downloading cache. Check console for details.');
     }
 }

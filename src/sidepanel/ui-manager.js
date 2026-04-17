@@ -306,6 +306,7 @@ export function cacheDomElements() {
     elements.cacheSettingsContainer = document.getElementById('cacheSettingsContainer');
     elements.cacheStatsTextModal = document.getElementById('cacheStatsTextModal');
     elements.clearCacheBtnModal = document.getElementById('clearCacheBtnModal');
+    elements.downloadCacheBtnModal = document.getElementById('downloadCacheBtnModal');
     elements.debugModeToggleModal = document.getElementById('debugModeToggleModal');
     elements.autoSwitchCallTabToggle = document.getElementById('autoSwitchCallTabToggle');
     elements.saveConnectionsBtn = document.getElementById('saveConnectionsBtn');

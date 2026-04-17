@@ -10,7 +10,6 @@
 
 import { STORAGE_KEYS, CANVAS_DOMAIN, LEGACY_CANVAS_SUBDOMAINS, GENERIC_AVATAR_URL, CANVAS_API_TYPES, normalizeCanvasUrl } from '../constants/index.js';
 import { numericToLetterGrade } from '../constants/field-utils.js';
-import { getCachedData, getCache, stageCacheData, flushPendingCacheWrites } from '../utils/canvasCache.js';
 import { openCanvasAuthErrorModal, isCanvasAuthError } from './modals/canvas-auth-modal.js';
 import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
@@ -692,20 +691,14 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
     try {
         const syStudentId = String(student.SyStudentId);
 
-        // --- Resolve user data + courses (cache or API) ---
-        const cachedData = (cacheEnabled && !useNonApiFetch) ? await getCachedData(syStudentId) : null;
-
-        let userData;
-        let courses;
-
-        if (cachedData) {
-            userData = cachedData.userData;
-            courses = cachedData.courses;
-        } else {
-            // Prefer a permanently cached Canvas user ID; falls back to the
-            // SIS lookup and invalidates the cache on 404.
+        // --- Resolve Canvas user profile ---
+        // Prefer the permanently cached Canvas user ID when the ID cache is
+        // enabled; on 404 the cached entry is invalidated and we fall back to
+        // the SIS lookup. The previous expiring full-profile cache was
+        // removed — courses are always fetched fresh.
+        let userResp = null;
+        if (cacheEnabled) {
             const cachedCanvasId = await getCachedCanvasUserId(syStudentId);
-            let userResp = null;
             if (cachedCanvasId) {
                 const directUrl = `${getCanvasDomain()}/api/v1/users/${cachedCanvasId}`;
                 userResp = await fetchWithFallback(directUrl, { headers: { 'Accept': 'application/json' } });
@@ -717,43 +710,40 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
                     userResp = null;
                 }
             }
-            if (!userResp) {
-                const userUrl = `${getCanvasDomain()}/api/v1/users/sis_user_id:${student.SyStudentId}`;
-                userResp = await fetchWithFallback(userUrl, { headers: { 'Accept': 'application/json' } });
-                if (isCanvasAuthError(userResp)) {
-                    await handleCanvasAuthError('fetching user data');
-                }
+        }
+        if (!userResp) {
+            const userUrl = `${getCanvasDomain()}/api/v1/users/sis_user_id:${student.SyStudentId}`;
+            userResp = await fetchWithFallback(userUrl, { headers: { 'Accept': 'application/json' } });
+            if (isCanvasAuthError(userResp)) {
+                await handleCanvasAuthError('fetching user data');
             }
-            if (!userResp.ok) {
-                console.warn(`Failed to fetch user data for ${student.SyStudentId}: ${userResp.status}`);
-                return student;
-            }
-            userData = await userResp.json();
-            if (userData && userData.id) {
-                await setCachedCanvasUserId(syStudentId, userData.id);
-            }
+        }
+        if (!userResp.ok) {
+            console.warn(`Failed to fetch user data for ${student.SyStudentId}: ${userResp.status}`);
+            return student;
+        }
+        const userData = await userResp.json();
+        if (cacheEnabled && userData && userData.id) {
+            await setCachedCanvasUserId(syStudentId, userData.id);
+        }
 
-            // Fetch courses (API or HTML scraping)
-            const canvasUserId = userData.id;
-            if (canvasUserId) {
-                if (useNonApiFetch) {
-                    courses = await fetchCoursesFromHtml(canvasUserId);
+        // --- Fetch courses (API or HTML scraping) ---
+        let courses;
+        const canvasUserId = userData.id;
+        if (canvasUserId) {
+            if (useNonApiFetch) {
+                courses = await fetchCoursesFromHtml(canvasUserId);
+            } else {
+                const coursesUrl = `${getCanvasDomain()}/api/v1/users/${canvasUserId}/courses?include[]=enrollments&per_page=100`;
+                const coursesResp = await fetchWithFallback(coursesUrl, { headers: { 'Accept': 'application/json' } });
+
+                if (isCanvasAuthError(coursesResp)) {
+                    await handleCanvasAuthError('fetching courses');
+                } else if (coursesResp.ok) {
+                    courses = await coursesResp.json();
                 } else {
-                    const coursesUrl = `${getCanvasDomain()}/api/v1/users/${canvasUserId}/courses?include[]=enrollments&per_page=100`;
-                    const coursesResp = await fetchWithFallback(coursesUrl, { headers: { 'Accept': 'application/json' } });
-
-                    if (isCanvasAuthError(coursesResp)) {
-                        await handleCanvasAuthError('fetching courses');
-                    } else if (coursesResp.ok) {
-                        courses = await coursesResp.json();
-                    } else {
-                        console.warn(`Failed to fetch courses for ${student.SyStudentId}: ${coursesResp.status}`);
-                        courses = [];
-                    }
-                }
-
-                if (cacheEnabled) {
-                    stageCacheData(syStudentId, userData, courses);
+                    console.warn(`Failed to fetch courses for ${student.SyStudentId}: ${coursesResp.status}`);
+                    courses = [];
                 }
             }
         }
@@ -852,9 +842,8 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
  * @param {number} options.batchSize - Students per batch
  * @param {number} options.delayMs - Milliseconds to wait between batches (0 = no delay)
  * @param {function} options.onProgress - Called with (processedSoFar) after each batch
- * @param {boolean} options.flushCache - Whether to flush staged cache writes after each batch
  */
-async function processBatches({ students, updatedStudents, studentIndexMap, processFn, batchSize, delayMs, onProgress, flushCache }) {
+async function processBatches({ students, updatedStudents, studentIndexMap, processFn, batchSize, delayMs, onProgress }) {
     for (let i = 0; i < students.length; i += batchSize) {
         checkShutdown();
 
@@ -874,10 +863,6 @@ async function processBatches({ students, updatedStudents, studentIndexMap, proc
             const originalIndex = studentIndexMap.get(originalStudent);
             updatedStudents[originalIndex] = result.status === 'fulfilled' ? result.value : originalStudent;
         });
-
-        if (flushCache) {
-            await flushPendingCacheWrites();
-        }
 
         if (onProgress) {
             onProgress(Math.min(i + batchSize, students.length));
@@ -932,39 +917,10 @@ async function _processStep2(students, renderCallback) {
             console.log('[Step 2] GraphQL mode: using REST for ID resolution (see canvas-graphql.js for rationale)');
         }
 
-        // --- Separate students into cached vs uncached groups ---
-        const cachedStudents = [];
-        const uncachedStudents = [];
+        // Step 2 contributes the first half of the combined 'Fetch Canvas Data'
+        // progress bar (0-50%); Step 3 picks up from 50-100%.
+        timeSpan.textContent = '0%';
 
-        if (cacheEnabled) {
-            const cache = await getCache();
-            const now = new Date();
-
-            const validCachedIds = Object.keys(cache).filter(id => {
-                const entry = cache[id];
-                return entry && entry.expiresAt && new Date(entry.expiresAt) > now;
-            });
-
-            const studentBySyId = new Map();
-            students.forEach(s => {
-                if (s.SyStudentId) studentBySyId.set(String(s.SyStudentId), s);
-            });
-
-            for (const cachedId of validCachedIds) {
-                if (studentBySyId.has(cachedId)) {
-                    cachedStudents.push(studentBySyId.get(cachedId));
-                    studentBySyId.delete(cachedId);
-                }
-            }
-            uncachedStudents.push(...studentBySyId.values());
-        } else {
-            uncachedStudents.push(...students);
-        }
-
-        console.log(`[Step 2] ${cachedStudents.length} cached, ${uncachedStudents.length} uncached`);
-        timeSpan.textContent = '15%';
-
-        // --- Build shared state for batch processing ---
         const BATCH_SIZE = 20;
         const BATCH_DELAY_MS = 100;
 
@@ -974,39 +930,23 @@ async function _processStep2(students, renderCallback) {
 
         let processedCount = 0;
         const updateProgress = () => {
-            const pct = 15 + Math.round((processedCount / students.length) * 85);
+            const pct = Math.round((processedCount / students.length) * 50);
             timeSpan.textContent = `${pct}%`;
         };
 
         const fetchFn = (student) => fetchCanvasDetails(student, cacheEnabled, useNonApiFetch, courseReferenceDate);
 
-        // --- Process cached students first (fast, no API delay needed) ---
+        // The expiring full-profile cache was removed, so every student
+        // takes the same API-backed path. Students with a cached Canvas user
+        // ID skip the sis_user_id: translation hop inside fetchCanvasDetails.
         await processBatches({
-            students: cachedStudents,
-            updatedStudents,
-            studentIndexMap,
-            processFn: fetchFn,
-            batchSize: BATCH_SIZE,
-            delayMs: 0,
-            onProgress: (n) => { processedCount = n; updateProgress(); },
-            flushCache: false
-        });
-
-        // --- Process uncached students (API calls, with delay between batches) ---
-        if (uncachedStudents.length > 0) {
-            console.log(`[Step 2] Now fetching fresh data for ${uncachedStudents.length} uncached students...`);
-        }
-
-        const cachedCount = cachedStudents.length;
-        await processBatches({
-            students: uncachedStudents,
+            students,
             updatedStudents,
             studentIndexMap,
             processFn: fetchFn,
             batchSize: BATCH_SIZE,
             delayMs: BATCH_DELAY_MS,
-            onProgress: (n) => { processedCount = cachedCount + n; updateProgress(); },
-            flushCache: true
+            onProgress: (n) => { processedCount = n; updateProgress(); }
         });
 
         await chrome.storage.local.set({ [STORAGE_KEYS.MASTER_ENTRIES]: updatedStudents });
@@ -1146,7 +1086,12 @@ async function _processStep3(students, renderCallback, options = {}) {
                 }
 
                 processedStudents += studentsInCourse.length;
-                timeSpan.textContent = `${Math.round((processedStudents / students.length) * 100)}%`;
+                // In pipeline mode (finalize=false) Step 3 renders the 50-100% half
+                // of the combined progress bar; standalone it fills 0-100%.
+                const offset = finalize ? 0 : 50;
+                const span = finalize ? 100 : 50;
+                const pct = offset + Math.round((processedStudents / students.length) * span);
+                timeSpan.textContent = `${pct}%`;
             }
         }
 
@@ -1223,7 +1168,7 @@ export async function processStep4(students) {
             const selectedCampus = await openCampusSelectionModal(campuses);
 
             if (selectedCampus === null) {
-                finish('(skipped)');
+                finish();
                 return students;
             }
 
@@ -1243,7 +1188,7 @@ export async function processStep4(students) {
             targetTabId = await openExcelInstanceModal(excelTabs);
 
             if (targetTabId === null) {
-                finish('(skipped)');
+                finish();
                 return students;
             }
         } else {
