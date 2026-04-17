@@ -766,7 +766,6 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
         }
 
         // --- Find active course and set gradebook URL ---
-        const canvasUserId = userData.id;
         if (canvasUserId && courses && courses.length > 0) {
             const now = courseReferenceDate || new Date();
             const validCourses = courses.filter(c => c.name && !c.name.toUpperCase().includes('CAPV'));
