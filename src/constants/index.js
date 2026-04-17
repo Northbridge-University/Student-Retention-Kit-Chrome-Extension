@@ -168,6 +168,7 @@ export const STORAGE_KEYS = {
     NEXT_ASSIGNMENT_ENABLED: 'settings.canvas.nextAssignmentEnabled',
     CANVAS_API_TYPE: 'settings.canvas.apiType',
     CANVAS_USER_ID_CACHE: 'settings.canvas.userIdCache',
+    CANVAS_COURSE_ID_CACHE: 'settings.canvas.courseIdCache',
 
     // Five9 settings (settings.five9.*)
     CALL_DEMO: 'settings.five9.callDemo',

@@ -10,6 +10,7 @@
 
 import { CANVAS_DOMAIN } from '../constants/index.js';
 import { isCanvasAuthError } from './modals/canvas-auth-modal.js';
+import { getCachedCanvasCourseId, setCachedCanvasCourseIds } from '../utils/canvasCourseIdCache.js';
 
 const GRAPHQL_ENDPOINT = `${CANVAS_DOMAIN}/api/graphql`;
 const SUBMISSIONS_PAGE_SIZE = 500;
@@ -67,6 +68,74 @@ async function graphqlRequest(query, variables = {}) {
         throw new Error(`Canvas GraphQL error: ${msg}`);
     }
     return payload.data;
+}
+
+// --- Course SIS → Canvas ID bulk resolver ---------------------------------
+//
+// Canvas user IDs and course IDs are both permanent. Cache both, and we
+// can skip the per-student /users/{id}/courses REST call when the roster
+// row already carries the ClassSectionId (most of the time).
+
+const COURSES_BY_SIS_QUERY = `
+query CoursesBySisIds($sisIds: [String!]!) {
+  courses(sisIds: $sisIds) {
+    _id
+    sisId
+  }
+}`;
+
+/**
+ * Resolves a list of ClassSectionIds (SIS course IDs) to Canvas numeric
+ * course IDs. Reads from the permanent course ID cache first, issues one
+ * GraphQL request per chunk of 100 SIS IDs for the misses, and writes the
+ * resolved pairs back to the cache.
+ *
+ * @param {string[]} sisCourseIds
+ * @returns {Promise<Map<string, string>>} SIS ID → Canvas course ID
+ */
+export async function resolveCourseCanvasIds(sisCourseIds) {
+    const result = new Map();
+    if (!sisCourseIds || sisCourseIds.length === 0) return result;
+
+    const unique = Array.from(new Set(sisCourseIds.map(String).filter(Boolean)));
+    const misses = [];
+
+    for (const sis of unique) {
+        const cached = await getCachedCanvasCourseId(sis);
+        if (cached != null) {
+            result.set(sis, String(cached));
+        } else {
+            misses.push(sis);
+        }
+    }
+
+    if (misses.length === 0) return result;
+
+    // Canvas caps courses(sisIds:) at 100 per query.
+    const CHUNK = 100;
+    const pairsToCache = [];
+    for (let i = 0; i < misses.length; i += CHUNK) {
+        const batch = misses.slice(i, i + CHUNK);
+        try {
+            const data = await graphqlRequest(COURSES_BY_SIS_QUERY, { sisIds: batch });
+            const courses = (data && data.courses) || [];
+            for (const c of courses) {
+                if (c && c.sisId && c._id) {
+                    result.set(String(c.sisId), String(c._id));
+                    pairsToCache.push([String(c.sisId), String(c._id)]);
+                }
+            }
+        } catch (e) {
+            if (e && e.isCanvasAuth) throw e;
+            console.warn(`[GraphQL] courses(sisIds:) batch failed: ${e.message}`);
+        }
+    }
+
+    if (pairsToCache.length > 0) {
+        await setCachedCanvasCourseIds(pairsToCache);
+    }
+
+    return result;
 }
 
 // --- Step 3: per-course submissions + grades ------------------------------
