@@ -167,7 +167,7 @@ export const STORAGE_KEYS = {
     NON_API_COURSE_FETCH: 'settings.canvas.nonApiCourseFetch',
     NEXT_ASSIGNMENT_ENABLED: 'settings.canvas.nextAssignmentEnabled',
     CANVAS_API_TYPE: 'settings.canvas.apiType',
-    CANVAS_SIS_COURSE_CACHE: 'settings.canvas.sisCourseCache',
+    CANVAS_USER_ID_CACHE: 'settings.canvas.userIdCache',
 
     // Five9 settings (settings.five9.*)
     CALL_DEMO: 'settings.five9.callDemo',

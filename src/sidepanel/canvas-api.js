@@ -17,6 +17,7 @@ import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
 import { fetchCourseGroupDataGraphQL } from './canvas-graphql.js';
+import { getCachedCanvasUserId, setCachedCanvasUserId, clearCachedCanvasUserId } from '../utils/canvasUserIdCache.js';
 
 // Custom error for cancelled updates
 class UpdateCancelledError extends Error {
@@ -169,11 +170,13 @@ export function updateTotalTime() {
  * @param {function} work - Async function that receives { timeSpan, startTime } and returns a result
  * @returns {Promise<*>} The result of work()
  */
-async function withStepUI(stepId, work) {
+async function withStepUI(stepId, work, options = {}) {
     // Check if the update was cancelled before starting this step
     if (isUpdateCancelled()) {
         throw new UpdateCancelledError();
     }
+
+    const { final = true } = options;
 
     const stepEl = document.getElementById(stepId);
     const timeSpan = stepEl.querySelector('.step-time');
@@ -181,19 +184,28 @@ async function withStepUI(stepId, work) {
     stepEl.className = 'queue-item active';
     updateStepIcon(stepEl, 'spinner');
 
-    const startTime = Date.now();
+    // Re-use an in-flight startTime when successive phases share the same
+    // step element (e.g. Step 2+3+4 all map to the 'Fetch Canvas Data' row).
+    const existingStart = stepEl.dataset.startTime;
+    const startTime = existingStart ? parseInt(existingStart, 10) : Date.now();
+    if (!existingStart) stepEl.dataset.startTime = String(startTime);
 
     try {
         const result = await work({ timeSpan, startTime });
 
-        const durationSeconds = (Date.now() - startTime) / 1000;
-        stepEl.className = 'queue-item completed';
-        updateStepIcon(stepEl, 'check');
-        timeSpan.textContent = formatDuration(durationSeconds);
-        updateTotalTime();
+        if (final) {
+            const durationSeconds = (Date.now() - startTime) / 1000;
+            stepEl.className = 'queue-item completed';
+            updateStepIcon(stepEl, 'check');
+            timeSpan.textContent = formatDuration(durationSeconds);
+            delete stepEl.dataset.startTime;
+            updateTotalTime();
+        }
 
         return result;
     } catch (error) {
+        delete stepEl.dataset.startTime;
+
         if (error instanceof UpdateCancelledError) {
             console.log(`[${stepId}] Cancelled by user`);
             setUpdateButtonsDisabled(false);
@@ -690,18 +702,36 @@ export async function fetchCanvasDetails(student, cacheEnabled = true, useNonApi
             userData = cachedData.userData;
             courses = cachedData.courses;
         } else {
-            // Fetch user profile
-            const userUrl = `${getCanvasDomain()}/api/v1/users/sis_user_id:${student.SyStudentId}`;
-            const userResp = await fetchWithFallback(userUrl, { headers: { 'Accept': 'application/json' } });
-
-            if (isCanvasAuthError(userResp)) {
-                await handleCanvasAuthError('fetching user data');
+            // Prefer a permanently cached Canvas user ID; falls back to the
+            // SIS lookup and invalidates the cache on 404.
+            const cachedCanvasId = await getCachedCanvasUserId(syStudentId);
+            let userResp = null;
+            if (cachedCanvasId) {
+                const directUrl = `${getCanvasDomain()}/api/v1/users/${cachedCanvasId}`;
+                userResp = await fetchWithFallback(directUrl, { headers: { 'Accept': 'application/json' } });
+                if (isCanvasAuthError(userResp)) {
+                    await handleCanvasAuthError('fetching user data');
+                }
+                if (userResp.status === 404) {
+                    await clearCachedCanvasUserId(syStudentId);
+                    userResp = null;
+                }
+            }
+            if (!userResp) {
+                const userUrl = `${getCanvasDomain()}/api/v1/users/sis_user_id:${student.SyStudentId}`;
+                userResp = await fetchWithFallback(userUrl, { headers: { 'Accept': 'application/json' } });
+                if (isCanvasAuthError(userResp)) {
+                    await handleCanvasAuthError('fetching user data');
+                }
             }
             if (!userResp.ok) {
                 console.warn(`Failed to fetch user data for ${student.SyStudentId}: ${userResp.status}`);
                 return student;
             }
             userData = await userResp.json();
+            if (userData && userData.id) {
+                await setCachedCanvasUserId(syStudentId, userData.id);
+            }
 
             // Fetch courses (API or HTML scraping)
             const canvasUserId = userData.id;
@@ -984,7 +1014,7 @@ async function _processStep2(students, renderCallback) {
         console.log(`[Step 2] Complete - ${students.length} students processed`);
 
         return updatedStudents;
-    });
+    }, { final: false });
 
     if (renderCallback) await renderCallback(updatedStudents);
     return updatedStudents;
@@ -1000,11 +1030,11 @@ async function _processStep2(students, renderCallback) {
  * pair of API calls. Uses a worker pool to keep multiple course fetches
  * in-flight simultaneously for maximum throughput.
  */
-export async function processStep3(students, renderCallback) {
+export async function processStep3(students, renderCallback, options = {}) {
     while (true) {
         resetAuthErrorState();
         try {
-            return await _processStep3(students, renderCallback);
+            return await _processStep3(students, renderCallback, options);
         } catch (e) {
             if (e instanceof CanvasAuthRetryError) {
                 console.log('[Step 3] Retrying with updated settings...');
@@ -1015,8 +1045,12 @@ export async function processStep3(students, renderCallback) {
     }
 }
 
-async function _processStep3(students, renderCallback) {
-    return withStepUI('step3', async ({ timeSpan }) => {
+async function _processStep3(students, renderCallback, options = {}) {
+    // When the pipeline calls Step 3 followed by Step 4, Step 3 should not
+    // finalize the 'Fetch Canvas Data' row — Step 4 does that. When Step 3
+    // runs standalone (e.g. "Check Grade Book Again"), it finalizes itself.
+    const finalize = options.finalize !== false;
+    return withStepUI('step2', async ({ timeSpan }) => {
         // Pre-check: ensure user is logged into Canvas before making any API calls.
         // This is critical when Step 3 runs standalone (e.g. "Check Grade Book Again")
         // without Step 2 having already verified the session.
@@ -1126,7 +1160,7 @@ async function _processStep3(students, renderCallback) {
 
         if (renderCallback) renderCallback(updatedStudents);
         return updatedStudents;
-    });
+    }, { final: finalize });
 }
 
 
@@ -1134,22 +1168,46 @@ async function _processStep3(students, renderCallback) {
 
 /** Process Step 4: Send the master list with missing assignments to Excel. */
 export async function processStep4(students) {
-    // Skip entirely when sending to Excel is disabled
+    const stepEl = document.getElementById('step2');
+    if (!stepEl) return students;
+
+    // Skip Excel send when disabled, but still finalize the Fetch Canvas Data
+    // row so it doesn't sit spinning after Step 3 completes.
     const settings = await storageGet([STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]);
     const sendEnabled = settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL] !== undefined
         ? settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]
         : true;
-    if (!sendEnabled) return students;
+    if (!sendEnabled) {
+        const existingStart = stepEl.dataset.startTime;
+        const startTime = existingStart ? parseInt(existingStart, 10) : Date.now();
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        const timeSpan = stepEl.querySelector('.step-time');
+        stepEl.className = 'queue-item completed';
+        updateStepIcon(stepEl, 'check');
+        if (timeSpan) timeSpan.textContent = formatDuration(durationSeconds);
+        delete stepEl.dataset.startTime;
+        updateTotalTime();
+        return students;
+    }
 
-    const step4 = document.getElementById('step4');
-    if (!step4) return students;
+    const timeSpan = stepEl.querySelector('.step-time');
+    stepEl.className = 'queue-item active';
+    updateStepIcon(stepEl, 'spinner');
 
-    const timeSpan = step4.querySelector('.step-time');
-    step4.className = 'queue-item active';
-    updateStepIcon(step4, 'spinner');
-    step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-spinner"></i> Sending List to Excel';
+    // Share the startTime with the earlier Step 2/3 phases so the final
+    // duration reflects the whole Canvas pipeline, not just the Excel send.
+    const existingStart = stepEl.dataset.startTime;
+    const startTime = existingStart ? parseInt(existingStart, 10) : Date.now();
+    if (!existingStart) stepEl.dataset.startTime = String(startTime);
 
-    const startTime = Date.now();
+    const finish = (suffix = '') => {
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        stepEl.className = 'queue-item completed';
+        updateStepIcon(stepEl, 'check');
+        timeSpan.textContent = suffix ? `${formatDuration(durationSeconds)} ${suffix}` : formatDuration(durationSeconds);
+        delete stepEl.dataset.startTime;
+        updateTotalTime();
+    };
 
     try {
         // Dynamically import to avoid circular dependency
@@ -1165,13 +1223,7 @@ export async function processStep4(students) {
             const selectedCampus = await openCampusSelectionModal(campuses);
 
             if (selectedCampus === null) {
-                // User cancelled
-                const durationSeconds = (Date.now() - startTime) / 1000;
-                step4.className = 'queue-item completed';
-                updateStepIcon(step4, 'check');
-                step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-check"></i> Sending List to Excel';
-                timeSpan.textContent = `${formatDuration(durationSeconds)} (skipped)`;
-                updateTotalTime();
+                finish('(skipped)');
                 return students;
             }
 
@@ -1191,13 +1243,7 @@ export async function processStep4(students) {
             targetTabId = await openExcelInstanceModal(excelTabs);
 
             if (targetTabId === null) {
-                // User cancelled
-                const durationSeconds = (Date.now() - startTime) / 1000;
-                step4.className = 'queue-item completed';
-                updateStepIcon(step4, 'check');
-                step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-check"></i> Sending List to Excel';
-                timeSpan.textContent = `${formatDuration(durationSeconds)} (skipped)`;
-                updateTotalTime();
+                finish('(skipped)');
                 return students;
             }
         } else {
@@ -1207,21 +1253,16 @@ export async function processStep4(students) {
         // --- Send ---
         await sendMasterListWithMissingAssignmentsToExcel(studentsToSend, targetTabId);
 
-        const durationSeconds = (Date.now() - startTime) / 1000;
-        step4.className = 'queue-item completed';
-        updateStepIcon(step4, 'check');
-        step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-check"></i> Sending List to Excel';
-        timeSpan.textContent = formatDuration(durationSeconds);
-        console.log(`[Step 4] Complete in ${formatDuration(durationSeconds)}`);
-        updateTotalTime();
+        finish();
+        console.log(`[Step 4] Complete`);
         return students;
 
     } catch (error) {
         console.error("[Step 4 Error]", error);
-        updateStepIcon(step4, 'error');
-        step4.querySelector('.queue-content').innerHTML = '<i class="fas fa-times"></i> Sending List to Excel';
-        step4.style.color = '#ef4444';
+        updateStepIcon(stepEl, 'error');
+        stepEl.style.color = '#ef4444';
         timeSpan.textContent = 'Error';
+        delete stepEl.dataset.startTime;
         return students;
     }
 }
