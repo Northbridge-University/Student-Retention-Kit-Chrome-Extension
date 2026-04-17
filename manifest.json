@@ -19,6 +19,7 @@
   ],
 "host_permissions": [
     "https://northbridge.instructure.com/*",
+    "https://nuc.instructure.com/*",
     "https://excel.office.com/*",
     "https://*.officeapps.live.com/*",
     "https://*.sharepoint.com/*",
