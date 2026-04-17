@@ -129,17 +129,21 @@ export async function resolveCourseCanvasIds(sisCourseIds) {
 
         try {
             const data = await graphqlRequest(query, variables);
-            if (!loggedSample) {
-                console.log('[GraphQL] course resolver sample response:', data);
+            if (!loggedSample && data && Object.keys(data).length > 0) {
+                const firstKey = Object.keys(data)[0];
+                console.log(`[GraphQL] course resolver sample (${firstKey}):`, JSON.stringify(data[firstKey]));
                 loggedSample = true;
             }
             if (data) {
                 for (let idx = 0; idx < batch.length; idx++) {
                     const course = data[`q${idx}`];
                     const sis = batch[idx];
-                    if (course && course.sisId && course._id) {
-                        result.set(String(course.sisId), String(course._id));
-                        pairsToCache.push([String(course.sisId), String(course._id)]);
+                    // Canvas may redact sisId in the response even when we
+                    // queried by it, so rely on _id alone — we already know
+                    // which SIS we asked for.
+                    if (course && course._id) {
+                        result.set(String(sis), String(course._id));
+                        pairsToCache.push([String(sis), String(course._id)]);
                     } else {
                         stillMissing.push(sis);
                     }
