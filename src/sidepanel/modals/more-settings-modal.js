@@ -1,7 +1,22 @@
 // More Settings Modal - Handles additional settings accessed via right-click context menu
 import { STORAGE_KEYS } from '../../constants/index.js';
 import { storageGet, storageSet } from '../../utils/storage.js';
+import { updateToggleUI, isToggleEnabled } from '../../utils/ui-helpers.js';
 import { elements } from '../ui-manager.js';
+
+/**
+ * Applies the Power Automate visibility preference to the Settings tab card.
+ * Called on startup and whenever the user toggles the preference.
+ */
+export function applyPowerAutomateVisibility(visible) {
+    if (!elements.powerAutomateSettingCard) return;
+    elements.powerAutomateSettingCard.style.display = visible ? '' : 'none';
+}
+
+export function toggleShowPowerAutomate() {
+    if (!elements.showPowerAutomateToggle) return;
+    updateToggleUI(elements.showPowerAutomateToggle, !isToggleEnabled(elements.showPowerAutomateToggle));
+}
 
 /**
  * Opens the More Settings modal and loads current values
@@ -15,8 +30,11 @@ export async function openMoreSettingsModal() {
         STORAGE_KEYS.EXPORT_TAB_COLOR,
         STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW,
         STORAGE_KEYS.EXPORT_COLOR_SCALE_MID,
-        STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH
+        STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH,
+        STORAGE_KEYS.SHOW_POWER_AUTOMATE
     ]);
+
+    updateToggleUI(elements.showPowerAutomateToggle, !!result[STORAGE_KEYS.SHOW_POWER_AUTOMATE]);
 
     // Load export tab color
     if (elements.exportTabColorInput && elements.exportTabColorTextInput) {
@@ -65,6 +83,10 @@ export async function saveMoreSettings() {
         settingsToSave[STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH] = elements.exportColorScaleHighInput.value || '#63BE7B';
     }
 
+    const showPowerAutomate = isToggleEnabled(elements.showPowerAutomateToggle);
+    settingsToSave[STORAGE_KEYS.SHOW_POWER_AUTOMATE] = showPowerAutomate;
+
     await storageSet(settingsToSave);
+    applyPowerAutomateVisibility(showPowerAutomate);
     closeMoreSettingsModal();
 }

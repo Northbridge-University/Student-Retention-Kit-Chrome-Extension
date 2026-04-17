@@ -1064,7 +1064,9 @@ async function _processStep3(students, renderCallback) {
 
         const useSpecificDate = settings[STORAGE_KEYS.USE_SPECIFIC_DATE] || false;
         const specificDateStr = settings[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
-        const nextAssignmentEnabled = settings[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] || false;
+        const nextAssignmentEnabled = settings[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] !== undefined
+            ? settings[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED]
+            : true;
         const apiType = settings[STORAGE_KEYS.CANVAS_API_TYPE] === CANVAS_API_TYPES.GRAPHQL
             ? CANVAS_API_TYPES.GRAPHQL
             : CANVAS_API_TYPES.REST;

@@ -350,7 +350,7 @@
                 <i class="fas fa-cog" style="margin-right:6px;"></i>Configure
             </button>
         </div>
-        <div class="setting-card">
+        <div id="powerAutomateSettingCard" class="setting-card" style="display:none;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <img src="../../assets/power-automate-icon.png" style="width:28px; height:28px; border-radius:4px;" alt="Power Automate">
                 <div style="flex-grow:1;">
@@ -411,19 +411,12 @@
             </div>
             <i class="fas fa-chevron-right" style="color:var(--text-secondary); font-size:1em;"></i>
         </div>
-        <a href="https://forms.office.com/r/PdqWgqTN8F" target="_blank" class="setting-card" style="cursor: pointer; text-decoration: none; color: inherit;">
+        <a id="reportIssueBtn" href="mailto:vblanco1@northbridge.edu?subject=Student%20Retention%20Kit%20Issue" class="setting-card" style="cursor: pointer; text-decoration: none; color: inherit;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <i class="fas fa-bug" style="color:#ef4444; font-size:1.5em; width:28px; text-align:center;"></i>
                 <span style="font-weight:500;">Report an Issue</span>
             </div>
-            <i class="fas fa-external-link-alt" style="color:var(--text-secondary); font-size:1em;"></i>
-        </a>
-        <a href="https://forms.office.com/r/NqtF2kT2S0" target="_blank" class="setting-card" style="cursor: pointer; text-decoration: none; color: inherit;">
-            <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
-                <i class="fas fa-lightbulb" style="color:#f59e0b; font-size:1.5em; width:28px; text-align:center;"></i>
-                <span style="font-weight:500;">Request a New Feature</span>
-            </div>
-            <i class="fas fa-external-link-alt" style="color:var(--text-secondary); font-size:1em;"></i>
+            <i class="fas fa-envelope" style="color:var(--text-secondary); font-size:1em;"></i>
         </a>
       </div>
     </div>
@@ -566,6 +559,19 @@
                     <div style="font-size:0.75em; color:var(--text-secondary); margin-top:4px;">Color scale applied to grade columns (0 &rarr; 65 &rarr; 100)</div>
                 </div>
 
+                <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin: 20px 0 10px 0; padding-top:16px; border-top: 1px solid rgba(0,0,0,0.08);">
+                    <i class="fas fa-eye" style="color:var(--primary-color); margin-right:6px;"></i>Integrations
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size:0.9em; font-weight:500; color:var(--text-main);">Show Power Automate</label>
+                        <i id="showPowerAutomateToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                    </div>
+                    <div style="font-size:0.75em; color:var(--text-secondary);">
+                        Reveal the Power Automate connection on the Settings tab. Off by default.
+                    </div>
+                </div>
+
                 <button class="btn-primary" id="saveMoreSettingsBtn">Save Settings</button>
             </div>
         </div>
@@ -639,16 +645,20 @@
                 <!-- Highlight Student Row Configuration -->
                 <div style="margin-bottom: 20px; padding-top: 20px; border-top: 1px solid rgba(0,0,0,0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-highlighter" style="color:var(--primary-color);"></i> Student Submission Highlight
-                        </label>
+                        <div id="highlightStudentRowHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="highlightStudentRowCollapsible" style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; user-select: none;">
+                            <label style="font-size:0.95em; font-weight:500; color:var(--text-main); cursor: pointer; margin: 0;">
+                                <i class="fas fa-highlighter" style="color:var(--primary-color);"></i> Student Submission Highlight
+                            </label>
+                            <i id="highlightStudentRowChevron" class="fas fa-chevron-down" style="color:var(--text-secondary); font-size:0.85em; transition: transform 0.2s;"></i>
+                        </div>
                         <i id="highlightStudentRowToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
                     </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:15px;">
-                        Automatically highlight student rows in Excel when a submission is detected.
-                    </div>
+                    <div id="highlightStudentRowCollapsible" style="display: none;">
+                        <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:15px;">
+                            Automatically highlight student rows in Excel when a submission is detected.
+                        </div>
 
-                    <div id="highlightSettingsContainer" style="transition: opacity 0.3s;">
+                        <div id="highlightSettingsContainer" style="transition: opacity 0.3s;">
                     <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:15px;">
                         Configure how student rows are highlighted in Excel when a submission is detected.
                     </div>
@@ -713,6 +723,7 @@
                             <input type="text" id="highlightRowColorTextInput" placeholder="#92d050" style="flex:1; padding:8px; font-size:0.9em; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem;">
                         </div>
                         <div style="font-size:0.75em; color:var(--text-secondary); margin-top:4px;">Hex color code for row highlighting</div>
+                    </div>
                     </div>
                     </div>
                 </div>
@@ -783,73 +794,86 @@
                     </div>
                 </div>
 
-                <!-- Canvas User ID Cache -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-database" style="color:var(--primary-color);"></i> Canvas User ID Cache
-                        </label>
-                        <i id="canvasCacheToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
-                    </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom: 12px;">
-                        Remembers each student's Canvas user ID after the first lookup so subsequent runs skip the <code>sis_user_id:</code> REST call. Canvas user IDs never change, so entries have no expiration.
-                    </div>
-                    <div id="cacheSettingsContainer">
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 8px;">
-                            <span style="font-size:0.9em;">Cached Student IDs</span>
-                            <span id="cacheStatsTextModal" style="font-size:0.9em; color:var(--text-secondary);">Loading...</span>
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button id="clearCacheBtnModal" class="btn-secondary" style="flex: 1;">
-                                <i class="fas fa-trash-alt" style="margin-right: 5px;"></i>
-                                Clear Cache
-                            </button>
-                            <button id="downloadCacheBtnModal" class="btn-secondary" style="flex: 0 0 auto;" title="Download cache as CSV">
-                                <i class="fas fa-download"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Non API Course Fetch -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-globe" style="color:var(--primary-color);"></i> Non API Course Fetch
-                        </label>
-                        <i id="nonApiCourseFetchToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
-                    </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary);">
-                        When enabled, fetches course data by scraping the Canvas web page instead of using the API. Use this if the API returns unauthorized errors for course lists.
-                    </div>
-                </div>
-
                 <!-- Next Assignment -->
                 <div style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-calendar-alt" style="color:var(--primary-color);"></i> Next Assignment
+                            <i class="fas fa-calendar-alt" style="color:var(--primary-color);"></i> Next Assignment Due
                         </label>
-                        <i id="nextAssignmentToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                        <i id="nextAssignmentToggle" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
                     </div>
                     <div style="font-size:0.8em; color:var(--text-secondary);">
                         When enabled, identifies the next upcoming assignment due for each student during master list updates. Shows the nearest assignment that hasn't been submitted yet.
                     </div>
                 </div>
 
-                <!-- API Mode -->
+                <!-- Advanced (collapsed by default) -->
                 <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-plug" style="color:var(--primary-color);"></i> API Mode
+                    <div id="canvasAdvancedToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="canvasAdvancedContent" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; cursor: pointer; border-top: 1px solid rgba(0,0,0,0.08); user-select: none;">
+                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main); cursor: pointer;">
+                            <i class="fas fa-cog" style="color:var(--primary-color); margin-right: 4px;"></i> Advanced
                         </label>
-                        <div id="canvasApiTypeToggle" role="radiogroup" aria-label="Canvas API Mode" style="display:inline-flex; border:1px solid rgba(0,0,0,0.1); border-radius:6px; overflow:hidden;">
-                            <button type="button" data-api-type="rest" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:var(--primary-color); color:#fff; border:none; cursor:pointer;">REST</button>
-                            <button type="button" data-api-type="graphql" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:transparent; color:var(--text-main); border:none; cursor:pointer;">GraphQL</button>
-                        </div>
+                        <i id="canvasAdvancedChevron" class="fas fa-chevron-down" style="color:var(--text-secondary); font-size:0.9em; transition: transform 0.2s;"></i>
                     </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary);">
-                        Choose how the Master List fetches Canvas data. GraphQL is faster for large rosters but requires a <strong>ClassSectionId</strong> column in your import (falls back to a lookup when missing).
+                    <div id="canvasAdvancedContent" style="display: none; margin-top: 12px;">
+
+                        <!-- Canvas User ID Cache -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                                    <i class="fas fa-database" style="color:var(--primary-color);"></i> Canvas User ID Cache
+                                </label>
+                                <i id="canvasCacheToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
+                            </div>
+                            <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom: 12px;">
+                                Remembers each student's Canvas user ID after the first lookup so subsequent runs skip the <code>sis_user_id:</code> REST call. Canvas user IDs never change, so entries have no expiration.
+                            </div>
+                            <div id="cacheSettingsContainer">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 8px;">
+                                    <span style="font-size:0.9em;">Cached Student IDs</span>
+                                    <span id="cacheStatsTextModal" style="font-size:0.9em; color:var(--text-secondary);">Loading...</span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="clearCacheBtnModal" class="btn-secondary" style="flex: 1;">
+                                        <i class="fas fa-trash-alt" style="margin-right: 5px;"></i>
+                                        Clear Cache
+                                    </button>
+                                    <button id="downloadCacheBtnModal" class="btn-secondary" style="flex: 0 0 auto;" title="Download cache as CSV">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Non API Course Fetch -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                                    <i class="fas fa-globe" style="color:var(--primary-color);"></i> Non API Course Fetch
+                                </label>
+                                <i id="nonApiCourseFetchToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                            </div>
+                            <div style="font-size:0.8em; color:var(--text-secondary);">
+                                When enabled, fetches course data by scraping the Canvas web page instead of using the API. Use this if the API returns unauthorized errors for course lists.
+                            </div>
+                        </div>
+
+                        <!-- API Mode -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                                    <i class="fas fa-plug" style="color:var(--primary-color);"></i> API Mode
+                                </label>
+                                <div id="canvasApiTypeToggle" role="radiogroup" aria-label="Canvas API Mode" style="display:inline-flex; border:1px solid rgba(0,0,0,0.1); border-radius:6px; overflow:hidden;">
+                                    <button type="button" data-api-type="rest" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:var(--primary-color); color:#fff; border:none; cursor:pointer;">REST</button>
+                                    <button type="button" data-api-type="graphql" class="canvas-api-type-option" style="padding:6px 14px; font-size:0.85em; background:transparent; color:var(--text-main); border:none; cursor:pointer;">GraphQL</button>
+                                </div>
+                            </div>
+                            <div style="font-size:0.8em; color:var(--text-secondary);">
+                                Choose how the Master List fetches Canvas data. GraphQL is faster for large rosters but requires a <strong>ClassSectionId</strong> column in your import (falls back to a lookup when missing).
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>

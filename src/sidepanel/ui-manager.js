@@ -270,6 +270,9 @@ export function cacheDomElements() {
     elements.sendMasterListToggleModal = document.getElementById('sendMasterListToggleModal');
     elements.reformatNameToggleModal = document.getElementById('reformatNameToggleModal');
     elements.highlightStudentRowToggleModal = document.getElementById('highlightStudentRowToggleModal');
+    elements.highlightStudentRowHeader = document.getElementById('highlightStudentRowHeader');
+    elements.highlightStudentRowCollapsible = document.getElementById('highlightStudentRowCollapsible');
+    elements.highlightStudentRowChevron = document.getElementById('highlightStudentRowChevron');
     elements.highlightSettingsContainer = document.getElementById('highlightSettingsContainer');
     elements.highlightStartColInput = document.getElementById('highlightStartColInput');
     elements.highlightEndColInput = document.getElementById('highlightEndColInput');
@@ -285,6 +288,8 @@ export function cacheDomElements() {
     elements.exportColorScaleLowInput = document.getElementById('exportColorScaleLowInput');
     elements.exportColorScaleMidInput = document.getElementById('exportColorScaleMidInput');
     elements.exportColorScaleHighInput = document.getElementById('exportColorScaleHighInput');
+    elements.showPowerAutomateToggle = document.getElementById('showPowerAutomateToggle');
+    elements.powerAutomateSettingCard = document.getElementById('powerAutomateSettingCard');
     elements.powerAutomateUrlInput = document.getElementById('powerAutomateUrlInput');
     elements.toggleUrlVisibility = document.getElementById('toggleUrlVisibility');
     elements.powerAutomateStatusText = document.getElementById('powerAutomateStatusText');
@@ -303,6 +308,10 @@ export function cacheDomElements() {
     elements.nonApiCourseFetchToggle = document.getElementById('nonApiCourseFetchToggle');
     elements.nextAssignmentToggle = document.getElementById('nextAssignmentToggle');
     elements.canvasApiTypeToggle = document.getElementById('canvasApiTypeToggle');
+    elements.canvasAdvancedToggle = document.getElementById('canvasAdvancedToggle');
+    elements.canvasAdvancedContent = document.getElementById('canvasAdvancedContent');
+    elements.canvasAdvancedChevron = document.getElementById('canvasAdvancedChevron');
+    elements.reportIssueBtn = document.getElementById('reportIssueBtn');
     elements.cacheSettingsContainer = document.getElementById('cacheSettingsContainer');
     elements.cacheStatsTextModal = document.getElementById('cacheStatsTextModal');
     elements.clearCacheBtnModal = document.getElementById('clearCacheBtnModal');

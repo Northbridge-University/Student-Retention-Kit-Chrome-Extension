@@ -22,6 +22,15 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'15.0': {
+        title: 'Latest Updates',
+        date: 'April 17, 2026',
+        updates: [
+			'Massive improvements to Canvas fetching speed and Settings UI',
+			'Try the new faster method: Canvas Settings → Advanced → API Mode → switch to GraphQL',
+			'Run into any issues? Report a bug from the Settings tab (bottom of the page)',
+        ]
+    },
 	'14.5': {
         title: 'Latest Updates',
         date: 'April 15, 2026',

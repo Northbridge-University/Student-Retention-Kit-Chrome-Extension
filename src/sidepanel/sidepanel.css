@@ -580,9 +580,15 @@ input:focus, textarea:focus, select:focus {
     align-items: center;
 }
 
-#clearMasterListBtn:hover {
+#clearMasterListBtn:hover,
+#reportIssueBtn:hover {
     background: rgba(239, 68, 68, 0.15);
     transition: background 0.2s ease;
+}
+
+#reportIssueBtn.is-opening {
+    pointer-events: none;
+    opacity: 0.6;
 }
 
 .modal-overlay {

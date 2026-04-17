@@ -49,6 +49,8 @@ export async function openConnectionsModal(connectionType) {
         if (elements.excelConfigContent) {
             elements.excelConfigContent.style.display = 'block';
         }
+        // Always start the Student Submission Highlight section collapsed
+        setHighlightStudentRowExpanded(false);
     } else if (connectionType === 'powerAutomate') {
         if (elements.connectionModalTitle) {
             elements.connectionModalTitle.textContent = 'Power Automate Settings';
@@ -63,6 +65,8 @@ export async function openConnectionsModal(connectionType) {
         if (elements.canvasConfigContent) {
             elements.canvasConfigContent.style.display = 'block';
         }
+        // Always start the Advanced section collapsed
+        setCanvasAdvancedExpanded(false);
         // Load canvas cache stats when Canvas settings are opened
         loadCacheStatsForModal();
     } else if (connectionType === 'five9') {
@@ -150,7 +154,7 @@ export async function openConnectionsModal(connectionType) {
     const nonApiCourseFetch = result[STORAGE_KEYS.NON_API_COURSE_FETCH] !== undefined ? result[STORAGE_KEYS.NON_API_COURSE_FETCH] : true;
     updateNonApiCourseFetchUI(nonApiCourseFetch);
 
-    const nextAssignmentEnabled = result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] !== undefined ? result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] : false;
+    const nextAssignmentEnabled = result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] !== undefined ? result[STORAGE_KEYS.NEXT_ASSIGNMENT_ENABLED] : true;
     updateNextAssignmentUI(nextAssignmentEnabled);
 
     const apiType = result[STORAGE_KEYS.CANVAS_API_TYPE] || CANVAS_API_TYPES.REST;
@@ -395,6 +399,54 @@ export function initCanvasApiTypeToggle() {
         btn.addEventListener('click', () => {
             updateCanvasApiTypeUI(btn.dataset.apiType);
         });
+    });
+}
+
+function setCanvasAdvancedExpanded(expanded) {
+    if (!elements.canvasAdvancedContent || !elements.canvasAdvancedToggle) return;
+    elements.canvasAdvancedContent.style.display = expanded ? 'block' : 'none';
+    elements.canvasAdvancedToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (elements.canvasAdvancedChevron) {
+        elements.canvasAdvancedChevron.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+}
+
+export function initCanvasAdvancedToggle() {
+    if (!elements.canvasAdvancedToggle) return;
+    const toggle = () => {
+        const current = elements.canvasAdvancedToggle.getAttribute('aria-expanded') === 'true';
+        setCanvasAdvancedExpanded(!current);
+    };
+    elements.canvasAdvancedToggle.addEventListener('click', toggle);
+    elements.canvasAdvancedToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+        }
+    });
+}
+
+function setHighlightStudentRowExpanded(expanded) {
+    if (!elements.highlightStudentRowHeader || !elements.highlightStudentRowCollapsible) return;
+    elements.highlightStudentRowCollapsible.style.display = expanded ? 'block' : 'none';
+    elements.highlightStudentRowHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (elements.highlightStudentRowChevron) {
+        elements.highlightStudentRowChevron.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+}
+
+export function initHighlightStudentRowToggle() {
+    if (!elements.highlightStudentRowHeader) return;
+    const toggle = () => {
+        const current = elements.highlightStudentRowHeader.getAttribute('aria-expanded') === 'true';
+        setHighlightStudentRowExpanded(!current);
+    };
+    elements.highlightStudentRowHeader.addEventListener('click', toggle);
+    elements.highlightStudentRowHeader.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+        }
     });
 }
 

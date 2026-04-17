@@ -79,6 +79,8 @@ import {
     toggleNonApiCourseFetch,
     toggleNextAssignment,
     initCanvasApiTypeToggle,
+    initCanvasAdvancedToggle,
+    initHighlightStudentRowToggle,
     togglePowerAutomateEnabled,
     togglePowerAutomateDebug,
     toggleDebugModeModal,
@@ -129,7 +131,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
-import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
@@ -231,6 +233,10 @@ async function initializeApp() {
     await loadStorageData();
     setActiveStudent(null, callManager);
     populateGuides();
+
+    // Apply the saved Power Automate visibility preference to the Settings tab
+    const { [STORAGE_KEYS.SHOW_POWER_AUTOMATE]: showPA } = await storageGet([STORAGE_KEYS.SHOW_POWER_AUTOMATE]);
+    applyPowerAutomateVisibility(!!showPA);
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
@@ -659,6 +665,10 @@ function setupEventListeners() {
         elements.saveMoreSettingsBtn.addEventListener('click', saveMoreSettings);
     }
 
+    if (elements.showPowerAutomateToggle) {
+        elements.showPowerAutomateToggle.addEventListener('click', toggleShowPowerAutomate);
+    }
+
     // Canvas Modal Settings
     if (elements.embedHelperToggleModal) {
         elements.embedHelperToggleModal.addEventListener('click', toggleEmbedHelperModal);
@@ -677,6 +687,38 @@ function setupEventListeners() {
     }
 
     initCanvasApiTypeToggle();
+    initCanvasAdvancedToggle();
+    initHighlightStudentRowToggle();
+
+    if (elements.reportIssueBtn) {
+        // Report an Issue: fresh 6-digit ticket per click so each report
+        // lands in its own email thread. The 5-second debounce + "Opening..."
+        // label prevents spam clicks while the user's mail client spins up.
+        const reportIssueLabelEl = elements.reportIssueBtn.querySelector('span');
+        const originalLabel = reportIssueLabelEl ? reportIssueLabelEl.textContent : 'Report an Issue';
+        let reportIssueBusy = false;
+
+        elements.reportIssueBtn.addEventListener('click', (e) => {
+            if (reportIssueBusy) {
+                e.preventDefault();
+                return;
+            }
+            reportIssueBusy = true;
+
+            const ticket = String(Math.floor(100000 + Math.random() * 900000));
+            const subject = encodeURIComponent(`Student Retention Kit Issue - ${ticket}`);
+            elements.reportIssueBtn.href = `mailto:vblanco1@northbridge.edu?subject=${subject}`;
+
+            elements.reportIssueBtn.classList.add('is-opening');
+            if (reportIssueLabelEl) reportIssueLabelEl.textContent = 'Opening...';
+
+            setTimeout(() => {
+                reportIssueBusy = false;
+                elements.reportIssueBtn.classList.remove('is-opening');
+                if (reportIssueLabelEl) reportIssueLabelEl.textContent = originalLabel;
+            }, 5000);
+        });
+    }
 
     if (elements.clearCacheBtnModal) {
         elements.clearCacheBtnModal.addEventListener('click', clearCacheFromModal);
