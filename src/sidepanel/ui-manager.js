@@ -288,6 +288,8 @@ export function cacheDomElements() {
     elements.exportColorScaleLowInput = document.getElementById('exportColorScaleLowInput');
     elements.exportColorScaleMidInput = document.getElementById('exportColorScaleMidInput');
     elements.exportColorScaleHighInput = document.getElementById('exportColorScaleHighInput');
+    elements.showPowerAutomateToggle = document.getElementById('showPowerAutomateToggle');
+    elements.powerAutomateSettingCard = document.getElementById('powerAutomateSettingCard');
     elements.powerAutomateUrlInput = document.getElementById('powerAutomateUrlInput');
     elements.toggleUrlVisibility = document.getElementById('toggleUrlVisibility');
     elements.powerAutomateStatusText = document.getElementById('powerAutomateStatusText');

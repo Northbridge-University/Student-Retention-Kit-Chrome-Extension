@@ -131,7 +131,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
-import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings } from './modals/more-settings-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
@@ -233,6 +233,10 @@ async function initializeApp() {
     await loadStorageData();
     setActiveStudent(null, callManager);
     populateGuides();
+
+    // Apply the saved Power Automate visibility preference to the Settings tab
+    const { [STORAGE_KEYS.SHOW_POWER_AUTOMATE]: showPA } = await storageGet([STORAGE_KEYS.SHOW_POWER_AUTOMATE]);
+    applyPowerAutomateVisibility(!!showPA);
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
@@ -659,6 +663,10 @@ function setupEventListeners() {
     }
     if (elements.saveMoreSettingsBtn) {
         elements.saveMoreSettingsBtn.addEventListener('click', saveMoreSettings);
+    }
+
+    if (elements.showPowerAutomateToggle) {
+        elements.showPowerAutomateToggle.addEventListener('click', toggleShowPowerAutomate);
     }
 
     // Canvas Modal Settings

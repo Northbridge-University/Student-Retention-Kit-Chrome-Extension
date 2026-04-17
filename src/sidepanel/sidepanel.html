@@ -350,7 +350,7 @@
                 <i class="fas fa-cog" style="margin-right:6px;"></i>Configure
             </button>
         </div>
-        <div class="setting-card">
+        <div id="powerAutomateSettingCard" class="setting-card" style="display:none;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <img src="../../assets/power-automate-icon.png" style="width:28px; height:28px; border-radius:4px;" alt="Power Automate">
                 <div style="flex-grow:1;">
@@ -557,6 +557,19 @@
                         </div>
                     </div>
                     <div style="font-size:0.75em; color:var(--text-secondary); margin-top:4px;">Color scale applied to grade columns (0 &rarr; 65 &rarr; 100)</div>
+                </div>
+
+                <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin: 20px 0 10px 0; padding-top:16px; border-top: 1px solid rgba(0,0,0,0.08);">
+                    <i class="fas fa-eye" style="color:var(--primary-color); margin-right:6px;"></i>Integrations
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size:0.9em; font-weight:500; color:var(--text-main);">Show Power Automate</label>
+                        <i id="showPowerAutomateToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                    </div>
+                    <div style="font-size:0.75em; color:var(--text-secondary);">
+                        Reveal the Power Automate connection on the Settings tab. Off by default.
+                    </div>
                 </div>
 
                 <button class="btn-primary" id="saveMoreSettingsBtn">Save Settings</button>
