@@ -108,7 +108,10 @@ export async function resolveCourseCanvasIds(sisCourseIds) {
 
     if (misses.length === 0) return result;
 
-    const CHUNK = 50;
+    // Canvas GraphQL rejects queries with "max query aliases exceeded" above
+    // a small cap (empirically ~10). 10 aliases per request still collapses
+    // 100 course resolutions into 10 round-trips, vs one-at-a-time.
+    const CHUNK = 10;
     const pairsToCache = [];
     for (let i = 0; i < misses.length; i += CHUNK) {
         const batch = misses.slice(i, i + CHUNK);
