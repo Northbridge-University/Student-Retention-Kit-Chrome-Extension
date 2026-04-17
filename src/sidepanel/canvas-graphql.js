@@ -108,11 +108,15 @@ export async function resolveCourseCanvasIds(sisCourseIds) {
 
     if (misses.length === 0) return result;
 
-    // Canvas GraphQL rejects queries with "max query aliases exceeded" above
-    // a small cap (empirically ~10). 10 aliases per request still collapses
-    // 100 course resolutions into 10 round-trips, vs one-at-a-time.
+    // Try GraphQL first (cheap, one round-trip per 10 courses). Canvas's
+    // course(sisId:) routes through a loader that may return null for
+    // browser sessions lacking admin scope; for those misses we fall back
+    // to REST per-course in parallel.
     const CHUNK = 10;
     const pairsToCache = [];
+    const stillMissing = [];
+    let loggedSample = false;
+
     for (let i = 0; i < misses.length; i += CHUNK) {
         const batch = misses.slice(i, i + CHUNK);
         const varDefs = batch.map((_, idx) => `$sis${idx}: String!`).join(', ');
@@ -125,18 +129,51 @@ export async function resolveCourseCanvasIds(sisCourseIds) {
 
         try {
             const data = await graphqlRequest(query, variables);
+            if (!loggedSample) {
+                console.log('[GraphQL] course resolver sample response:', data);
+                loggedSample = true;
+            }
             if (data) {
-                for (const key of Object.keys(data)) {
-                    const course = data[key];
+                for (let idx = 0; idx < batch.length; idx++) {
+                    const course = data[`q${idx}`];
+                    const sis = batch[idx];
                     if (course && course.sisId && course._id) {
                         result.set(String(course.sisId), String(course._id));
                         pairsToCache.push([String(course.sisId), String(course._id)]);
+                    } else {
+                        stillMissing.push(sis);
                     }
                 }
+            } else {
+                stillMissing.push(...batch);
             }
         } catch (e) {
             if (e && e.isCanvasAuth) throw e;
             console.warn(`[GraphQL] course alias batch failed: ${e.message}`);
+            stillMissing.push(...batch);
+        }
+    }
+
+    // REST fallback for anything GraphQL couldn't resolve. Parallelized so
+    // this stays fast even when GraphQL gives us nothing.
+    if (stillMissing.length > 0) {
+        console.log(`[Course resolver] ${stillMissing.length} SIS IDs fell back to REST`);
+        const CONCURRENCY = 20;
+        for (let i = 0; i < stillMissing.length; i += CONCURRENCY) {
+            const chunk = stillMissing.slice(i, i + CONCURRENCY);
+            const responses = await Promise.all(chunk.map(sis =>
+                fetch(`${CANVAS_DOMAIN}/api/v1/courses/sis_course_id:${encodeURIComponent(sis)}`, {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' }
+                }).then(r => r.ok ? r.json() : null).catch(() => null)
+            ));
+            responses.forEach((course, idx) => {
+                const sis = chunk[idx];
+                if (course && course.id) {
+                    result.set(String(sis), String(course.id));
+                    pairsToCache.push([String(sis), String(course.id)]);
+                }
+            });
         }
     }
 
