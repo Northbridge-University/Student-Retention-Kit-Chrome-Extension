@@ -80,6 +80,7 @@ import {
     toggleNextAssignment,
     initCanvasApiTypeToggle,
     initCanvasAdvancedToggle,
+    initHighlightStudentRowToggle,
     togglePowerAutomateEnabled,
     togglePowerAutomateDebug,
     toggleDebugModeModal,
@@ -679,15 +680,35 @@ function setupEventListeners() {
 
     initCanvasApiTypeToggle();
     initCanvasAdvancedToggle();
+    initHighlightStudentRowToggle();
 
     if (elements.reportIssueBtn) {
-        // Regenerate a fresh 6-digit ticket number on every click so each
-        // report lands in a unique email thread. Synchronous update of href
-        // takes effect before the browser follows the mailto link.
-        elements.reportIssueBtn.addEventListener('click', () => {
+        // Report an Issue: fresh 6-digit ticket per click so each report
+        // lands in its own email thread. The 5-second debounce + "Opening..."
+        // label prevents spam clicks while the user's mail client spins up.
+        const reportIssueLabelEl = elements.reportIssueBtn.querySelector('span');
+        const originalLabel = reportIssueLabelEl ? reportIssueLabelEl.textContent : 'Report an Issue';
+        let reportIssueBusy = false;
+
+        elements.reportIssueBtn.addEventListener('click', (e) => {
+            if (reportIssueBusy) {
+                e.preventDefault();
+                return;
+            }
+            reportIssueBusy = true;
+
             const ticket = String(Math.floor(100000 + Math.random() * 900000));
             const subject = encodeURIComponent(`Student Retention Kit Issue - ${ticket}`);
             elements.reportIssueBtn.href = `mailto:vblanco1@northbridge.edu?subject=${subject}`;
+
+            elements.reportIssueBtn.classList.add('is-opening');
+            if (reportIssueLabelEl) reportIssueLabelEl.textContent = 'Opening...';
+
+            setTimeout(() => {
+                reportIssueBusy = false;
+                elements.reportIssueBtn.classList.remove('is-opening');
+                if (reportIssueLabelEl) reportIssueLabelEl.textContent = originalLabel;
+            }, 5000);
         });
     }
 

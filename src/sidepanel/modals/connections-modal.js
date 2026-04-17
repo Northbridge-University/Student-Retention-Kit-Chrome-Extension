@@ -49,6 +49,8 @@ export async function openConnectionsModal(connectionType) {
         if (elements.excelConfigContent) {
             elements.excelConfigContent.style.display = 'block';
         }
+        // Always start the Student Submission Highlight section collapsed
+        setHighlightStudentRowExpanded(false);
     } else if (connectionType === 'powerAutomate') {
         if (elements.connectionModalTitle) {
             elements.connectionModalTitle.textContent = 'Power Automate Settings';
@@ -417,6 +419,30 @@ export function initCanvasAdvancedToggle() {
     };
     elements.canvasAdvancedToggle.addEventListener('click', toggle);
     elements.canvasAdvancedToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+        }
+    });
+}
+
+function setHighlightStudentRowExpanded(expanded) {
+    if (!elements.highlightStudentRowHeader || !elements.highlightStudentRowCollapsible) return;
+    elements.highlightStudentRowCollapsible.style.display = expanded ? 'block' : 'none';
+    elements.highlightStudentRowHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (elements.highlightStudentRowChevron) {
+        elements.highlightStudentRowChevron.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+}
+
+export function initHighlightStudentRowToggle() {
+    if (!elements.highlightStudentRowHeader) return;
+    const toggle = () => {
+        const current = elements.highlightStudentRowHeader.getAttribute('aria-expanded') === 'true';
+        setHighlightStudentRowExpanded(!current);
+    };
+    elements.highlightStudentRowHeader.addEventListener('click', toggle);
+    elements.highlightStudentRowHeader.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             toggle();

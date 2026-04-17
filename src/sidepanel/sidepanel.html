@@ -632,16 +632,20 @@
                 <!-- Highlight Student Row Configuration -->
                 <div style="margin-bottom: 20px; padding-top: 20px; border-top: 1px solid rgba(0,0,0,0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
-                            <i class="fas fa-highlighter" style="color:var(--primary-color);"></i> Student Submission Highlight
-                        </label>
+                        <div id="highlightStudentRowHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="highlightStudentRowCollapsible" style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; user-select: none;">
+                            <label style="font-size:0.95em; font-weight:500; color:var(--text-main); cursor: pointer; margin: 0;">
+                                <i class="fas fa-highlighter" style="color:var(--primary-color);"></i> Student Submission Highlight
+                            </label>
+                            <i id="highlightStudentRowChevron" class="fas fa-chevron-down" style="color:var(--text-secondary); font-size:0.85em; transition: transform 0.2s;"></i>
+                        </div>
                         <i id="highlightStudentRowToggleModal" class="fas fa-toggle-on" style="color:var(--primary-color); font-size:2em; cursor: pointer;"></i>
                     </div>
-                    <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:15px;">
-                        Automatically highlight student rows in Excel when a submission is detected.
-                    </div>
+                    <div id="highlightStudentRowCollapsible" style="display: none;">
+                        <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:15px;">
+                            Automatically highlight student rows in Excel when a submission is detected.
+                        </div>
 
-                    <div id="highlightSettingsContainer" style="transition: opacity 0.3s;">
+                        <div id="highlightSettingsContainer" style="transition: opacity 0.3s;">
                     <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:15px;">
                         Configure how student rows are highlighted in Excel when a submission is detected.
                     </div>
@@ -706,6 +710,7 @@
                             <input type="text" id="highlightRowColorTextInput" placeholder="#92d050" style="flex:1; padding:8px; font-size:0.9em; border: 1px solid rgba(0,0,0,0.2); border-radius:0.5rem;">
                         </div>
                         <div style="font-size:0.75em; color:var(--text-secondary); margin-top:4px;">Hex color code for row highlighting</div>
+                    </div>
                     </div>
                     </div>
                 </div>

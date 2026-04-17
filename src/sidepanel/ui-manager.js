@@ -270,6 +270,9 @@ export function cacheDomElements() {
     elements.sendMasterListToggleModal = document.getElementById('sendMasterListToggleModal');
     elements.reformatNameToggleModal = document.getElementById('reformatNameToggleModal');
     elements.highlightStudentRowToggleModal = document.getElementById('highlightStudentRowToggleModal');
+    elements.highlightStudentRowHeader = document.getElementById('highlightStudentRowHeader');
+    elements.highlightStudentRowCollapsible = document.getElementById('highlightStudentRowCollapsible');
+    elements.highlightStudentRowChevron = document.getElementById('highlightStudentRowChevron');
     elements.highlightSettingsContainer = document.getElementById('highlightSettingsContainer');
     elements.highlightStartColInput = document.getElementById('highlightStartColInput');
     elements.highlightEndColInput = document.getElementById('highlightEndColInput');
