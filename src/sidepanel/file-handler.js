@@ -1604,7 +1604,7 @@ export async function handleFileImport(files, onSuccess) {
  * Resets the queue UI to default state
  */
 export function resetQueueUI() {
-    const steps = ['step1', 'step2', 'step3', 'step4'];
+    const steps = ['step1', 'step2'];
     steps.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -1612,6 +1612,7 @@ export function resetQueueUI() {
         updateStepIcon(el, 'pending');
         el.querySelector('.step-time').textContent = '';
         el.style.color = '';
+        delete el.dataset.startTime;
     });
     const totalTimeDisplay = document.getElementById('queueTotalTime');
     if (totalTimeDisplay) {

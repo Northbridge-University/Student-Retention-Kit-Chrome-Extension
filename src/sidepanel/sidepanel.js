@@ -1525,7 +1525,7 @@ function setupEventListeners() {
                 // Passing callbacks that also render would cause double renders (duplicate students bug).
                 processStep2(students, async (updatedStudents) => {
                     if (isUpdateCancelled()) { setUpdateButtonsDisabled(false); return; }
-                    const finalStudents = await processStep3(updatedStudents, null, { finalize: false });
+                    const finalStudents = await processStep3(updatedStudents);
                     if (isUpdateCancelled()) { setUpdateButtonsDisabled(false); return; }
                     // Send master list with missing assignments to Excel
                     await processStep4(finalStudents);

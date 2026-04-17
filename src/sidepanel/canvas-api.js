@@ -165,7 +165,7 @@ export function updateTotalTime() {
  * Handles the active/spinner → completed/check or error/red transitions
  * so each processStepN doesn't need to repeat the boilerplate.
  *
- * @param {string} stepId - DOM element ID (e.g. 'step2', 'step3')
+ * @param {string} stepId - DOM element ID ('step1' or 'step2')
  * @param {function} work - Async function that receives { timeSpan, startTime } and returns a result
  * @returns {Promise<*>} The result of work()
  */
@@ -969,11 +969,11 @@ async function _processStep2(students, renderCallback) {
  * pair of API calls. Uses a worker pool to keep multiple course fetches
  * in-flight simultaneously for maximum throughput.
  */
-export async function processStep3(students, renderCallback, options = {}) {
+export async function processStep3(students, renderCallback) {
     while (true) {
         resetAuthErrorState();
         try {
-            return await _processStep3(students, renderCallback, options);
+            return await _processStep3(students, renderCallback);
         } catch (e) {
             if (e instanceof CanvasAuthRetryError) {
                 console.log('[Step 3] Retrying with updated settings...');
@@ -984,11 +984,12 @@ export async function processStep3(students, renderCallback, options = {}) {
     }
 }
 
-async function _processStep3(students, renderCallback, options = {}) {
-    // When the pipeline calls Step 3 followed by Step 4, Step 3 should not
-    // finalize the 'Fetch Canvas Data' row — Step 4 does that. When Step 3
-    // runs standalone (e.g. "Check Grade Book Again"), it finalizes itself.
-    const finalize = options.finalize !== false;
+async function _processStep3(students, renderCallback) {
+    // Step 3 always finalizes the 'Fetch Canvas Data' row so the user sees
+    // a completed state even if Step 4's Excel instance modal blocks next.
+    // Whether we're mid-pipeline (Step 2 ran first) or standalone determines
+    // only the progress range — inferred from the shared dataset.startTime.
+    const pipelineMode = !!document.getElementById('step2')?.dataset.startTime;
     return withStepUI('step2', async ({ timeSpan }) => {
         // Pre-check: ensure user is logged into Canvas before making any API calls.
         // This is critical when Step 3 runs standalone (e.g. "Check Grade Book Again")
@@ -1085,10 +1086,10 @@ async function _processStep3(students, renderCallback, options = {}) {
                 }
 
                 processedStudents += studentsInCourse.length;
-                // In pipeline mode (finalize=false) Step 3 renders the 50-100% half
-                // of the combined progress bar; standalone it fills 0-100%.
-                const offset = finalize ? 0 : 50;
-                const span = finalize ? 100 : 50;
+                // Step 3 fills 50-100% in pipeline mode (Step 2 already filled 0-50%)
+                // and 0-100% when running standalone ("Check Grade Book Again").
+                const offset = pipelineMode ? 50 : 0;
+                const span = pipelineMode ? 50 : 100;
                 const pct = offset + Math.round((processedStudents / students.length) * span);
                 timeSpan.textContent = `${pct}%`;
             }
@@ -1104,7 +1105,7 @@ async function _processStep3(students, renderCallback, options = {}) {
 
         if (renderCallback) renderCallback(updatedStudents);
         return updatedStudents;
-    }, { final: finalize });
+    });
 }
 
 
@@ -1112,46 +1113,15 @@ async function _processStep3(students, renderCallback, options = {}) {
 
 /** Process Step 4: Send the master list with missing assignments to Excel. */
 export async function processStep4(students) {
-    const stepEl = document.getElementById('step2');
-    if (!stepEl) return students;
-
-    // Skip Excel send when disabled, but still finalize the Fetch Canvas Data
-    // row so it doesn't sit spinning after Step 3 completes.
+    // The Fetch Canvas Data row finalized at the end of Step 3, so this step
+    // doesn't touch any queue UI. Excel-specific user prompts (campus, tab
+    // picker) run inline and blocking the user on them no longer holds the
+    // pipeline status display in spinner state.
     const settings = await storageGet([STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]);
     const sendEnabled = settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL] !== undefined
         ? settings[STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]
         : true;
-    if (!sendEnabled) {
-        const existingStart = stepEl.dataset.startTime;
-        const startTime = existingStart ? parseInt(existingStart, 10) : Date.now();
-        const durationSeconds = (Date.now() - startTime) / 1000;
-        const timeSpan = stepEl.querySelector('.step-time');
-        stepEl.className = 'queue-item completed';
-        updateStepIcon(stepEl, 'check');
-        if (timeSpan) timeSpan.textContent = formatDuration(durationSeconds);
-        delete stepEl.dataset.startTime;
-        updateTotalTime();
-        return students;
-    }
-
-    const timeSpan = stepEl.querySelector('.step-time');
-    stepEl.className = 'queue-item active';
-    updateStepIcon(stepEl, 'spinner');
-
-    // Share the startTime with the earlier Step 2/3 phases so the final
-    // duration reflects the whole Canvas pipeline, not just the Excel send.
-    const existingStart = stepEl.dataset.startTime;
-    const startTime = existingStart ? parseInt(existingStart, 10) : Date.now();
-    if (!existingStart) stepEl.dataset.startTime = String(startTime);
-
-    const finish = (suffix = '') => {
-        const durationSeconds = (Date.now() - startTime) / 1000;
-        stepEl.className = 'queue-item completed';
-        updateStepIcon(stepEl, 'check');
-        timeSpan.textContent = suffix ? `${formatDuration(durationSeconds)} ${suffix}` : formatDuration(durationSeconds);
-        delete stepEl.dataset.startTime;
-        updateTotalTime();
-    };
+    if (!sendEnabled) return students;
 
     try {
         // Dynamically import to avoid circular dependency
@@ -1165,12 +1135,7 @@ export async function processStep4(students) {
 
         if (campuses.length > 1) {
             const selectedCampus = await openCampusSelectionModal(campuses);
-
-            if (selectedCampus === null) {
-                finish();
-                return students;
-            }
-
+            if (selectedCampus === null) return students;
             if (selectedCampus !== '') {
                 studentsToSend = students.filter(s => s.campus === selectedCampus);
                 console.log(`[Step 4] Filtered to ${studentsToSend.length} students from campus: ${selectedCampus}`);
@@ -1185,28 +1150,17 @@ export async function processStep4(students) {
             // No tabs — will attempt to send when tabs open
         } else if (excelTabs.length > 1) {
             targetTabId = await openExcelInstanceModal(excelTabs);
-
-            if (targetTabId === null) {
-                finish();
-                return students;
-            }
+            if (targetTabId === null) return students;
         } else {
             targetTabId = excelTabs[0].id;
         }
 
-        // --- Send ---
         await sendMasterListWithMissingAssignmentsToExcel(studentsToSend, targetTabId);
-
-        finish();
         console.log(`[Step 4] Complete`);
         return students;
 
     } catch (error) {
         console.error("[Step 4 Error]", error);
-        updateStepIcon(stepEl, 'error');
-        stepEl.style.color = '#ef4444';
-        timeSpan.textContent = 'Error';
-        delete stepEl.dataset.startTime;
         return students;
     }
 }
