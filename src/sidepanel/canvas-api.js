@@ -16,7 +16,7 @@ import { ensureCanvasLogin } from './modals/canvas-login-modal.js';
 import { storageGet } from '../utils/storage.js';
 import { updateStepIcon } from '../utils/ui-helpers.js';
 import { isUpdateCancelled, setUpdateButtonsDisabled } from './file-handler.js';
-import { fetchCanvasDetailsGraphQL, fetchCourseGroupDataGraphQL } from './canvas-graphql.js';
+import { fetchCanvasDetailsGraphQL, fetchCourseGroupDataGraphQL, resolveStudentsViaGraphQL } from './canvas-graphql.js';
 
 // Custom error for cancelled updates
 class UpdateCancelledError extends Error {
@@ -892,6 +892,16 @@ async function _processStep2(students, renderCallback) {
         console.log(`[Step 2] Pinging Canvas API: ${getCanvasDomain()}`);
 
         const { cacheEnabled, useNonApiFetch, courseReferenceDate, apiType } = await loadPipelineSettings();
+
+        // --- GraphQL fast path: resolve all students in one pass, grouped by ClassSectionId ---
+        if (apiType === CANVAS_API_TYPES.GRAPHQL) {
+            timeSpan.textContent = '15%';
+            await resolveStudentsViaGraphQL(students);
+            timeSpan.textContent = '100%';
+            await chrome.storage.local.set({ [STORAGE_KEYS.MASTER_ENTRIES]: students });
+            console.log(`[Step 2] GraphQL complete - ${students.length} students processed`);
+            return students;
+        }
 
         // --- Separate students into cached vs uncached groups ---
         const cachedStudents = [];

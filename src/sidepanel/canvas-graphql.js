@@ -1,32 +1,48 @@
 // Canvas GraphQL Integration - Alternate path for building the Master List.
 //
-// REST flow remains the default in canvas-api.js. When the user opts into
-// GraphQL via the Canvas Settings modal, step orchestrators delegate their
-// per-course data fetches to this module. GraphQL responses are mapped to
-// the REST-compatible shapes that processCourseGroupResults already expects,
-// so downstream analysis code stays untouched.
+// Canvas GraphQL requires:
+//   - Session cookies (credentials: 'include')
+//   - A matching X-CSRF-Token header (fetched from the _csrf_token cookie)
+// Without the CSRF header, Canvas Rails rejects the POST with HTTP 422.
 
 import { STORAGE_KEYS, CANVAS_DOMAIN } from '../constants/index.js';
 import { storageGet, storageSet } from '../utils/storage.js';
 import { isCanvasAuthError } from './modals/canvas-auth-modal.js';
 
 const GRAPHQL_ENDPOINT = `${CANVAS_DOMAIN}/api/graphql`;
-const SUBMISSIONS_PAGE_SIZE = 500; // Canvas caps at ~100, but we request more in case limits rise
+const SUBMISSIONS_PAGE_SIZE = 500;
 const USERS_PAGE_SIZE = 100;
 
-/**
- * Executes a GraphQL query against Canvas.
- * Returns the `data` field on success; throws on network or GraphQL errors.
- */
+let cachedCsrfToken = null;
+
+async function getCsrfToken() {
+    if (cachedCsrfToken) return cachedCsrfToken;
+    if (!chrome.cookies || !chrome.cookies.get) return null;
+    try {
+        const cookie = await chrome.cookies.get({ url: CANVAS_DOMAIN, name: '_csrf_token' });
+        if (cookie && cookie.value) {
+            cachedCsrfToken = decodeURIComponent(cookie.value);
+            return cachedCsrfToken;
+        }
+    } catch (e) {
+        console.warn('[GraphQL] Failed to read CSRF cookie:', e.message);
+    }
+    return null;
+}
+
 async function graphqlRequest(query, variables = {}) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    };
+    const csrf = await getCsrfToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+
     const response = await fetch(GRAPHQL_ENDPOINT, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers,
         body: JSON.stringify({ query, variables })
     });
 
@@ -38,7 +54,11 @@ async function graphqlRequest(query, variables = {}) {
     }
 
     if (!response.ok) {
-        throw new Error(`Canvas GraphQL HTTP ${response.status}`);
+        let detail = '';
+        try { detail = (await response.text()).slice(0, 500); } catch (_) { /* ignore */ }
+        // CSRF token may have rotated — clear the cache so the next call re-reads it.
+        if (response.status === 422) cachedCsrfToken = null;
+        throw new Error(`Canvas GraphQL HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
     }
 
     const payload = await response.json();
@@ -50,8 +70,6 @@ async function graphqlRequest(query, variables = {}) {
 }
 
 // --- SIS → course cache ---------------------------------------------------
-// Persisted in chrome.storage.local under STORAGE_KEYS.CANVAS_SIS_COURSE_CACHE
-// Shape: { [SyStudentId]: { ClassSectionId, canvasUserId, canvasCourseId, savedAt } }
 
 async function readSisCourseCache() {
     const data = await storageGet([STORAGE_KEYS.CANVAS_SIS_COURSE_CACHE]);
@@ -64,11 +82,6 @@ async function writeSisCourseCacheEntry(syStudentId, entry) {
     await storageSet({ [STORAGE_KEYS.CANVAS_SIS_COURSE_CACHE]: cache });
 }
 
-/**
- * When a student row is missing ClassSectionId, resolve it via one REST call.
- * GraphQL does not expose a user(sisId:) lookup, so this fallback is unavoidable.
- * Once resolved, the mapping is cached so subsequent runs skip the hop.
- */
 async function resolveClassSectionIdViaRest(syStudentId) {
     const cache = await readSisCourseCache();
     const cached = cache[String(syStudentId)];
@@ -76,12 +89,12 @@ async function resolveClassSectionIdViaRest(syStudentId) {
 
     const userUrl = `${CANVAS_DOMAIN}/api/v1/users/sis_user_id:${syStudentId}?include[]=enrollments`;
     const userResp = await fetch(userUrl, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-    if (!userResp.ok) throw new Error(`Failed to resolve SIS user ${syStudentId}: ${userResp.status}`);
+    if (!userResp.ok) return null;
     const user = await userResp.json();
 
     const coursesUrl = `${CANVAS_DOMAIN}/api/v1/users/${user.id}/courses?include[]=enrollments&per_page=100`;
     const coursesResp = await fetch(coursesUrl, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-    if (!coursesResp.ok) throw new Error(`Failed to load courses for ${syStudentId}: ${coursesResp.status}`);
+    if (!coursesResp.ok) return null;
     const courses = await coursesResp.json();
 
     const activeCourse = pickActiveCourse(courses);
@@ -110,84 +123,137 @@ function pickActiveCourse(courses) {
     return valid.find(c => c.enrollments && c.enrollments.some(e => e.enrollment_state === 'active')) || valid[0];
 }
 
-// --- Step 2 replacement: resolve course + gradebook URL -------------------
+// --- Step 2: resolve student.url in one query per course ------------------
 
-const COURSE_BY_SIS_QUERY = `
-query CourseBySisId($sisId: String!) {
+const COURSE_USERS_QUERY = `
+query CourseUsersBySisId($sisId: String!) {
   course(sisId: $sisId) {
     _id
     name
     sisId
     usersConnection(first: ${USERS_PAGE_SIZE}, filter: { enrollmentTypes: [StudentEnrollment], enrollmentStates: [active] }) {
+      nodes { _id sisId name }
+    }
+    enrollmentsConnection {
       nodes {
-        _id
-        sisId
-        name
+        type
+        user { _id }
+        grades { currentScore finalScore currentGrade }
       }
     }
   }
 }`;
 
 /**
- * GraphQL analog of fetchCanvasDetails. Populates student.url and student.grade
- * using ClassSectionId when available; falls back to REST to resolve missing
- * ClassSectionId values.
+ * Batch-resolves `url` and `grade` for every student that has a ClassSectionId.
+ * Students are grouped by ClassSectionId, and one GraphQL query per group pulls
+ * back the course + all enrolled users + their grades. Students without a
+ * ClassSectionId fall through to resolveClassSectionIdViaRest().
  *
- * @returns the same student object with canvas fields filled in.
+ * @param {Array} students - Student objects (mutated in place).
+ * @returns {Promise<Array>} The same students, with url/grade populated where possible.
  */
-export async function fetchCanvasDetailsGraphQL(student) {
-    if (!student.SyStudentId) return student;
-    const syStudentId = String(student.SyStudentId);
+export async function resolveStudentsViaGraphQL(students) {
+    const byClassSection = new Map();
+    const unresolved = [];
 
-    try {
-        let sisCourseId = student.ClassSectionId || null;
-        let canvasUserId = null;
-        let canvasCourseId = null;
-
-        if (!sisCourseId) {
-            const resolved = await resolveClassSectionIdViaRest(syStudentId);
-            if (resolved) {
-                sisCourseId = resolved.ClassSectionId;
-                canvasUserId = resolved.canvasUserId;
-                canvasCourseId = resolved.canvasCourseId;
-                if (sisCourseId) student.ClassSectionId = sisCourseId;
-            }
+    for (const student of students) {
+        const sis = student.ClassSectionId && String(student.ClassSectionId).trim();
+        if (sis) {
+            if (!byClassSection.has(sis)) byClassSection.set(sis, []);
+            byClassSection.get(sis).push(student);
+        } else {
+            unresolved.push(student);
         }
-
-        if (sisCourseId) {
-            const data = await graphqlRequest(COURSE_BY_SIS_QUERY, { sisId: sisCourseId });
-            const course = data && data.course;
-            if (course) {
-                canvasCourseId = canvasCourseId || course._id;
-                const match = course.usersConnection && course.usersConnection.nodes
-                    ? course.usersConnection.nodes.find(u => u.sisId === syStudentId)
-                    : null;
-                if (match) {
-                    canvasUserId = canvasUserId || match._id;
-                    if (!student.name && match.name) student.name = match.name;
-                }
-            }
-        }
-
-        if (canvasUserId && canvasCourseId) {
-            student.url = `${CANVAS_DOMAIN}/courses/${canvasCourseId}/grades/${canvasUserId}`;
-        }
-    } catch (e) {
-        if (e && e.isCanvasAuth) throw e;
-        console.warn(`[GraphQL] fetchCanvasDetails failed for ${student.SyStudentId}:`, e.message);
     }
 
+    console.log(`[GraphQL] Step 2: ${byClassSection.size} course(s), ${unresolved.length} unresolved`);
+
+    for (const [sisCourseId, group] of byClassSection.entries()) {
+        try {
+            const data = await graphqlRequest(COURSE_USERS_QUERY, { sisId: sisCourseId });
+            const course = data && data.course;
+            if (!course) {
+                console.warn(`[GraphQL] Course ${sisCourseId} not found`);
+                continue;
+            }
+            applyCourseDataToStudents(course, group);
+        } catch (e) {
+            if (e && e.isCanvasAuth) throw e;
+            console.warn(`[GraphQL] Course ${sisCourseId} failed:`, e.message);
+        }
+    }
+
+    // Fallback: students without ClassSectionId resolve individually via REST,
+    // which seeds student.ClassSectionId for next run and sets url/grade.
+    for (const student of unresolved) {
+        try {
+            await resolveUnknownStudent(student);
+        } catch (e) {
+            console.warn(`[GraphQL] Fallback failed for ${student.SyStudentId}:`, e.message);
+        }
+    }
+
+    return students;
+}
+
+function applyCourseDataToStudents(course, group) {
+    const canvasCourseId = course._id;
+    const usersByCanvasSisId = new Map();
+    for (const u of (course.usersConnection && course.usersConnection.nodes) || []) {
+        if (u.sisId) usersByCanvasSisId.set(String(u.sisId), u);
+    }
+    const gradesByUserId = new Map();
+    for (const e of (course.enrollmentsConnection && course.enrollmentsConnection.nodes) || []) {
+        if (e.user && e.user._id) gradesByUserId.set(String(e.user._id), e.grades || {});
+    }
+
+    for (const student of group) {
+        const syId = String(student.SyStudentId || '');
+        const user = usersByCanvasSisId.get(syId);
+        if (!user) continue;
+
+        student.url = `${CANVAS_DOMAIN}/courses/${canvasCourseId}/grades/${user._id}`;
+        if (!student.name && user.name) student.name = user.name;
+
+        const grades = gradesByUserId.get(String(user._id)) || {};
+        if (grades.currentScore != null) {
+            student.grade = `${grades.currentScore}%`;
+        } else if (grades.finalScore != null) {
+            student.grade = `${grades.finalScore}%`;
+        } else if (grades.currentGrade != null) {
+            student.grade = String(grades.currentGrade);
+        }
+    }
+}
+
+async function resolveUnknownStudent(student) {
+    if (!student.SyStudentId) return;
+    const resolved = await resolveClassSectionIdViaRest(student.SyStudentId);
+    if (!resolved) return;
+    if (resolved.ClassSectionId) student.ClassSectionId = resolved.ClassSectionId;
+    if (resolved.canvasUserId && resolved.canvasCourseId) {
+        student.url = `${CANVAS_DOMAIN}/courses/${resolved.canvasCourseId}/grades/${resolved.canvasUserId}`;
+    }
+}
+
+/**
+ * Single-student entry point preserved for existing call sites. Groups of one
+ * student aren't useful, so this just wraps resolveStudentsViaGraphQL.
+ */
+export async function fetchCanvasDetailsGraphQL(student) {
+    await resolveStudentsViaGraphQL([student]);
     return student;
 }
 
-// --- Step 3 replacement: course-group submissions + grades ----------------
+// --- Step 3: per-course submissions + grades ------------------------------
 
 const COURSE_DATA_QUERY = `
-query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor: String) {
+query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor: String, $fetchSubs: Boolean!, $fetchUsers: Boolean!) {
   course(id: $courseId) {
     _id
     submissionsConnection(first: ${SUBMISSIONS_PAGE_SIZE}, after: $submissionsCursor,
-      filter: { states: [submitted, unsubmitted, graded, pending_review] }) {
+      filter: { states: [submitted, unsubmitted, graded, pending_review] }) @include(if: $fetchSubs) {
       pageInfo { hasNextPage endCursor }
       nodes {
         _id
@@ -209,7 +275,7 @@ query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor:
         }
       }
     }
-    enrollmentsConnection(after: $userCursor) {
+    enrollmentsConnection(after: $userCursor) @include(if: $fetchUsers) {
       pageInfo { hasNextPage endCursor }
       nodes {
         _id
@@ -221,13 +287,6 @@ query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor:
   }
 }`;
 
-/**
- * GraphQL analog of fetchCourseGroupData. Paginates submissions/enrollments,
- * then maps each GraphQL node to the REST-compatible shape that
- * processCourseGroupResults expects, so downstream analysis is unchanged.
- *
- * @returns {{ submissionsData: Array, usersData: Array }}
- */
 export async function fetchCourseGroupDataGraphQL(origin, courseId, studentIds) {
     const wanted = new Set(studentIds.map(id => String(id)));
 
@@ -241,29 +300,31 @@ export async function fetchCourseGroupDataGraphQL(origin, courseId, studentIds) 
     while (hasMoreSubs || hasMoreUsers) {
         const data = await graphqlRequest(COURSE_DATA_QUERY, {
             courseId,
-            submissionsCursor: hasMoreSubs ? submissionsCursor : null,
-            userCursor: hasMoreUsers ? userCursor : null
+            submissionsCursor,
+            userCursor,
+            fetchSubs: hasMoreSubs,
+            fetchUsers: hasMoreUsers
         });
         const course = data && data.course;
         if (!course) break;
 
-        if (hasMoreSubs) {
-            const subPage = course.submissionsConnection || { nodes: [], pageInfo: {} };
-            for (const node of (subPage.nodes || [])) {
+        if (hasMoreSubs && course.submissionsConnection) {
+            for (const node of (course.submissionsConnection.nodes || [])) {
                 if (wanted.size > 0 && !wanted.has(String(node.userId))) continue;
                 submissions.push(mapSubmission(node, origin, courseId));
             }
-            hasMoreSubs = !!(subPage.pageInfo && subPage.pageInfo.hasNextPage);
-            submissionsCursor = subPage.pageInfo ? subPage.pageInfo.endCursor : null;
+            const info = course.submissionsConnection.pageInfo || {};
+            hasMoreSubs = !!info.hasNextPage;
+            submissionsCursor = info.endCursor || null;
         }
 
-        if (hasMoreUsers) {
-            const userPage = course.enrollmentsConnection || { nodes: [], pageInfo: {} };
-            for (const node of (userPage.nodes || [])) {
+        if (hasMoreUsers && course.enrollmentsConnection) {
+            for (const node of (course.enrollmentsConnection.nodes || [])) {
                 enrollments.push(node);
             }
-            hasMoreUsers = !!(userPage.pageInfo && userPage.pageInfo.hasNextPage);
-            userCursor = userPage.pageInfo ? userPage.pageInfo.endCursor : null;
+            const info = course.enrollmentsConnection.pageInfo || {};
+            hasMoreUsers = !!info.hasNextPage;
+            userCursor = info.endCursor || null;
         }
     }
 
@@ -299,7 +360,6 @@ function mapSubmission(node, origin, courseId) {
 }
 
 function buildUsersData(enrollments, wanted) {
-    // Collapse enrollments to one record per user, preferring StudentEnrollment grades.
     const byUser = new Map();
     for (const enr of enrollments) {
         const userId = enr.user && enr.user._id ? parseInt(enr.user._id, 10) : null;
@@ -307,10 +367,6 @@ function buildUsersData(enrollments, wanted) {
         if (wanted.size > 0 && !wanted.has(String(userId))) continue;
 
         const grades = enr.grades || {};
-        const current = grades.currentScore != null ? grades.currentScore : null;
-        const final = grades.finalScore != null ? grades.finalScore : null;
-        const currentGrade = grades.currentGrade || null;
-
         const existing = byUser.get(userId);
         if (!existing || enr.type === 'StudentEnrollment') {
             byUser.set(userId, {
@@ -318,9 +374,9 @@ function buildUsersData(enrollments, wanted) {
                 enrollments: [{
                     type: enr.type || 'StudentEnrollment',
                     grades: {
-                        current_score: current,
-                        final_score: final,
-                        current_grade: currentGrade
+                        current_score: grades.currentScore != null ? grades.currentScore : null,
+                        final_score: grades.finalScore != null ? grades.finalScore : null,
+                        current_grade: grades.currentGrade || null
                     }
                 }]
             });
