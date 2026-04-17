@@ -72,10 +72,11 @@ async function graphqlRequest(query, variables = {}) {
 // --- Step 3: per-course submissions + grades ------------------------------
 
 const COURSE_DATA_QUERY = `
-query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor: String, $fetchSubs: Boolean!, $fetchUsers: Boolean!) {
+query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor: String, $fetchSubs: Boolean!, $fetchUsers: Boolean!, $studentIds: [ID!]) {
   course(id: $courseId) {
     _id
     submissionsConnection(first: ${SUBMISSIONS_PAGE_SIZE}, after: $submissionsCursor,
+      studentIds: $studentIds,
       filter: { states: [submitted, unsubmitted, graded, pending_review] }) @include(if: $fetchSubs) {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -112,6 +113,13 @@ query CourseSubmissions($courseId: ID!, $submissionsCursor: String, $userCursor:
 
 export async function fetchCourseGroupDataGraphQL(origin, courseId, studentIds) {
     const wanted = new Set(studentIds.map(id => String(id)));
+    // Pass Canvas user IDs to Canvas so submissionsConnection only returns
+    // rows for our cohort instead of the whole course. For a course where
+    // the roster is a small subset, this cuts submissions pagination from
+    // many pages down to one or two.
+    const studentIdArg = studentIds && studentIds.length > 0
+        ? studentIds.map(id => String(id))
+        : null;
 
     const submissions = [];
     const enrollments = [];
@@ -126,7 +134,8 @@ export async function fetchCourseGroupDataGraphQL(origin, courseId, studentIds) 
             submissionsCursor,
             userCursor,
             fetchSubs: hasMoreSubs,
-            fetchUsers: hasMoreUsers
+            fetchUsers: hasMoreUsers,
+            studentIds: studentIdArg
         });
         const course = data && data.course;
         if (!course) break;

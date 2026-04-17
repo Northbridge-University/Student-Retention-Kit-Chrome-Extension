@@ -44,35 +44,58 @@ function getCanvasDomain() {
 }
 
 /**
- * Fetches a Canvas API URL with automatic legacy domain fallback.
- * If the primary domain fails with a non-auth error, retries with the legacy domain.
- * After FALLBACK_THRESHOLD consecutive fallbacks, locks to the legacy domain.
+ * Fetches a Canvas API URL.
+ * - On 429 (rate limit): retries the same URL with exponential backoff,
+ *   honoring the Retry-After header when present.
+ * - On other non-ok responses (e.g. 404): falls back to the legacy domain
+ *   if one is configured, to handle branding-transition URL rewrites.
+ * Auth errors and network failures on the fallback are swallowed so one
+ * bad request doesn't abort the pipeline.
  */
 async function fetchWithFallback(url, options = {}) {
-    const response = await fetch(url, options);
+    let response = await fetch(url, options);
+
+    // Retry 429s on the same domain with backoff. Falling back would just
+    // hit CORS on the legacy domain and lose the rate-limit state.
+    for (let attempt = 1; attempt <= 3 && response.status === 429; attempt++) {
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '0', 10);
+        const delayMs = retryAfter > 0
+            ? Math.min(retryAfter * 1000, 8000)
+            : Math.min(500 * Math.pow(2, attempt), 4000);
+        await new Promise(r => setTimeout(r, delayMs));
+        response = await fetch(url, options);
+    }
 
     if (response.ok || isCanvasAuthError(response) || !FALLBACK_DOMAIN) {
         if (response.ok) domainFallbackCount = 0;
         return response;
     }
 
-    // Primary domain failed — try legacy domain
-    const fallbackUrl = url.replace(CANVAS_DOMAIN, FALLBACK_DOMAIN);
-    if (fallbackUrl === url) return response; // URL doesn't use primary domain
-
-    console.warn(`[Canvas] Primary domain failed (${response.status}), trying legacy: ${FALLBACK_DOMAIN}`);
-    const fallbackResp = await fetch(fallbackUrl, options);
-
-    if (fallbackResp.ok) {
-        domainFallbackCount++;
-        if (domainFallbackCount >= FALLBACK_THRESHOLD && !useFallbackDomain) {
-            useFallbackDomain = true;
-            console.warn(`[Canvas] ${FALLBACK_THRESHOLD} consecutive fallbacks — using ${FALLBACK_DOMAIN} for remaining requests`);
-        }
-        return fallbackResp;
+    // 5xx and 429 aren't "domain is wrong" signals — don't jump domains.
+    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+        return response;
     }
 
-    return response; // Both failed, return original error
+    const fallbackUrl = url.replace(CANVAS_DOMAIN, FALLBACK_DOMAIN);
+    if (fallbackUrl === url) return response;
+
+    console.warn(`[Canvas] Primary domain failed (${response.status}), trying legacy: ${FALLBACK_DOMAIN}`);
+    try {
+        const fallbackResp = await fetch(fallbackUrl, options);
+        if (fallbackResp.ok) {
+            domainFallbackCount++;
+            if (domainFallbackCount >= FALLBACK_THRESHOLD && !useFallbackDomain) {
+                useFallbackDomain = true;
+                console.warn(`[Canvas] ${FALLBACK_THRESHOLD} consecutive fallbacks — using ${FALLBACK_DOMAIN} for remaining requests`);
+            }
+            return fallbackResp;
+        }
+    } catch (e) {
+        // Legacy domain likely missing from host_permissions — fall through.
+        console.warn(`[Canvas] Legacy fallback fetch threw: ${e.message}`);
+    }
+
+    return response;
 }
 
 /** Resets auth error state and domain fallback — call when starting a new pipeline run. */
@@ -920,7 +943,10 @@ async function _processStep2(students, renderCallback) {
         // progress bar (0-50%); Step 3 picks up from 50-100%.
         timeSpan.textContent = '0%';
 
-        const BATCH_SIZE = 20;
+        // 50 was too aggressive on northbridge — Canvas started 429-ing.
+        // 25 is a middle ground; the 429 backoff in fetchWithFallback
+        // transparently smooths any remaining throttling.
+        const BATCH_SIZE = 25;
         const BATCH_DELAY_MS = 100;
 
         let updatedStudents = [...students];
