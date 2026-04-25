@@ -96,6 +96,12 @@ export async function openConnectionsModal(connectionType) {
         STORAGE_KEYS.CANVAS_API_TYPE,
         STORAGE_KEYS.CALL_DEMO,
         STORAGE_KEYS.AUTO_SWITCH_TO_CALL_TAB,
+        STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
+        STORAGE_KEYS.AUTO_END_CALLS_SECONDS,
+        STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION,
+        STORAGE_KEYS.AUTO_END_RINGING_VOLUME,
+        STORAGE_KEYS.AUTO_END_TALKING_VOLUME,
+        STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME,
         STORAGE_KEYS.HIGHLIGHT_START_COL,
         STORAGE_KEYS.HIGHLIGHT_END_COL,
         STORAGE_KEYS.HIGHLIGHT_EDIT_COLUMN,
@@ -167,6 +173,25 @@ export async function openConnectionsModal(connectionType) {
     // Load Auto Switch to Call Tab setting
     const autoSwitchCallTab = result[STORAGE_KEYS.AUTO_SWITCH_TO_CALL_TAB] !== undefined ? result[STORAGE_KEYS.AUTO_SWITCH_TO_CALL_TAB] : true;
     updateAutoSwitchCallTabUI(autoSwitchCallTab);
+
+    // Load Auto-End Calls settings
+    const autoEndEnabled = result[STORAGE_KEYS.AUTO_END_CALLS_ENABLED] || false;
+    updateAutoEndCallsModalUI(autoEndEnabled);
+    if (elements.autoEndCallsSecondsInput) {
+        const secs = result[STORAGE_KEYS.AUTO_END_CALLS_SECONDS];
+        elements.autoEndCallsSecondsInput.value = (typeof secs === 'number' && secs > 0) ? secs : 5;
+    }
+    if (elements.autoEndCallsDispositionSelect) {
+        elements.autoEndCallsDispositionSelect.value = result[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION] || 'Left Voicemail';
+    }
+    const loadVolume = (input, key, fallback) => {
+        if (!input) return;
+        const v = result[key];
+        input.value = (typeof v === 'number' && v >= 0 && v <= 100) ? v : fallback;
+    };
+    loadVolume(elements.autoEndRingingVolumeInput, STORAGE_KEYS.AUTO_END_RINGING_VOLUME, 0);
+    loadVolume(elements.autoEndTalkingVolumeInput, STORAGE_KEYS.AUTO_END_TALKING_VOLUME, 25);
+    loadVolume(elements.autoEndKeepCallVolumeInput, STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME, 100);
 
     // Load Highlight Student Row settings
     if (elements.highlightStartColInput) {
@@ -316,6 +341,28 @@ export async function saveConnectionsSettings() {
     settingsToSave[STORAGE_KEYS.AUTO_SWITCH_TO_CALL_TAB] = autoSwitchEnabled;
     console.log(`Auto Switch to Call Tab setting saved: ${autoSwitchEnabled}`);
 
+    // Save Auto-End Calls settings
+    const autoEndEnabled = isToggleEnabled(elements.autoEndCallsToggleModal);
+    settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_ENABLED] = autoEndEnabled;
+    if (elements.autoEndCallsSecondsInput) {
+        const parsed = parseInt(elements.autoEndCallsSecondsInput.value, 10);
+        const clamped = Math.max(1, Math.min(60, isNaN(parsed) ? 5 : parsed));
+        settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_SECONDS] = clamped;
+    }
+    if (elements.autoEndCallsDispositionSelect) {
+        settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION] = elements.autoEndCallsDispositionSelect.value || 'Left Voicemail';
+    }
+    const saveVolume = (input, key, fallback) => {
+        if (!input) return;
+        const parsed = parseInt(input.value, 10);
+        const clamped = Math.max(0, Math.min(100, isNaN(parsed) ? fallback : parsed));
+        settingsToSave[key] = clamped;
+    };
+    saveVolume(elements.autoEndRingingVolumeInput, STORAGE_KEYS.AUTO_END_RINGING_VOLUME, 0);
+    saveVolume(elements.autoEndTalkingVolumeInput, STORAGE_KEYS.AUTO_END_TALKING_VOLUME, 25);
+    saveVolume(elements.autoEndKeepCallVolumeInput, STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME, 100);
+    console.log(`Auto-End Calls saved: enabled=${autoEndEnabled}, seconds=${settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_SECONDS]}, disposition=${settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION]}, volumes=ring:${settingsToSave[STORAGE_KEYS.AUTO_END_RINGING_VOLUME]}/talk:${settingsToSave[STORAGE_KEYS.AUTO_END_TALKING_VOLUME]}/keep:${settingsToSave[STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME]}`);
+
     // Save Highlight Student Row settings
     if (elements.highlightStartColInput) {
         settingsToSave[STORAGE_KEYS.HIGHLIGHT_START_COL] = elements.highlightStartColInput.value || 'Student Name';
@@ -456,6 +503,17 @@ function updateDebugModeModalUI(isEnabled) {
 
 function updateAutoSwitchCallTabUI(isEnabled) {
     updateToggleUI(elements.autoSwitchCallTabToggle, isEnabled);
+}
+
+function updateAutoEndCallsModalUI(isEnabled) {
+    updateToggleUI(elements.autoEndCallsToggleModal, isEnabled);
+    if (elements.autoEndCallsParams) {
+        elements.autoEndCallsParams.style.display = isEnabled ? 'block' : 'none';
+    }
+}
+
+export function toggleAutoEndCallsModal() {
+    updateAutoEndCallsModalUI(!isToggleEnabled(elements.autoEndCallsToggleModal));
 }
 
 function updateSyncActiveStudentModalUI(isEnabled) {
