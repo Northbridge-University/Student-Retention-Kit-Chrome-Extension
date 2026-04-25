@@ -1450,53 +1450,79 @@ function _setFive9PlaybackVolumeInPage(percent) {
             const $handle = $p.find('[role=slider]').first();
             const current = parseInt($handle.attr('aria-valuenow') || '0', 10);
 
+            // Detect mute state — the toolbar icon class changes
+            // (fa-volume-up → fa-volume-off / fa-volume-mute when muted), and/or
+            // the mute button gains aria-pressed=true or .active.
+            const isMuted = () => {
+                const muteBtn = popover.querySelector('#StationVolumePopover-mute_playback-button');
+                if (muteBtn) {
+                    if (muteBtn.getAttribute('aria-pressed') === 'true') return true;
+                    if (muteBtn.classList.contains('active')) return true;
+                }
+                const toolbarIcon = document.querySelector('#StationToolbar-playback_volume-node span.fa');
+                if (toolbarIcon) {
+                    const cls = toolbarIcon.className;
+                    if (/fa-volume-(off|mute|times|xmark)/.test(cls)) return true;
+                }
+                return false;
+            };
+            const muted = isMuted();
+
+            const muteBtn = popover.querySelector('#StationVolumePopover-mute_playback-button');
+
             try {
                 if (target === 100) {
+                    // Max button auto-unmutes AND sets volume to 100, in one
+                    // operation (confirmed by Five9's setVolume + mute false IPC pair).
                     const maxBtn = popover.querySelector('#StationVolumePopover-max_volume_playback-button');
                     if (maxBtn) fireOpen(maxBtn);
-                    return finishClose({ success: true, applied: 100, method: 'max-button', from: current });
+                    return finishClose({ success: true, applied: 100, method: 'max-button', from: current, wasMuted: muted });
                 }
                 if (target === 0) {
-                    if (current !== 0) {
-                        const muteBtn = popover.querySelector('#StationVolumePopover-mute_playback-button');
-                        if (muteBtn) fireOpen(muteBtn);
-                    }
-                    return finishClose({ success: true, applied: 0, method: 'mute-button', from: current });
+                    // Want NO audio → ensure muted. Click mute button only if not already muted.
+                    if (!muted && muteBtn) fireOpen(muteBtn);
+                    return finishClose({ success: true, applied: 0, method: muted ? 'already-muted' : 'mute-button', from: current });
                 }
-                // Arbitrary value — try bootstrap-slider API first (cleanest)
-                const $slider = $p.find('.f9-slider').first();
-                let used = null;
-                try {
-                    if (typeof $slider.slider === 'function') {
-                        $slider.slider('setValue', target, true, true);
-                        used = 'bootstrap-slider-api';
-                    }
-                } catch (_) {}
-                if (used) return finishClose({ success: true, applied: used === 'bootstrap-slider-api' ? target : current, method: used, from: current });
+                // Arbitrary value → ensure UNMUTED first, then set the volume.
+                if (muted && muteBtn) {
+                    fireOpen(muteBtn);
+                    // Brief wait for state to flip before adjusting volume
+                    return setTimeout(() => applyVolumeNonZero(popover, $p, $handle, current, target, true), 80);
+                }
+                return applyVolumeNonZero(popover, $p, $handle, current, target, false);
+            } catch (e) {
+                finishClose({ success: false, error: 'apply error: ' + e.message });
+            }
+        };
 
-                // Fallback: simulate a mousedown+drag+mouseup at the right Y on
-                // the slider-track. This is what bootstrap-slider actually
-                // listens for (the [role=slider] handle's keyboard events
-                // don't reliably move the value in Five9's vertical layout).
+        // Sets a non-zero playback volume on an already-open, already-unmuted popover.
+        // Tries bootstrap-slider's API first, then track-coordinate clicks, then keyboard walk.
+        const applyVolumeNonZero = (popover, $p, $handle, current, target, didUnmute) => {
+            try {
+                const $slider = $p.find('.f9-slider').first();
+                if (typeof $slider.slider === 'function') {
+                    try {
+                        $slider.slider('setValue', target, true, true);
+                        return finishClose({ success: true, applied: target, method: 'bootstrap-slider-api', from: current, didUnmute });
+                    } catch (_) { /* fall through */ }
+                }
                 const track = popover.querySelector('.slider-track');
                 if (track) {
                     const rect = track.getBoundingClientRect();
-                    // Vertical slider: bottom = 0%, top = 100%
+                    // Vertical slider: bottom=0, top=100
                     const clickY = rect.bottom - (rect.height * (target / 100));
                     const clickX = rect.left + (rect.width / 2);
                     const opts = { bubbles: true, cancelable: true, view: window, clientX: clickX, clientY: clickY, button: 0, buttons: 1 };
                     track.dispatchEvent(new MouseEvent('mousedown', opts));
                     track.dispatchEvent(new MouseEvent('mousemove', opts));
-                    // mouseup must dispatch on window — bootstrap-slider listens there
+                    // mouseup must go to window — bootstrap-slider listens there
                     window.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
-                    // Verify by re-reading aria-valuenow after a short delay
                     return setTimeout(() => {
                         const finalValue = parseInt($p.find('[role=slider]').first().attr('aria-valuenow') || '0', 10);
-                        finishClose({ success: true, applied: finalValue, method: 'track-coords', from: current, requested: target });
+                        finishClose({ success: true, applied: finalValue, method: 'track-coords', from: current, requested: target, didUnmute });
                     }, 50);
                 }
-
-                // Last-ditch fallback: keyboard walk on the handle
+                // Last-ditch keyboard walk
                 const handle = $handle[0];
                 if (!handle) return finishClose({ success: false, error: 'slider track and handle both missing' });
                 handle.focus();
@@ -1514,12 +1540,12 @@ function _setFive9PlaybackVolumeInPage(percent) {
                         remaining -= 1;
                         setTimeout(step, 30);
                     } else {
-                        finishClose({ success: true, applied: target, method: 'keyboard-walk', from: current });
+                        finishClose({ success: true, applied: target, method: 'keyboard-walk', from: current, didUnmute });
                     }
                 };
                 step();
             } catch (e) {
-                finishClose({ success: false, error: 'apply error: ' + e.message });
+                finishClose({ success: false, error: 'applyVolumeNonZero error: ' + e.message });
             }
         };
 
