@@ -29,8 +29,14 @@ $RegPath     = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\$HostName"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 # --- 1. Find the built exe ---
+# Candidate paths, in priority order:
+#   1. A fresh build output (developer who just ran `dotnet publish`).
+#   2. A `prebuilt\` folder committed to the repo so a fresh clone can
+#      install without needing the .NET SDK and a build toolchain.
+#   3. Loose alongside install.ps1 (manual drop-in).
 $candidatePaths = @(
     (Join-Path $ScriptDir 'bin\Release\net8.0-windows\win-x64\publish\Five9VolumeHost.exe'),
+    (Join-Path $ScriptDir 'prebuilt\Five9VolumeHost.exe'),
     (Join-Path $ScriptDir 'Five9VolumeHost.exe')
 )
 $ExeSource = $null
@@ -40,7 +46,7 @@ foreach ($p in $candidatePaths) {
 if (-not $ExeSource) {
     Write-Host "ERROR: Could not find Five9VolumeHost.exe." -ForegroundColor Red
     Write-Host "       Build it first with:  dotnet publish -c Release -r win-x64" -ForegroundColor Red
-    Write-Host "       Or copy the published exe next to install.ps1." -ForegroundColor Red
+    Write-Host "       Or copy the published files into a 'prebuilt' folder next to install.ps1." -ForegroundColor Red
     exit 1
 }
 
