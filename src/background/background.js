@@ -902,22 +902,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })();
   }
   else if (msg.type === 'triggerFive9SetPlaybackVolume') {
-      console.log(`[BG volume] received triggerFive9SetPlaybackVolume percent=${msg.percent}`);
+      console.log(`[BG volume] received percent=${msg.percent}`);
       (async () => {
           const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
-          console.log(`[BG volume] found ${tabs.length} Five9 tab(s)`);
-          if (tabs.length === 0) return;
-          chrome.tabs.sendMessage(tabs[0].id, {
-              type: 'executeFive9SetPlaybackVolume',
-              percent: msg.percent
-          }, (response) => {
-              const err = chrome.runtime.lastError;
-              if (err) {
-                  console.warn(`[BG volume] sendMessage error: ${err.message}`);
-              } else {
-                  console.log(`[BG volume] tab response:`, response);
-              }
-          });
+          if (tabs.length === 0) { console.log('[BG volume] no Five9 tabs'); return; }
+          try {
+              const results = await chrome.scripting.executeScript({
+                  target: { tabId: tabs[0].id },
+                  world: 'MAIN', // run in the page world so we can use jQuery + bootstrap-slider
+                  func: _setFive9PlaybackVolumeInPage,
+                  args: [msg.percent]
+              });
+              console.log('[BG volume] executeScript result:', results?.[0]?.result);
+          } catch (e) {
+              console.warn('[BG volume] executeScript error:', e.message);
+          }
       })();
   }
   else if (msg.type === 'triggerFive9DisposeOnly') {
@@ -1390,6 +1389,108 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
     }, 'Five9 tab closed state');
   }
 });
+
+/**
+ * Page-world function injected via chrome.scripting.executeScript with
+ * world: 'MAIN'. Sets Five9's playback volume by triggering jQuery click
+ * events on the popover trigger and inner controls (synthetic events from
+ * the isolated content-script world don't fire jQuery-bound handlers).
+ *
+ * This function MUST be self-contained — it runs serialized in the page,
+ * so it can't reference any outer scope.
+ *
+ * @param {number} percent - target volume 0-100
+ * @returns {Promise<{success:boolean, applied?:number, method?:string, error?:string}>}
+ */
+function _setFive9PlaybackVolumeInPage(percent) {
+    return new Promise((resolve) => {
+        const $ = window.jQuery || window.$;
+        if (!$) return resolve({ success: false, error: 'jQuery not present in page' });
+
+        const target = Math.max(0, Math.min(100, Math.round(percent)));
+        const trigger = document.getElementById('StationToolbar-playback_volume-node');
+        if (!trigger) return resolve({ success: false, error: 'volume trigger not found' });
+
+        const isOpen = () => !!document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
+        const wasOpen = isOpen();
+
+        const finishClose = (result) => {
+            setTimeout(() => {
+                if (!wasOpen) {
+                    try { $(trigger).trigger('click'); } catch (_) {}
+                }
+                resolve(result);
+            }, 100);
+        };
+
+        const apply = () => {
+            const popover = document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
+            if (!popover) return finishClose({ success: false, error: 'popover not open after attempt' });
+            const $p = $(popover);
+            const $handle = $p.find('[role=slider]').first();
+            const current = parseInt($handle.attr('aria-valuenow') || '0', 10);
+
+            try {
+                if (target === 100) {
+                    $p.find('#StationVolumePopover-max_volume_playback-button').trigger('click');
+                    return finishClose({ success: true, applied: 100, method: 'max-button', from: current });
+                }
+                if (target === 0) {
+                    if (current !== 0) {
+                        $p.find('#StationVolumePopover-mute_playback-button').trigger('click');
+                    }
+                    return finishClose({ success: true, applied: 0, method: 'mute-button', from: current });
+                }
+                // Arbitrary value
+                const $slider = $p.find('.f9-slider').first();
+                let used = null;
+                try {
+                    if (typeof $slider.slider === 'function') {
+                        $slider.slider('setValue', target, true, true);
+                        used = 'bootstrap-slider-api';
+                    }
+                } catch (_) { /* fall through to keys */ }
+
+                if (used) return finishClose({ success: true, applied: target, method: used, from: current });
+
+                // Fallback: keyboard walk
+                const handle = $handle[0];
+                if (!handle) return finishClose({ success: false, error: 'slider handle missing' });
+                handle.focus();
+                const diff = target - current;
+                const bigKey = diff > 0 ? 'PageUp' : 'PageDown';
+                const smallKey = diff > 0 ? 'ArrowUp' : 'ArrowDown';
+                let remaining = Math.abs(diff);
+                const step = () => {
+                    if (remaining >= 10) {
+                        handle.dispatchEvent(new KeyboardEvent('keydown', { key: bigKey, code: bigKey, bubbles: true, cancelable: true }));
+                        remaining -= 10;
+                        setTimeout(step, 30);
+                    } else if (remaining > 0) {
+                        handle.dispatchEvent(new KeyboardEvent('keydown', { key: smallKey, code: smallKey, bubbles: true, cancelable: true }));
+                        remaining -= 1;
+                        setTimeout(step, 30);
+                    } else {
+                        finishClose({ success: true, applied: target, method: 'keyboard-walk', from: current });
+                    }
+                };
+                step();
+            } catch (e) {
+                finishClose({ success: false, error: 'apply error: ' + e.message });
+            }
+        };
+
+        if (wasOpen) return apply();
+
+        try { $(trigger).trigger('click'); } catch (_) {}
+        let waited = 0;
+        const iv = setInterval(() => {
+            waited += 50;
+            if (isOpen()) { clearInterval(iv); apply(); }
+            else if (waited >= 1500) { clearInterval(iv); resolve({ success: false, error: 'popover did not open after jQuery click' }); }
+        }, 50);
+    });
+}
 
 // --- INITIALIZATION ---
 (async () => {
