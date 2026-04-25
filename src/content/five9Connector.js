@@ -506,103 +506,121 @@ async function waitForStationReconnect(maxWaitMs = 20000) {
  */
 async function setFive9PlaybackVolume(percent) {
     const target = Math.max(0, Math.min(100, Math.round(percent)));
+    console.log(`SRK [volume]: setFive9PlaybackVolume(${percent}) → target=${target}`);
 
-    // 100%: max button is the cleanest path (also unmutes)
+    // The popover root has the .open class when visible. The container-node ID
+    // is in the DOM at all times, so DON'T use that to detect open state.
+    const isPopoverOpen = () => !!document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
+    const popoverRoot = () => document.querySelector('.f9-popover.station-playback-volume-popover-container');
+
+    const click = (el, label) => {
+        if (!el) { console.warn(`SRK [volume]: ${label} not found`); return false; }
+        console.log(`SRK [volume]: clicking ${label}`);
+        try {
+            dispatchRealClick(el);
+            // Also call native .click() — some bootstrap handlers only fire on this
+            try { el.click(); } catch (_) {}
+        } catch (e) {
+            console.warn(`SRK [volume]: click on ${label} threw:`, e);
+            return false;
+        }
+        return true;
+    };
+
+    const openPopover = async () => {
+        if (isPopoverOpen()) {
+            console.log('SRK [volume]: popover already open');
+            return true;
+        }
+        const trigger = document.getElementById('StationToolbar-playback_volume-node');
+        if (!trigger) { console.warn('SRK [volume]: volume trigger SPAN not found'); return false; }
+        // The click handler may live on a parent (the trigger is a SPAN, often
+        // inside a clickable BUTTON or DIV). Try the SPAN first, then walk up.
+        click(trigger, 'volume trigger SPAN');
+        // Wait up to 1s for the .open class to appear
+        for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 50));
+            if (isPopoverOpen()) { console.log(`SRK [volume]: popover opened after ${(i+1)*50}ms`); return true; }
+        }
+        // SPAN click didn't open it — try parent
+        if (trigger.parentElement) {
+            console.log('SRK [volume]: trigger SPAN click did not open popover, trying parent');
+            click(trigger.parentElement, 'volume trigger parent');
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 50));
+                if (isPopoverOpen()) { console.log(`SRK [volume]: popover opened via parent after ${(i+1)*50}ms`); return true; }
+            }
+        }
+        console.warn('SRK [volume]: popover did not open after retry');
+        return false;
+    };
+
+    const closePopoverIfWeOpened = async (weOpenedIt) => {
+        if (!weOpenedIt) return;
+        const trigger = document.getElementById('StationToolbar-playback_volume-node');
+        if (!trigger) return;
+        click(trigger, 'volume trigger (close)');
+    };
+
+    const wasOpen = isPopoverOpen();
+    console.log(`SRK [volume]: popover open at start? ${wasOpen}`);
+    const opened = await openPopover();
+    if (!opened) return { success: false, error: 'popover did not open' };
+    const weOpenedIt = !wasOpen;
+
+    // Scope element lookups to the playback popover root so we don't accidentally
+    // grab the capture (microphone) popover's controls (same IDs are duplicated).
+    const root = popoverRoot();
+    const muteBtn = root ? root.querySelector('#StationVolumePopover-mute_playback-button') :
+                            document.getElementById('StationVolumePopover-mute_playback-button');
+    const maxBtn = root ? root.querySelector('#StationVolumePopover-max_volume_playback-button') :
+                           document.getElementById('StationVolumePopover-max_volume_playback-button');
+    const slider = root ? root.querySelector('[role="slider"]') :
+                           document.querySelectorAll('[role="slider"]')[0];
+
+    const currentValue = slider ? parseInt(slider.getAttribute('aria-valuenow') || '0', 10) : null;
+    console.log(`SRK [volume]: muteBtn=${!!muteBtn} maxBtn=${!!maxBtn} slider=${!!slider} current=${currentValue}`);
+
     if (target === 100) {
-        const popoverWasOpen = !!document.getElementById('StationVolumePopover-container-node');
-        if (!popoverWasOpen) {
-            const trigger = document.getElementById('StationToolbar-playback_volume-node');
-            if (!trigger) return { success: false, error: 'volume trigger not found' };
-            dispatchRealClick(trigger);
-            await new Promise(r => setTimeout(r, 150));
+        click(maxBtn, 'max-volume button');
+    } else if (target === 0) {
+        // Click mute only if we're not already at 0. The mute button toggles.
+        if (currentValue !== 0) {
+            click(muteBtn, 'mute button');
+        } else {
+            console.log('SRK [volume]: already at 0, skipping mute click');
         }
-        const maxBtn = document.getElementById('StationVolumePopover-max_volume_playback-button');
-        if (!maxBtn) return { success: false, error: 'max button not found' };
-        dispatchRealClick(maxBtn);
-        if (!popoverWasOpen) {
-            await new Promise(r => setTimeout(r, 100));
-            // Click trigger again to close
-            const trigger = document.getElementById('StationToolbar-playback_volume-node');
-            if (trigger) dispatchRealClick(trigger);
+    } else {
+        if (!slider) {
+            console.warn('SRK [volume]: cannot reach intermediate value — slider not found');
+            await closePopoverIfWeOpened(weOpenedIt);
+            return { success: false, error: 'slider not found' };
         }
-        return { success: true, applied: 100 };
-    }
-
-    // 0%: mute button
-    if (target === 0) {
-        const popoverWasOpen = !!document.getElementById('StationVolumePopover-container-node');
-        if (!popoverWasOpen) {
-            const trigger = document.getElementById('StationToolbar-playback_volume-node');
-            if (!trigger) return { success: false, error: 'volume trigger not found' };
-            dispatchRealClick(trigger);
-            await new Promise(r => setTimeout(r, 150));
-        }
-        const muteBtn = document.getElementById('StationVolumePopover-mute_playback-button');
-        if (!muteBtn) return { success: false, error: 'mute button not found' };
-        // The mute button toggles. Click only if not already muted.
-        // Detect mute state via aria-pressed / class. If undetectable, click anyway —
-        // worst case we briefly unmute and the next state change will fix it.
-        const alreadyMuted = muteBtn.getAttribute('aria-pressed') === 'true' ||
-                             muteBtn.classList.contains('active') ||
-                             muteBtn.classList.contains('muted');
-        if (!alreadyMuted) {
-            dispatchRealClick(muteBtn);
-        }
-        if (!popoverWasOpen) {
-            await new Promise(r => setTimeout(r, 100));
-            const trigger = document.getElementById('StationToolbar-playback_volume-node');
-            if (trigger) dispatchRealClick(trigger);
-        }
-        return { success: true, applied: 0 };
-    }
-
-    // Arbitrary value: walk the slider with keyboard events
-    const popoverWasOpen = !!document.getElementById('StationVolumePopover-container-node');
-    if (!popoverWasOpen) {
-        const trigger = document.getElementById('StationToolbar-playback_volume-node');
-        if (!trigger) return { success: false, error: 'volume trigger not found' };
-        dispatchRealClick(trigger);
-        await new Promise(r => setTimeout(r, 150));
-    }
-
-    // The first slider in the popover is playback (index 0); capture is index 1.
-    const sliders = document.querySelectorAll('[role="slider"]');
-    const slider = sliders[0];
-    if (!slider) {
-        if (!popoverWasOpen) {
-            const trigger = document.getElementById('StationToolbar-playback_volume-node');
-            if (trigger) dispatchRealClick(trigger);
-        }
-        return { success: false, error: 'playback slider not found' };
-    }
-
-    const current = parseInt(slider.getAttribute('aria-valuenow') || '0', 10);
-    let diff = target - current;
-
-    if (diff !== 0) {
-        slider.focus();
-        const sendKey = (key) => slider.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
-        const sign = diff > 0 ? 1 : -1;
-        const bigKey = diff > 0 ? 'PageUp' : 'PageDown';
-        const smallKey = diff > 0 ? 'ArrowUp' : 'ArrowDown';
-        let remaining = Math.abs(diff);
-        while (remaining >= 10) {
-            sendKey(bigKey);
-            remaining -= 10;
-            await new Promise(r => setTimeout(r, 25));
-        }
-        while (remaining > 0) {
-            sendKey(smallKey);
-            remaining -= 1;
-            await new Promise(r => setTimeout(r, 25));
+        const diff = target - (currentValue ?? 0);
+        if (diff !== 0) {
+            slider.focus();
+            const sendKey = (key) => slider.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true }));
+            const bigKey = diff > 0 ? 'PageUp' : 'PageDown';
+            const smallKey = diff > 0 ? 'ArrowUp' : 'ArrowDown';
+            let remaining = Math.abs(diff);
+            console.log(`SRK [volume]: walking slider ${currentValue} → ${target} (${remaining} steps)`);
+            while (remaining >= 10) {
+                sendKey(bigKey);
+                remaining -= 10;
+                await new Promise(r => setTimeout(r, 30));
+            }
+            while (remaining > 0) {
+                sendKey(smallKey);
+                remaining -= 1;
+                await new Promise(r => setTimeout(r, 30));
+            }
+            const finalValue = parseInt(slider.getAttribute('aria-valuenow') || '0', 10);
+            console.log(`SRK [volume]: slider walk done, final aria-valuenow=${finalValue}`);
         }
     }
 
-    if (!popoverWasOpen) {
-        await new Promise(r => setTimeout(r, 100));
-        const trigger = document.getElementById('StationToolbar-playback_volume-node');
-        if (trigger) dispatchRealClick(trigger);
-    }
+    await new Promise(r => setTimeout(r, 100));
+    await closePopoverIfWeOpened(weOpenedIt);
     return { success: true, applied: target };
 }
 
