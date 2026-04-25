@@ -67,15 +67,29 @@ This will:
 After install: reload the extension and test a call. The Auto-End Calls
 volume settings will now control only Five9's audio.
 
-### First-run SmartScreen warning
+### SmartScreen behavior
 
-Because the binary isn't code-signed, Windows SmartScreen will warn the
-**first time** the host runs ("Windows protected your PC"). Click
-**More info → Run anyway**. Windows will trust it from then on.
+SmartScreen's "Windows protected your PC" warning **only fires on files
+that have the Mark of the Web (MOTW)** — the metadata Windows attaches to
+files downloaded from the internet, email attachments, or untrusted
+network shares.
 
-If you'd rather avoid the warning entirely, you can sign the binary with
-a code-signing cert before publishing. For solo use it's not worth the
-~$200/year.
+Files **built locally** on your own machine (i.e. by `dotnet publish`)
+have no MOTW. SmartScreen does not fire. As long as you build the host
+yourself with `dotnet publish` and run `install.ps1` from your local
+clone, you should never see the warning.
+
+Defensive mitigations already in place:
+- `install.ps1` calls `Unblock-File` after copying — strips MOTW even if
+  it somehow got attached (e.g. if you downloaded a pre-built exe).
+- Native AOT compilation produces a real native PE binary, not a packed
+  script bundle, so behavioral heuristics see it as a normal Windows
+  executable.
+- The csproj sets a clear AssemblyTitle, Description, Company, and
+  Version that show up in File Properties → Details.
+
+If SmartScreen does fire (rare): click **More info → Run anyway** once
+and Windows will trust it permanently for that file path.
 
 ## Uninstall
 

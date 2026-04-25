@@ -55,6 +55,18 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Copy-Item -Force -Path $ExeSource -Destination $ExeDest
 Write-Host "Copied: $ExeDest"
 
+# Defensive: strip the "Mark of the Web" zone identifier if any. Files built
+# locally won't have one, but if you cloned via a zip download or the binary
+# was shared from elsewhere, MOTW could be attached and SmartScreen would
+# warn on first launch. Unblock-File removes it.
+try {
+    Unblock-File -Path $ExeDest -ErrorAction Stop
+    Write-Host "Unblocked: $ExeDest (MOTW cleared)"
+} catch {
+    # Unblock-File errors out only if the file doesn't exist. We just copied it
+    # so this should never fail in practice. Swallow for resilience.
+}
+
 # --- 3. Generate the manifest with the absolute exe path ---
 $json = (Get-Content -Raw -Path $ManifestTemplate) -replace '__INSTALL_PATH__', ($ExeDest -replace '\\', '\\\\')
 Set-Content -Path $ManifestDest -Value $json -Encoding UTF8
