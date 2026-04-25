@@ -1,9 +1,0 @@
-{
-    "name": "com.srk.five9volume",
-    "description": "Student Retention Kit - Five9 per-process volume control",
-    "path": "__INSTALL_PATH__",
-    "type": "stdio",
-    "allowed_origins": [
-        "chrome-extension://gddcphgmndgogbgmhiijapgdjdikkmgg/"
-    ]
-}
