@@ -199,6 +199,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         handleFive9Hangup(request.dispositionType, sendResponse);
         return true; // Keep channel open
     }
+    if (request.type === 'executeFive9SetPlaybackVolume') {
+        setFive9PlaybackVolume(request.percent).then(result => sendResponse(result)).catch(e => sendResponse({success: false, error: e.message}));
+        return true; // Keep channel open
+    }
     if (request.type === 'executeFive9DisposeOnly') {
         handleFive9DisposeOnly(request.dispositionType, sendResponse);
         return true; // Keep channel open
@@ -475,6 +479,131 @@ async function waitForStationReconnect(maxWaitMs = 20000) {
 
     console.warn("SRK: Station reconnect verification timed out");
     return { connected: false };
+}
+
+/**
+ * Sets Five9's playback (speaker) volume to a target percentage (0-100).
+ *
+ * Five9 has no public volume API — its softphone uses an opaque global f9phone
+ * object and a Marionette event bus whose command names aren't documented.
+ * What IS stable is the volume popover's DOM:
+ *   - StationToolbar-playback_volume-node: SPAN that opens the popover
+ *   - StationVolumePopover-mute_playback-button: toggles mute (0%)
+ *   - StationVolumePopover-max_volume_playback-button: sets 100%
+ *   - A [role="slider"] inside the popover with aria-valuenow as current value
+ *
+ * Strategy:
+ *   - Target 0:   click mute button (if not already muted)
+ *   - Target 100: click max button (also unmutes)
+ *   - Otherwise:  open popover, focus slider, send keyboard events to walk the
+ *                 value (PageUp/PageDown = ±10, ArrowUp/ArrowDown = ±1).
+ *
+ * Each keyboard event triggers Five9's internal IPC, so we batch using
+ * page-up steps where possible to minimize round-trips.
+ *
+ * @param {number} percent - target volume 0-100
+ * @returns {Promise<{success: boolean, applied?: number, error?: string}>}
+ */
+async function setFive9PlaybackVolume(percent) {
+    const target = Math.max(0, Math.min(100, Math.round(percent)));
+
+    // 100%: max button is the cleanest path (also unmutes)
+    if (target === 100) {
+        const popoverWasOpen = !!document.getElementById('StationVolumePopover-container-node');
+        if (!popoverWasOpen) {
+            const trigger = document.getElementById('StationToolbar-playback_volume-node');
+            if (!trigger) return { success: false, error: 'volume trigger not found' };
+            dispatchRealClick(trigger);
+            await new Promise(r => setTimeout(r, 150));
+        }
+        const maxBtn = document.getElementById('StationVolumePopover-max_volume_playback-button');
+        if (!maxBtn) return { success: false, error: 'max button not found' };
+        dispatchRealClick(maxBtn);
+        if (!popoverWasOpen) {
+            await new Promise(r => setTimeout(r, 100));
+            // Click trigger again to close
+            const trigger = document.getElementById('StationToolbar-playback_volume-node');
+            if (trigger) dispatchRealClick(trigger);
+        }
+        return { success: true, applied: 100 };
+    }
+
+    // 0%: mute button
+    if (target === 0) {
+        const popoverWasOpen = !!document.getElementById('StationVolumePopover-container-node');
+        if (!popoverWasOpen) {
+            const trigger = document.getElementById('StationToolbar-playback_volume-node');
+            if (!trigger) return { success: false, error: 'volume trigger not found' };
+            dispatchRealClick(trigger);
+            await new Promise(r => setTimeout(r, 150));
+        }
+        const muteBtn = document.getElementById('StationVolumePopover-mute_playback-button');
+        if (!muteBtn) return { success: false, error: 'mute button not found' };
+        // The mute button toggles. Click only if not already muted.
+        // Detect mute state via aria-pressed / class. If undetectable, click anyway —
+        // worst case we briefly unmute and the next state change will fix it.
+        const alreadyMuted = muteBtn.getAttribute('aria-pressed') === 'true' ||
+                             muteBtn.classList.contains('active') ||
+                             muteBtn.classList.contains('muted');
+        if (!alreadyMuted) {
+            dispatchRealClick(muteBtn);
+        }
+        if (!popoverWasOpen) {
+            await new Promise(r => setTimeout(r, 100));
+            const trigger = document.getElementById('StationToolbar-playback_volume-node');
+            if (trigger) dispatchRealClick(trigger);
+        }
+        return { success: true, applied: 0 };
+    }
+
+    // Arbitrary value: walk the slider with keyboard events
+    const popoverWasOpen = !!document.getElementById('StationVolumePopover-container-node');
+    if (!popoverWasOpen) {
+        const trigger = document.getElementById('StationToolbar-playback_volume-node');
+        if (!trigger) return { success: false, error: 'volume trigger not found' };
+        dispatchRealClick(trigger);
+        await new Promise(r => setTimeout(r, 150));
+    }
+
+    // The first slider in the popover is playback (index 0); capture is index 1.
+    const sliders = document.querySelectorAll('[role="slider"]');
+    const slider = sliders[0];
+    if (!slider) {
+        if (!popoverWasOpen) {
+            const trigger = document.getElementById('StationToolbar-playback_volume-node');
+            if (trigger) dispatchRealClick(trigger);
+        }
+        return { success: false, error: 'playback slider not found' };
+    }
+
+    const current = parseInt(slider.getAttribute('aria-valuenow') || '0', 10);
+    let diff = target - current;
+
+    if (diff !== 0) {
+        slider.focus();
+        const sendKey = (key) => slider.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        const sign = diff > 0 ? 1 : -1;
+        const bigKey = diff > 0 ? 'PageUp' : 'PageDown';
+        const smallKey = diff > 0 ? 'ArrowUp' : 'ArrowDown';
+        let remaining = Math.abs(diff);
+        while (remaining >= 10) {
+            sendKey(bigKey);
+            remaining -= 10;
+            await new Promise(r => setTimeout(r, 25));
+        }
+        while (remaining > 0) {
+            sendKey(smallKey);
+            remaining -= 1;
+            await new Promise(r => setTimeout(r, 25));
+        }
+    }
+
+    if (!popoverWasOpen) {
+        await new Promise(r => setTimeout(r, 100));
+        const trigger = document.getElementById('StationToolbar-playback_volume-node');
+        if (trigger) dispatchRealClick(trigger);
+    }
+    return { success: true, applied: target };
 }
 
 /**

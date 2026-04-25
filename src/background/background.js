@@ -901,6 +901,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
       })();
   }
+  else if (msg.type === 'triggerFive9SetPlaybackVolume') {
+      (async () => {
+          const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
+          if (tabs.length === 0) return; // Silently skip — volume control isn't critical
+          chrome.tabs.sendMessage(tabs[0].id, {
+              type: 'executeFive9SetPlaybackVolume',
+              percent: msg.percent
+          }, () => { /* fire-and-forget; ignore lastError */ void chrome.runtime.lastError; });
+      })();
+  }
   else if (msg.type === 'triggerFive9DisposeOnly') {
       (async () => {
           const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });

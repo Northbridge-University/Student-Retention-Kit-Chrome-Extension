@@ -177,6 +177,9 @@ export const STORAGE_KEYS = {
     AUTO_END_CALLS_ENABLED: 'settings.five9.autoEndCallsEnabled',
     AUTO_END_CALLS_SECONDS: 'settings.five9.autoEndCallsSeconds',
     AUTO_END_CALLS_DISPOSITION: 'settings.five9.autoEndCallsDisposition',
+    AUTO_END_RINGING_VOLUME: 'settings.five9.autoEndRingingVolume',
+    AUTO_END_TALKING_VOLUME: 'settings.five9.autoEndTalkingVolume',
+    AUTO_END_KEEP_CALL_VOLUME: 'settings.five9.autoEndKeepCallVolume',
 
     // Submission Checker settings (settings.submissionChecker.*)
     LOOPER_DAYS_OUT_FILTER: 'settings.submissionChecker.looperDaysOutFilter',
@@ -271,6 +274,9 @@ export const DEFAULT_SETTINGS = {
     [STORAGE_KEYS.AUTO_END_CALLS_ENABLED]: false, // Auto-end calls in automation (assumes voicemail)
     [STORAGE_KEYS.AUTO_END_CALLS_SECONDS]: 5,     // Seconds in TALKING state before auto-hangup
     [STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION]: 'Left Voicemail', // Disposition applied on auto-hangup
+    [STORAGE_KEYS.AUTO_END_RINGING_VOLUME]: 0,    // 0-100, playback volume while RINGING
+    [STORAGE_KEYS.AUTO_END_TALKING_VOLUME]: 25,   // 0-100, playback volume after TALKING begins
+    [STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME]: 100, // 0-100, playback volume after Keep Call pressed
 
     // Submission Checker settings
     [STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER]: '>=5',

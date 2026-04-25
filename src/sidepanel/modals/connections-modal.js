@@ -99,6 +99,9 @@ export async function openConnectionsModal(connectionType) {
         STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
         STORAGE_KEYS.AUTO_END_CALLS_SECONDS,
         STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION,
+        STORAGE_KEYS.AUTO_END_RINGING_VOLUME,
+        STORAGE_KEYS.AUTO_END_TALKING_VOLUME,
+        STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME,
         STORAGE_KEYS.HIGHLIGHT_START_COL,
         STORAGE_KEYS.HIGHLIGHT_END_COL,
         STORAGE_KEYS.HIGHLIGHT_EDIT_COLUMN,
@@ -181,6 +184,14 @@ export async function openConnectionsModal(connectionType) {
     if (elements.autoEndCallsDispositionSelect) {
         elements.autoEndCallsDispositionSelect.value = result[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION] || 'Left Voicemail';
     }
+    const loadVolume = (input, key, fallback) => {
+        if (!input) return;
+        const v = result[key];
+        input.value = (typeof v === 'number' && v >= 0 && v <= 100) ? v : fallback;
+    };
+    loadVolume(elements.autoEndRingingVolumeInput, STORAGE_KEYS.AUTO_END_RINGING_VOLUME, 0);
+    loadVolume(elements.autoEndTalkingVolumeInput, STORAGE_KEYS.AUTO_END_TALKING_VOLUME, 25);
+    loadVolume(elements.autoEndKeepCallVolumeInput, STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME, 100);
 
     // Load Highlight Student Row settings
     if (elements.highlightStartColInput) {
@@ -341,7 +352,16 @@ export async function saveConnectionsSettings() {
     if (elements.autoEndCallsDispositionSelect) {
         settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION] = elements.autoEndCallsDispositionSelect.value || 'Left Voicemail';
     }
-    console.log(`Auto-End Calls saved: enabled=${autoEndEnabled}, seconds=${settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_SECONDS]}, disposition=${settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION]}`);
+    const saveVolume = (input, key, fallback) => {
+        if (!input) return;
+        const parsed = parseInt(input.value, 10);
+        const clamped = Math.max(0, Math.min(100, isNaN(parsed) ? fallback : parsed));
+        settingsToSave[key] = clamped;
+    };
+    saveVolume(elements.autoEndRingingVolumeInput, STORAGE_KEYS.AUTO_END_RINGING_VOLUME, 0);
+    saveVolume(elements.autoEndTalkingVolumeInput, STORAGE_KEYS.AUTO_END_TALKING_VOLUME, 25);
+    saveVolume(elements.autoEndKeepCallVolumeInput, STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME, 100);
+    console.log(`Auto-End Calls saved: enabled=${autoEndEnabled}, seconds=${settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_SECONDS]}, disposition=${settingsToSave[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION]}, volumes=ring:${settingsToSave[STORAGE_KEYS.AUTO_END_RINGING_VOLUME]}/talk:${settingsToSave[STORAGE_KEYS.AUTO_END_TALKING_VOLUME]}/keep:${settingsToSave[STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME]}`);
 
     // Save Highlight Student Row settings
     if (elements.highlightStartColInput) {

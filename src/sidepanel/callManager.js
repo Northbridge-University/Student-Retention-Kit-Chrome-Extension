@@ -138,6 +138,39 @@ export default class CallManager {
      * Cancels any pending auto-end timer and hides the countdown UI.
      * @param {string} reason - "manual" (Keep Call clicked), "external" (call ended), "disposed", etc.
      */
+    /**
+     * Sends the Five9 playback volume to a target percentage (0-100).
+     * Read-from-storage helper that respects the auto-end feature's settings.
+     * Only fires while in automation mode + non-demo + auto-end enabled.
+     * @param {string} stateKey - "ringing", "talking", or "keepCall"
+     */
+    async applyAutoEndVolume(stateKey) {
+        if (!this.automationMode || this.debugMode) return;
+        const data = await storageGet([
+            STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
+            STORAGE_KEYS.AUTO_END_RINGING_VOLUME,
+            STORAGE_KEYS.AUTO_END_TALKING_VOLUME,
+            STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME
+        ]);
+        if (!data[STORAGE_KEYS.AUTO_END_CALLS_ENABLED]) return;
+        const map = {
+            ringing: data[STORAGE_KEYS.AUTO_END_RINGING_VOLUME],
+            talking: data[STORAGE_KEYS.AUTO_END_TALKING_VOLUME],
+            keepCall: data[STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME]
+        };
+        let percent = map[stateKey];
+        if (typeof percent !== 'number') {
+            const fallbacks = { ringing: 0, talking: 25, keepCall: 100 };
+            percent = fallbacks[stateKey] ?? 100;
+        }
+        console.log(`🔊 Setting Five9 playback volume → ${percent}% (${stateKey})`);
+        try {
+            chrome.runtime.sendMessage({ type: 'triggerFive9SetPlaybackVolume', percent });
+        } catch (e) {
+            console.warn('Volume message failed:', e);
+        }
+    }
+
     cancelAutoEndTimer(reason = 'cancelled') {
         const wasArmed = !!(this.autoEndTimeout || this.autoEndCountdownInterval);
         if (this.autoEndTimeout) {

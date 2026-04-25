@@ -322,6 +322,9 @@ export function cacheDomElements() {
     elements.autoEndCallsParams = document.getElementById('autoEndCallsParams');
     elements.autoEndCallsSecondsInput = document.getElementById('autoEndCallsSecondsInput');
     elements.autoEndCallsDispositionSelect = document.getElementById('autoEndCallsDispositionSelect');
+    elements.autoEndRingingVolumeInput = document.getElementById('autoEndRingingVolumeInput');
+    elements.autoEndTalkingVolumeInput = document.getElementById('autoEndTalkingVolumeInput');
+    elements.autoEndKeepCallVolumeInput = document.getElementById('autoEndKeepCallVolumeInput');
     elements.autoEndCountdown = document.getElementById('autoEndCountdown');
     elements.autoEndCountdownSeconds = document.getElementById('autoEndCountdownSeconds');
     elements.keepCallBtn = document.getElementById('keepCallBtn');

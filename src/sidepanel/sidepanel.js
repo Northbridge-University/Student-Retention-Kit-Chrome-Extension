@@ -765,7 +765,10 @@ function setupEventListeners() {
     }
 
     if (elements.keepCallBtn) {
-        elements.keepCallBtn.addEventListener('click', () => callManager.cancelAutoEndTimer('manual'));
+        elements.keepCallBtn.addEventListener('click', () => {
+            callManager.cancelAutoEndTimer('manual');
+            callManager.applyAutoEndVolume('keepCall');
+        });
     }
 
     // Excel Modal Settings
