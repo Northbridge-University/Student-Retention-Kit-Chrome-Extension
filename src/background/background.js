@@ -1417,10 +1417,69 @@ function _setFive9PlaybackVolumeInPage(percent) {
         const finishClose = (result) => {
             setTimeout(() => {
                 if (!wasOpen) {
-                    try { $(trigger).trigger('click'); } catch (_) {}
+                    try { closePopover(); } catch (_) {}
                 }
                 resolve(result);
             }, 100);
+        };
+
+        // Try every reasonable opening strategy until the popover appears.
+        // Some bootstrap-style popovers bind click on the trigger; others on a
+        // parent button via delegation; others use mousedown/pointerdown.
+        const tryOpen = () => {
+            const strategies = [];
+            // Walk trigger and up to 3 ancestors
+            let el = trigger;
+            for (let i = 0; el && i < 4; i++, el = el.parentElement) {
+                const target = el;
+                strategies.push(() => $(target).trigger('click'));
+                strategies.push(() => target.click && target.click());
+                strategies.push(() => {
+                    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, button: 0 }));
+                    target.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true, view: window, button: 0 }));
+                    target.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true, view: window, button: 0 }));
+                });
+                strategies.push(() => {
+                    if (typeof PointerEvent === 'function') {
+                        target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse', button: 0 }));
+                        target.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true, pointerType: 'mouse', button: 0 }));
+                        target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, button: 0 }));
+                    }
+                });
+            }
+            return strategies;
+        };
+
+        // Diagnostic: walk up DOM and report what jQuery events are bound at each level.
+        const diagnoseHandlers = () => {
+            const out = [];
+            let el = trigger;
+            for (let i = 0; el && i < 5; i++, el = el.parentElement) {
+                let events = null;
+                try {
+                    if (typeof $._data === 'function') {
+                        const d = $._data(el, 'events');
+                        if (d) events = Object.keys(d);
+                    }
+                } catch (_) {}
+                out.push({
+                    level: i,
+                    tag: el.tagName,
+                    id: el.id || null,
+                    cls: (el.className && typeof el.className === 'string') ? el.className.slice(0, 80) : null,
+                    jqEvents: events
+                });
+            }
+            return out;
+        };
+
+        const closePopover = () => {
+            // Try clicking outside the popover, then fall back to triggering trigger again
+            const evt = new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, clientX: 1, clientY: 1 });
+            document.body.dispatchEvent(evt);
+            setTimeout(() => {
+                if (isOpen()) { try { $(trigger).trigger('click'); } catch (_) {} }
+            }, 50);
         };
 
         const apply = () => {
@@ -1449,11 +1508,9 @@ function _setFive9PlaybackVolumeInPage(percent) {
                         $slider.slider('setValue', target, true, true);
                         used = 'bootstrap-slider-api';
                     }
-                } catch (_) { /* fall through to keys */ }
-
+                } catch (_) {}
                 if (used) return finishClose({ success: true, applied: target, method: used, from: current });
 
-                // Fallback: keyboard walk
                 const handle = $handle[0];
                 if (!handle) return finishClose({ success: false, error: 'slider handle missing' });
                 handle.focus();
@@ -1482,13 +1539,33 @@ function _setFive9PlaybackVolumeInPage(percent) {
 
         if (wasOpen) return apply();
 
-        try { $(trigger).trigger('click'); } catch (_) {}
-        let waited = 0;
-        const iv = setInterval(() => {
-            waited += 50;
-            if (isOpen()) { clearInterval(iv); apply(); }
-            else if (waited >= 1500) { clearInterval(iv); resolve({ success: false, error: 'popover did not open after jQuery click' }); }
-        }, 50);
+        // Try strategies in sequence until popover opens
+        const strategies = tryOpen();
+        let strategyIdx = 0;
+        const tryNext = () => {
+            if (strategyIdx >= strategies.length) {
+                return resolve({
+                    success: false,
+                    error: 'all open strategies exhausted',
+                    handlers: diagnoseHandlers()
+                });
+            }
+            try { strategies[strategyIdx](); } catch (_) {}
+            strategyIdx++;
+            // After each attempt, poll briefly for popover
+            let waited = 0;
+            const iv = setInterval(() => {
+                waited += 50;
+                if (isOpen()) {
+                    clearInterval(iv);
+                    apply();
+                } else if (waited >= 200) {
+                    clearInterval(iv);
+                    tryNext();
+                }
+            }, 50);
+        };
+        tryNext();
     });
 }
 
