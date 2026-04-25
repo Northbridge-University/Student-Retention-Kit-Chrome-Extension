@@ -504,9 +504,166 @@ async function waitForStationReconnect(maxWaitMs = 20000) {
  * @param {number} percent - target volume 0-100
  * @returns {Promise<{success: boolean, applied?: number, error?: string}>}
  */
+/**
+ * Injects a helper script into the page world so we can use jQuery to trigger
+ * Five9's popover and bootstrap-slider handlers. Synthetic events from the
+ * isolated content-script world don't fire jQuery's bound handlers, so we
+ * postMessage into the page where window.jQuery is reachable.
+ *
+ * Idempotent — only injects once per page lifetime.
+ */
+function injectVolumeHelperScript() {
+    if (document.getElementById('srk-volume-helper-script')) return;
+    const script = document.createElement('script');
+    script.id = 'srk-volume-helper-script';
+    script.textContent = `
+        (function () {
+            if (window.__srkVolumeHelperLoaded) return;
+            window.__srkVolumeHelperLoaded = true;
+
+            document.addEventListener('SRK_volume_request', function (e) {
+                var detail = e.detail || {};
+                var $ = window.jQuery || window.$;
+                var rid = detail.id;
+
+                function respond(result) {
+                    document.dispatchEvent(new CustomEvent('SRK_volume_response', { detail: { id: rid, result: result } }));
+                }
+
+                if (!$) { respond({ success: false, error: 'jQuery not present in page world' }); return; }
+
+                var trigger = document.getElementById('StationToolbar-playback_volume-node');
+                if (!trigger) { respond({ success: false, error: 'volume trigger not found' }); return; }
+
+                var popover = document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
+                var openedByUs = false;
+
+                function applyAndClose() {
+                    var p = document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
+                    if (!p) { respond({ success: false, error: 'popover not open after attempt' }); return; }
+                    var $p = $(p);
+                    var $handle = $p.find('[role=slider]').first();
+                    var current = parseInt($handle.attr('aria-valuenow') || '0', 10);
+                    var target = detail.percent;
+
+                    try {
+                        if (target === 100) {
+                            $p.find('#StationVolumePopover-max_volume_playback-button').trigger('click');
+                        } else if (target === 0) {
+                            if (current !== 0) {
+                                $p.find('#StationVolumePopover-mute_playback-button').trigger('click');
+                            }
+                        } else {
+                            // Try bootstrap-slider API first (one IPC call vs many)
+                            var $slider = $p.find('.f9-slider').first();
+                            var sliderApiOk = false;
+                            try {
+                                if (typeof $slider.slider === 'function') {
+                                    $slider.slider('setValue', target, true, true);
+                                    sliderApiOk = true;
+                                }
+                            } catch (err) { /* fall through */ }
+                            if (!sliderApiOk) {
+                                var handle = $handle[0];
+                                if (handle) {
+                                    handle.focus();
+                                    var diff = target - current;
+                                    var bigKey = diff > 0 ? 'PageUp' : 'PageDown';
+                                    var smallKey = diff > 0 ? 'ArrowUp' : 'ArrowDown';
+                                    var remaining = Math.abs(diff);
+                                    (function step() {
+                                        if (remaining >= 10) {
+                                            handle.dispatchEvent(new KeyboardEvent('keydown', { key: bigKey, code: bigKey, bubbles: true, cancelable: true }));
+                                            remaining -= 10;
+                                            setTimeout(step, 30);
+                                        } else if (remaining > 0) {
+                                            handle.dispatchEvent(new KeyboardEvent('keydown', { key: smallKey, code: smallKey, bubbles: true, cancelable: true }));
+                                            remaining -= 1;
+                                            setTimeout(step, 30);
+                                        } else {
+                                            finish();
+                                        }
+                                    })();
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        respond({ success: false, error: 'apply error: ' + err.message });
+                        return;
+                    }
+                    finish();
+
+                    function finish() {
+                        setTimeout(function () {
+                            if (openedByUs) {
+                                try { $(trigger).trigger('click'); } catch (_) {}
+                            }
+                            respond({ success: true, applied: target, sliderApi: $p.find('.f9-slider').first().slider !== undefined });
+                        }, 100);
+                    }
+                }
+
+                if (popover) {
+                    applyAndClose();
+                } else {
+                    try { $(trigger).trigger('click'); } catch (_) {}
+                    var waited = 0;
+                    var interval = setInterval(function () {
+                        waited += 50;
+                        var p = document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
+                        if (p) {
+                            clearInterval(interval);
+                            openedByUs = true;
+                            applyAndClose();
+                        } else if (waited >= 1000) {
+                            clearInterval(interval);
+                            respond({ success: false, error: 'jQuery click did not open popover' });
+                        }
+                    }, 50);
+                }
+            });
+        })();
+    `;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+    console.log('SRK [volume]: page-world helper injected');
+}
+
+/**
+ * Sends a volume request to the page-world helper and awaits its response.
+ * @returns {Promise<{success:boolean, applied?:number, error?:string}>}
+ */
+function pageWorldVolumeRequest(percent) {
+    return new Promise((resolve) => {
+        const id = `vol-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const handler = (e) => {
+            if (!e.detail || e.detail.id !== id) return;
+            document.removeEventListener('SRK_volume_response', handler);
+            resolve(e.detail.result || { success: false, error: 'empty response' });
+        };
+        document.addEventListener('SRK_volume_response', handler);
+        document.dispatchEvent(new CustomEvent('SRK_volume_request', { detail: { id, percent } }));
+        setTimeout(() => {
+            document.removeEventListener('SRK_volume_response', handler);
+            resolve({ success: false, error: 'page-world timeout' });
+        }, 4000);
+    });
+}
+
 async function setFive9PlaybackVolume(percent) {
     const target = Math.max(0, Math.min(100, Math.round(percent)));
     console.log(`SRK [volume]: setFive9PlaybackVolume(${percent}) → target=${target}`);
+
+    // Try the page-world (jQuery-based) path first — it triggers Five9's actual
+    // bound handlers, which the synthetic-event path below cannot.
+    injectVolumeHelperScript();
+    const pageResult = await pageWorldVolumeRequest(target);
+    console.log('SRK [volume]: page-world result:', pageResult);
+    if (pageResult.success) return pageResult;
+
+    console.warn(`SRK [volume]: page-world path failed (${pageResult.error}); falling back to DOM events`);
+    // ---- Fallback: synthetic-event DOM path (kept for resilience) ----
 
     // The popover root has the .open class when visible. The container-node ID
     // is in the DOM at all times, so DON'T use that to detect open state.
