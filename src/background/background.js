@@ -1411,75 +1411,36 @@ function _setFive9PlaybackVolumeInPage(percent) {
         const trigger = document.getElementById('StationToolbar-playback_volume-node');
         if (!trigger) return resolve({ success: false, error: 'volume trigger not found' });
 
+        // The actual click target is the innermost icon span (.fa.fa-volume-up)
+        // inside the trigger container. Five9's ItemView (Marionette) binds the
+        // popover-open handler there. Falls back to anything with role="button"
+        // inside the trigger, then to the trigger itself.
+        const iconEl = trigger.querySelector('span.fa.fa-volume-up')
+                     || trigger.querySelector('[role="button"]')
+                     || trigger.querySelector('span[data-f9-cid]')
+                     || trigger;
+
         const isOpen = () => !!document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
         const wasOpen = isOpen();
+
+        // The handler responds to mousedown (followed by click for completeness).
+        // Native dispatchEvent works because the bound listener uses
+        // addEventListener / Marionette delegation, not jQuery .on().
+        const fireOpen = (el) => {
+            const opts = { bubbles: true, cancelable: true, view: window, button: 0 };
+            el.dispatchEvent(new MouseEvent('mousedown', opts));
+            el.dispatchEvent(new MouseEvent('mouseup', opts));
+            el.dispatchEvent(new MouseEvent('click', opts));
+        };
 
         const finishClose = (result) => {
             setTimeout(() => {
                 if (!wasOpen) {
-                    try { closePopover(); } catch (_) {}
+                    // Toggle by re-firing on the icon
+                    try { fireOpen(iconEl); } catch (_) {}
                 }
                 resolve(result);
             }, 100);
-        };
-
-        // Try every reasonable opening strategy until the popover appears.
-        // Some bootstrap-style popovers bind click on the trigger; others on a
-        // parent button via delegation; others use mousedown/pointerdown.
-        const tryOpen = () => {
-            const strategies = [];
-            // Walk trigger and up to 3 ancestors
-            let el = trigger;
-            for (let i = 0; el && i < 4; i++, el = el.parentElement) {
-                const target = el;
-                strategies.push(() => $(target).trigger('click'));
-                strategies.push(() => target.click && target.click());
-                strategies.push(() => {
-                    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, button: 0 }));
-                    target.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true, view: window, button: 0 }));
-                    target.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true, view: window, button: 0 }));
-                });
-                strategies.push(() => {
-                    if (typeof PointerEvent === 'function') {
-                        target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse', button: 0 }));
-                        target.dispatchEvent(new PointerEvent('pointerup',   { bubbles: true, cancelable: true, pointerType: 'mouse', button: 0 }));
-                        target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, button: 0 }));
-                    }
-                });
-            }
-            return strategies;
-        };
-
-        // Diagnostic: walk up DOM and report what jQuery events are bound at each level.
-        const diagnoseHandlers = () => {
-            const out = [];
-            let el = trigger;
-            for (let i = 0; el && i < 5; i++, el = el.parentElement) {
-                let events = null;
-                try {
-                    if (typeof $._data === 'function') {
-                        const d = $._data(el, 'events');
-                        if (d) events = Object.keys(d);
-                    }
-                } catch (_) {}
-                out.push({
-                    level: i,
-                    tag: el.tagName,
-                    id: el.id || null,
-                    cls: (el.className && typeof el.className === 'string') ? el.className.slice(0, 80) : null,
-                    jqEvents: events
-                });
-            }
-            return out;
-        };
-
-        const closePopover = () => {
-            // Try clicking outside the popover, then fall back to triggering trigger again
-            const evt = new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, clientX: 1, clientY: 1 });
-            document.body.dispatchEvent(evt);
-            setTimeout(() => {
-                if (isOpen()) { try { $(trigger).trigger('click'); } catch (_) {} }
-            }, 50);
         };
 
         const apply = () => {
@@ -1491,16 +1452,18 @@ function _setFive9PlaybackVolumeInPage(percent) {
 
             try {
                 if (target === 100) {
-                    $p.find('#StationVolumePopover-max_volume_playback-button').trigger('click');
+                    const maxBtn = popover.querySelector('#StationVolumePopover-max_volume_playback-button');
+                    if (maxBtn) fireOpen(maxBtn);
                     return finishClose({ success: true, applied: 100, method: 'max-button', from: current });
                 }
                 if (target === 0) {
                     if (current !== 0) {
-                        $p.find('#StationVolumePopover-mute_playback-button').trigger('click');
+                        const muteBtn = popover.querySelector('#StationVolumePopover-mute_playback-button');
+                        if (muteBtn) fireOpen(muteBtn);
                     }
                     return finishClose({ success: true, applied: 0, method: 'mute-button', from: current });
                 }
-                // Arbitrary value
+                // Arbitrary value — try bootstrap-slider API first
                 const $slider = $p.find('.f9-slider').first();
                 let used = null;
                 try {
@@ -1539,33 +1502,21 @@ function _setFive9PlaybackVolumeInPage(percent) {
 
         if (wasOpen) return apply();
 
-        // Try strategies in sequence until popover opens
-        const strategies = tryOpen();
-        let strategyIdx = 0;
-        const tryNext = () => {
-            if (strategyIdx >= strategies.length) {
-                return resolve({
-                    success: false,
-                    error: 'all open strategies exhausted',
-                    handlers: diagnoseHandlers()
-                });
+        // Fire mousedown+click on the icon — confirmed by manual testing to
+        // be the event sequence Five9's ItemView responds to.
+        try { fireOpen(iconEl); } catch (e) {
+            return resolve({ success: false, error: 'fireOpen threw: ' + e.message });
+        }
+
+        let waited = 0;
+        const iv = setInterval(() => {
+            waited += 50;
+            if (isOpen()) { clearInterval(iv); apply(); }
+            else if (waited >= 1500) {
+                clearInterval(iv);
+                resolve({ success: false, error: 'popover did not open after icon mousedown+click', iconTag: iconEl.tagName, iconCls: iconEl.className });
             }
-            try { strategies[strategyIdx](); } catch (_) {}
-            strategyIdx++;
-            // After each attempt, poll briefly for popover
-            let waited = 0;
-            const iv = setInterval(() => {
-                waited += 50;
-                if (isOpen()) {
-                    clearInterval(iv);
-                    apply();
-                } else if (waited >= 200) {
-                    clearInterval(iv);
-                    tryNext();
-                }
-            }, 50);
-        };
-        tryNext();
+        }, 50);
     });
 }
 
