@@ -85,7 +85,7 @@
             
             <div class="call-controls-row">
                 <button class="control-btn secondary-action mute" title="Mute"><i class="fas fa-microphone-slash"></i></button>
-                
+
                 <button class="control-btn dial" id="dialBtn">
                     <i class="fas fa-phone"></i>
                 </button>
@@ -93,8 +93,17 @@
                 <button class="control-btn hangup" id="hangupBtn" style="display:none;">
                     <i class="fas fa-phone-slash"></i>
                 </button>
-                
+
                 <button class="control-btn secondary-action speaker" title="Speaker"><i class="fas fa-volume-up"></i></button>
+            </div>
+
+            <div id="autoEndCountdown" style="display:none; margin-top:10px; padding:10px 12px; background:rgba(239,68,68,0.1); border-left:3px solid #ef4444; border-radius:8px; align-items:center; justify-content:space-between; gap:10px;">
+                <div style="font-size:0.85em; color:#7f1d1d; font-weight:500;">
+                    <i class="fas fa-hourglass-end" style="margin-right:4px;"></i> Auto-hangup in <span id="autoEndCountdownSeconds">5</span>s
+                </div>
+                <button id="keepCallBtn" type="button" style="font-size:0.8em; padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:white; cursor:pointer; font-weight:600;">
+                    <i class="fas fa-hand-paper"></i> Keep Call
+                </button>
             </div>
         </div>
 
@@ -903,6 +912,38 @@
                     </div>
                     <div style="font-size:0.8em; color:var(--text-secondary);">
                         Automatically switch to the Call tab when selecting a student from the Master List.
+                    </div>
+                </div>
+
+                <!-- Auto-End Calls Toggle -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <label style="font-size:0.95em; font-weight:500; color:var(--text-main);">
+                            <i class="fas fa-stopwatch" style="color:var(--primary-color);"></i> Auto-End Calls
+                        </label>
+                        <i id="autoEndCallsToggleModal" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                    </div>
+                    <div style="font-size:0.8em; color:var(--text-secondary); margin-bottom: 10px;">
+                        During automation, hang up shortly after the line connects (assumes voicemail) and apply a default disposition. Press <strong>Keep Call</strong> on the call interface if a real person answers.
+                    </div>
+                    <div id="autoEndCallsParams" style="display:none; padding:12px; background:rgba(0,0,0,0.03); border-radius:8px;">
+                        <div style="margin-bottom:12px;">
+                            <label for="autoEndCallsSecondsInput" style="display:block; font-size:0.85em; font-weight:500; color:var(--text-main); margin-bottom:4px;">
+                                End call after <span style="color:var(--text-secondary); font-weight:400;">(seconds in connected state)</span>
+                            </label>
+                            <input type="number" id="autoEndCallsSecondsInput" min="1" max="60" value="5" style="width:80px; padding:6px 8px; border-radius:6px; border:1px solid rgba(0,0,0,0.1); font-size:0.9em;">
+                        </div>
+                        <div>
+                            <label for="autoEndCallsDispositionSelect" style="display:block; font-size:0.85em; font-weight:500; color:var(--text-main); margin-bottom:4px;">
+                                Default disposition on auto-end
+                            </label>
+                            <select id="autoEndCallsDispositionSelect" style="width:100%; padding:6px 8px; border-radius:6px; border:1px solid rgba(0,0,0,0.1); font-size:0.9em; background:white;">
+                                <option value="Left Voicemail">Left Voicemail</option>
+                                <option value="No Answer">No Answer</option>
+                                <option value="Disconnected">Disconnected</option>
+                                <option value="Outbound Error">Outbound Error</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>

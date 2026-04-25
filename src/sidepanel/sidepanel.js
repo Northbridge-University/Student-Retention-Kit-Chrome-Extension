@@ -85,6 +85,7 @@ import {
     togglePowerAutomateDebug,
     toggleDebugModeModal,
     toggleAutoSwitchCallTabModal,
+    toggleAutoEndCallsModal,
     toggleSyncActiveStudentModal,
     toggleSendMasterListModal,
     toggleReformatNameModal,
@@ -757,6 +758,14 @@ function setupEventListeners() {
 
     if (elements.autoSwitchCallTabToggle) {
         elements.autoSwitchCallTabToggle.addEventListener('click', toggleAutoSwitchCallTabModal);
+    }
+
+    if (elements.autoEndCallsToggleModal) {
+        elements.autoEndCallsToggleModal.addEventListener('click', toggleAutoEndCallsModal);
+    }
+
+    if (elements.keepCallBtn) {
+        elements.keepCallBtn.addEventListener('click', () => callManager.cancelAutoEndTimer('manual'));
     }
 
     // Excel Modal Settings

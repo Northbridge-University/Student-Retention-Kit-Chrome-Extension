@@ -191,5 +191,18 @@ export function setupFive9StatusListeners(callManager, getSelectedQueue) {
                 callManager.handleExternalDisconnect();
             }
         }
+
+        // Start auto-end countdown when the call reaches a connected/talking state.
+        // Five9 reports several state strings depending on environment (REST normalizes
+        // to "ACTIVE"; the WebSocket payload uses "TALKING"). Accept both.
+        if (message.type === 'FIVE9_CALL_STATE_CHANGED' && callManager && !callManager.debugMode) {
+            const ns = message.newState;
+            const ps = message.previousState;
+            const becameTalking = (ns === 'ACTIVE' || ns === 'TALKING') &&
+                                  ps !== 'ACTIVE' && ps !== 'TALKING';
+            if (becameTalking) {
+                callManager.startAutoEndTimer(message.interactionId || null);
+            }
+        }
     });
 }

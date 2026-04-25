@@ -5,6 +5,7 @@
 
 import { STORAGE_KEYS } from '../constants/index.js';
 import { CONFIG } from '../constants/config.js';
+import { storageGet } from '../utils/storage.js';
 
 /**
  * CallManager class - Manages call state, timers, and automation sequences
@@ -24,6 +25,11 @@ export default class CallManager {
         this.waitingForDisposition = false; // Track if call ended but waiting for disposition
         this._dispositionInProgress = false; // Guard against double-clicks during disposition
         this.isPaused = false; // Track if automation is paused between calls
+
+        // Auto-end timer state
+        this.autoEndTimeout = null;          // setTimeout handle for the actual hangup
+        this.autoEndCountdownInterval = null; // setInterval handle updating the displayed seconds
+        this.autoEndPendingForCallId = null; // interactionId we're counting down for (prevents stale fires)
     }
 
     /**
@@ -41,6 +47,99 @@ export default class CallManager {
     setDebugMode(enabled) {
         this.debugMode = enabled;
         this.updateCallInterfaceState();
+    }
+
+    /**
+     * Starts the auto-end countdown if eligible.
+     * Called when the Five9 call transitions to a connected/talking state.
+     * Eligibility: feature enabled in settings, automation mode running, not in demo,
+     * call still active, not already counting down for this call.
+     * @param {string|null} interactionId - Five9 call id, used to guard against stale fires
+     */
+    async startAutoEndTimer(interactionId = null) {
+        if (this.autoEndTimeout || this.autoEndCountdownInterval) return; // Already running
+        if (!this.automationMode) return;                                  // Outbound automation only
+        if (!this.isCallActive || this.waitingForDisposition) return;      // Not in a fresh active call
+        if (this.debugMode) return;                                        // Demo mode skips Five9 logic
+
+        const data = await storageGet([
+            STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
+            STORAGE_KEYS.AUTO_END_CALLS_SECONDS,
+            STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION
+        ]);
+        if (!data[STORAGE_KEYS.AUTO_END_CALLS_ENABLED]) return;
+
+        const rawSeconds = data[STORAGE_KEYS.AUTO_END_CALLS_SECONDS];
+        const seconds = Math.max(1, Math.min(60, (typeof rawSeconds === 'number' && rawSeconds > 0) ? rawSeconds : 5));
+        const disposition = data[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION] || 'Left Voicemail';
+
+        this.autoEndPendingForCallId = interactionId;
+
+        const countdownEl = this.elements.autoEndCountdown;
+        const secondsEl = this.elements.autoEndCountdownSeconds;
+        if (countdownEl) {
+            countdownEl.style.display = 'flex';
+        }
+        if (secondsEl) {
+            secondsEl.textContent = String(seconds);
+        }
+
+        let remaining = seconds;
+        this.autoEndCountdownInterval = setInterval(() => {
+            remaining -= 1;
+            if (secondsEl) {
+                secondsEl.textContent = String(Math.max(0, remaining));
+            }
+            if (remaining <= 0) {
+                clearInterval(this.autoEndCountdownInterval);
+                this.autoEndCountdownInterval = null;
+            }
+        }, 1000);
+
+        this.autoEndTimeout = setTimeout(async () => {
+            this.autoEndTimeout = null;
+            if (this.autoEndCountdownInterval) {
+                clearInterval(this.autoEndCountdownInterval);
+                this.autoEndCountdownInterval = null;
+            }
+            if (countdownEl) countdownEl.style.display = 'none';
+            this.autoEndPendingForCallId = null;
+
+            // Re-check eligibility at fire time (Keep Call may have been pressed,
+            // call may already be ending, etc.)
+            if (!this.isCallActive || this.waitingForDisposition || !this.automationMode) return;
+            console.log(`⏱️ Auto-end timer fired — applying disposition "${disposition}"`);
+            try {
+                await this.handleDisposition(disposition);
+            } catch (e) {
+                console.error('Auto-end disposition failed:', e);
+            }
+        }, seconds * 1000);
+
+        console.log(`⏱️ Auto-end timer armed: ${seconds}s → "${disposition}"`);
+    }
+
+    /**
+     * Cancels any pending auto-end timer and hides the countdown UI.
+     * @param {string} reason - "manual" (Keep Call clicked), "external" (call ended), "disposed", etc.
+     */
+    cancelAutoEndTimer(reason = 'cancelled') {
+        const wasArmed = !!(this.autoEndTimeout || this.autoEndCountdownInterval);
+        if (this.autoEndTimeout) {
+            clearTimeout(this.autoEndTimeout);
+            this.autoEndTimeout = null;
+        }
+        if (this.autoEndCountdownInterval) {
+            clearInterval(this.autoEndCountdownInterval);
+            this.autoEndCountdownInterval = null;
+        }
+        this.autoEndPendingForCallId = null;
+        if (this.elements.autoEndCountdown) {
+            this.elements.autoEndCountdown.style.display = 'none';
+        }
+        if (wasArmed) {
+            console.log(`⏱️ Auto-end timer cancelled (${reason})`);
+        }
     }
 
     /**
@@ -153,6 +252,9 @@ export default class CallManager {
         } else {
             // Call is ending - show "Ending call" status
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
+
+            // Cancel any pending auto-end — user is taking over manually
+            this.cancelAutoEndTimer('manual-hangup');
 
             let hangupResult = { success: true, state: 'WRAP_UP' };
 
@@ -506,6 +608,7 @@ export default class CallManager {
         this._dispositionInProgress = false;
         this.stopCallTimer();
         this.stopDispositionTimer();
+        this.cancelAutoEndTimer('automation-cancelled');
 
         // Exit automation mode
         this.automationMode = false;
@@ -633,6 +736,7 @@ export default class CallManager {
         // Stop any running timers
         this.stopCallTimer();
         this.stopDispositionTimer();
+        this.cancelAutoEndTimer('external-disposition');
 
         // Reset call state
         this.isCallActive = false;
@@ -689,6 +793,7 @@ export default class CallManager {
         // Stop call timer, start disposition timer
         this.stopCallTimer();
         this.startDispositionTimer();
+        this.cancelAutoEndTimer('external-disconnect');
 
         // Update state
         this.waitingForDisposition = true;
@@ -733,6 +838,9 @@ export default class CallManager {
             return;
         }
         this._dispositionInProgress = true;
+
+        // Stop any pending auto-end timer — disposition is taking over
+        this.cancelAutoEndTimer('disposition-set');
 
         console.log("Logged Disposition:", type);
 
@@ -1127,6 +1235,7 @@ export default class CallManager {
     cleanup() {
         this.stopCallTimer();
         this.stopDispositionTimer();
+        this.cancelAutoEndTimer('cleanup');
         this.selectedQueue = [];
         this.isCallActive = false;
     }
