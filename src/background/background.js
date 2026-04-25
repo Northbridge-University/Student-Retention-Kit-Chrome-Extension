@@ -902,10 +902,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })();
   }
   else if (msg.type === 'triggerFive9SetPlaybackVolume') {
-      console.log(`[BG volume] received percent=${msg.percent}`);
+      console.log(`SRK [volume] received percent=${msg.percent}`);
       (async () => {
           const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
-          if (tabs.length === 0) { console.log('[BG volume] no Five9 tabs'); return; }
+          if (tabs.length === 0) { console.log('SRK [volume] no Five9 tabs'); return; }
           try {
               const results = await chrome.scripting.executeScript({
                   target: { tabId: tabs[0].id },
@@ -913,9 +913,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                   func: _setFive9PlaybackVolumeInPage,
                   args: [msg.percent]
               });
-              console.log('[BG volume] executeScript result:', results?.[0]?.result);
+              console.log('SRK [volume] executeScript result:', results?.[0]?.result);
           } catch (e) {
-              console.warn('[BG volume] executeScript error:', e.message);
+              console.warn('SRK [volume] executeScript error:', e.message);
           }
       })();
   }

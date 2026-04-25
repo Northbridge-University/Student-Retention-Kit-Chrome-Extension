@@ -163,7 +163,7 @@ export default class CallManager {
             const fallbacks = { ringing: 0, talking: 25, keepCall: 100 };
             percent = fallbacks[stateKey] ?? 100;
         }
-        console.log(`🔊 Setting Five9 playback volume → ${percent}% (${stateKey})`);
+        console.log(`SRK [volume] sidepanel → ${percent}% (${stateKey})`);
         try {
             chrome.runtime.sendMessage({ type: 'triggerFive9SetPlaybackVolume', percent });
         } catch (e) {
