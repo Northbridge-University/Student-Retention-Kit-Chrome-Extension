@@ -57,17 +57,32 @@ export default class CallManager {
      * @param {string|null} interactionId - Five9 call id, used to guard against stale fires
      */
     async startAutoEndTimer(interactionId = null) {
-        if (this.autoEndTimeout || this.autoEndCountdownInterval) return; // Already running
-        if (!this.automationMode) return;                                  // Outbound automation only
-        if (!this.isCallActive || this.waitingForDisposition) return;      // Not in a fresh active call
-        if (this.debugMode) return;                                        // Demo mode skips Five9 logic
+        if (this.autoEndTimeout || this.autoEndCountdownInterval) {
+            console.log('⏱️ startAutoEndTimer skipped: already armed');
+            return;
+        }
+        if (!this.automationMode) {
+            console.log('⏱️ startAutoEndTimer skipped: not in automation mode');
+            return;
+        }
+        if (!this.isCallActive || this.waitingForDisposition) {
+            console.log(`⏱️ startAutoEndTimer skipped: isCallActive=${this.isCallActive} waitingForDisposition=${this.waitingForDisposition}`);
+            return;
+        }
+        if (this.debugMode) {
+            console.log('⏱️ startAutoEndTimer skipped: demo mode');
+            return;
+        }
 
         const data = await storageGet([
             STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
             STORAGE_KEYS.AUTO_END_CALLS_SECONDS,
             STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION
         ]);
-        if (!data[STORAGE_KEYS.AUTO_END_CALLS_ENABLED]) return;
+        if (!data[STORAGE_KEYS.AUTO_END_CALLS_ENABLED]) {
+            console.log('⏱️ startAutoEndTimer skipped: setting disabled');
+            return;
+        }
 
         const rawSeconds = data[STORAGE_KEYS.AUTO_END_CALLS_SECONDS];
         const seconds = Math.max(1, Math.min(60, (typeof rawSeconds === 'number' && rawSeconds > 0) ? rawSeconds : 5));

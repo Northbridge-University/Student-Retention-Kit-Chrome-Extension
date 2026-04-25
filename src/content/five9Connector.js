@@ -46,14 +46,26 @@ async function monitorCallState() {
         const activeCall = interactions.find(i => i.channelType === 'CALL');
 
         if (activeCall) {
-            const newState = activeCall.state; // ACTIVE, WRAP_UP, FINISHED, etc.
+            const newState = activeCall.state; // ACTIVE, TALKING, WRAP_UP, FINISHED, etc.
             const newInteractionId = activeCall.interactionId;
 
-            // Detect state changes
-            if (currentInteractionId === newInteractionId && currentCallState !== newState) {
+            const isNewCall = currentInteractionId !== newInteractionId;
+            const isStateChange = !isNewCall && currentCallState !== newState;
+
+            if (isNewCall) {
+                // First time seeing this call — emit its initial state so listeners
+                // (e.g. auto-end timer) can react to fresh-call appearances, not just
+                // transitions within an already-tracked call.
+                console.log(`SRK: New call detected: ${newInteractionId} initial state=${newState}`);
+                chrome.runtime.sendMessage({
+                    type: 'FIVE9_CALL_STATE_CHANGED',
+                    previousState: null,
+                    newState: newState,
+                    interactionId: newInteractionId
+                });
+            } else if (isStateChange) {
                 console.log(`SRK: Call state changed: ${currentCallState} -> ${newState}`);
 
-                // Notify extension of state change
                 chrome.runtime.sendMessage({
                     type: 'FIVE9_CALL_STATE_CHANGED',
                     previousState: currentCallState,
@@ -70,8 +82,8 @@ async function monitorCallState() {
                     });
                 }
 
-                // If state changed to WRAP_UP from ACTIVE, call was disconnected
-                if (currentCallState === 'ACTIVE' && newState === 'WRAP_UP') {
+                // If state changed to WRAP_UP from ACTIVE/TALKING, call was disconnected
+                if ((currentCallState === 'ACTIVE' || currentCallState === 'TALKING') && newState === 'WRAP_UP') {
                     console.log("SRK: Call disconnected (detected WRAP_UP state)");
                     chrome.runtime.sendMessage({
                         type: 'FIVE9_CALL_DISCONNECTED',
