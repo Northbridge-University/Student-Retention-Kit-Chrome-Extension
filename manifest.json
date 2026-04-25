@@ -15,7 +15,8 @@
     "sidePanel",
     "webRequest",
     "scripting",
-    "cookies"
+    "cookies",
+    "nativeMessaging"
   ],
 "host_permissions": [
     "https://northbridge.instructure.com/*",

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>StudentRetentionKit.Five9VolumeHost</RootNamespace>
+    <AssemblyName>Five9VolumeHost</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Native AOT: produces a single ~5-8MB exe with no .NET runtime
+         dependency. Reduces antivirus false-positive rate vs PyInstaller
+         and avoids needing a separate runtime install. -->
+    <PublishAot>true</PublishAot>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <StripSymbols>true</StripSymbols>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+
+    <!-- A descriptive name and description in the binary metadata helps
+         AV products avoid flagging as suspicious. -->
+    <AssemblyTitle>Student Retention Kit - Five9 Volume Host</AssemblyTitle>
+    <Product>Student Retention Kit</Product>
+    <Company>Student Retention Kit</Company>
+    <Description>Chrome native messaging host that adjusts the per-process audio session volume of the Five9 Softphone, so the extension can mute/unmute calls without affecting other apps' volume.</Description>
+  </PropertyGroup>
+
+</Project>

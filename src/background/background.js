@@ -903,21 +903,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   else if (msg.type === 'triggerFive9SetPlaybackVolume') {
       console.log(`SRK [volume] received percent=${msg.percent}`);
-      (async () => {
-          const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
-          if (tabs.length === 0) { console.log('SRK [volume] no Five9 tabs'); return; }
-          try {
-              const results = await chrome.scripting.executeScript({
-                  target: { tabId: tabs[0].id },
-                  world: 'MAIN', // run in the page world so we can use jQuery + bootstrap-slider
-                  func: _setFive9PlaybackVolumeInPage,
-                  args: [msg.percent]
-              });
-              console.log('SRK [volume] executeScript result:', results?.[0]?.result);
-          } catch (e) {
-              console.warn('SRK [volume] executeScript error:', e.message);
-          }
-      })();
+      // Routes through the Windows native messaging host so we touch only
+      // Five9's per-process audio session — not the headset's master volume.
+      // Falls back silently if the host isn't installed (the auto-end timer
+      // continues to work; the user just won't get the volume juggling).
+      try {
+          chrome.runtime.sendNativeMessage(
+              'com.srk.five9volume',
+              msg.percent === 0
+                  ? { action: 'setMute',   muted:   true }
+                  : { action: 'setVolume', percent: msg.percent },
+              (response) => {
+                  const err = chrome.runtime.lastError;
+                  if (err) {
+                      console.warn(`SRK [volume] native host unavailable: ${err.message}`);
+                      console.warn('SRK [volume] install the host: see native-host/README.md');
+                  } else {
+                      console.log('SRK [volume] native host response:', response);
+                  }
+              }
+          );
+      } catch (e) {
+          console.warn('SRK [volume] sendNativeMessage threw:', e?.message);
+      }
   }
   else if (msg.type === 'triggerFive9DisposeOnly') {
       (async () => {
@@ -1389,185 +1397,6 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
     }, 'Five9 tab closed state');
   }
 });
-
-/**
- * Page-world function injected via chrome.scripting.executeScript with
- * world: 'MAIN'. Sets Five9's playback volume by triggering jQuery click
- * events on the popover trigger and inner controls (synthetic events from
- * the isolated content-script world don't fire jQuery-bound handlers).
- *
- * This function MUST be self-contained — it runs serialized in the page,
- * so it can't reference any outer scope.
- *
- * @param {number} percent - target volume 0-100
- * @returns {Promise<{success:boolean, applied?:number, method?:string, error?:string}>}
- */
-function _setFive9PlaybackVolumeInPage(percent) {
-    return new Promise((resolve) => {
-        const $ = window.jQuery || window.$;
-        if (!$) return resolve({ success: false, error: 'jQuery not present in page' });
-
-        const target = Math.max(0, Math.min(100, Math.round(percent)));
-        const trigger = document.getElementById('StationToolbar-playback_volume-node');
-        if (!trigger) return resolve({ success: false, error: 'volume trigger not found' });
-
-        // The actual click target is the innermost icon span (.fa.fa-volume-up)
-        // inside the trigger container. Five9's ItemView (Marionette) binds the
-        // popover-open handler there. Falls back to anything with role="button"
-        // inside the trigger, then to the trigger itself.
-        const iconEl = trigger.querySelector('span.fa.fa-volume-up')
-                     || trigger.querySelector('[role="button"]')
-                     || trigger.querySelector('span[data-f9-cid]')
-                     || trigger;
-
-        const isOpen = () => !!document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
-        const wasOpen = isOpen();
-
-        // The handler responds to mousedown (followed by click for completeness).
-        // Native dispatchEvent works because the bound listener uses
-        // addEventListener / Marionette delegation, not jQuery .on().
-        const fireOpen = (el) => {
-            const opts = { bubbles: true, cancelable: true, view: window, button: 0 };
-            el.dispatchEvent(new MouseEvent('mousedown', opts));
-            el.dispatchEvent(new MouseEvent('mouseup', opts));
-            el.dispatchEvent(new MouseEvent('click', opts));
-        };
-
-        const finishClose = (result) => {
-            setTimeout(() => {
-                if (!wasOpen) {
-                    // Toggle by re-firing on the icon
-                    try { fireOpen(iconEl); } catch (_) {}
-                }
-                resolve(result);
-            }, 100);
-        };
-
-        const apply = () => {
-            const popover = document.querySelector('.f9-popover.station-playback-volume-popover-container.open');
-            if (!popover) return finishClose({ success: false, error: 'popover not open after attempt' });
-            const $p = $(popover);
-            const $handle = $p.find('[role=slider]').first();
-            const current = parseInt($handle.attr('aria-valuenow') || '0', 10);
-
-            // Detect mute state — the toolbar icon class changes
-            // (fa-volume-up → fa-volume-off / fa-volume-mute when muted), and/or
-            // the mute button gains aria-pressed=true or .active.
-            const isMuted = () => {
-                const muteBtn = popover.querySelector('#StationVolumePopover-mute_playback-button');
-                if (muteBtn) {
-                    if (muteBtn.getAttribute('aria-pressed') === 'true') return true;
-                    if (muteBtn.classList.contains('active')) return true;
-                }
-                const toolbarIcon = document.querySelector('#StationToolbar-playback_volume-node span.fa');
-                if (toolbarIcon) {
-                    const cls = toolbarIcon.className;
-                    if (/fa-volume-(off|mute|times|xmark)/.test(cls)) return true;
-                }
-                return false;
-            };
-            const muted = isMuted();
-
-            const muteBtn = popover.querySelector('#StationVolumePopover-mute_playback-button');
-
-            try {
-                if (target === 100) {
-                    // Max button auto-unmutes AND sets volume to 100, in one
-                    // operation (confirmed by Five9's setVolume + mute false IPC pair).
-                    const maxBtn = popover.querySelector('#StationVolumePopover-max_volume_playback-button');
-                    if (maxBtn) fireOpen(maxBtn);
-                    return finishClose({ success: true, applied: 100, method: 'max-button', from: current, wasMuted: muted });
-                }
-                if (target === 0) {
-                    // Want NO audio → ensure muted. Click mute button only if not already muted.
-                    if (!muted && muteBtn) fireOpen(muteBtn);
-                    return finishClose({ success: true, applied: 0, method: muted ? 'already-muted' : 'mute-button', from: current });
-                }
-                // Arbitrary value → ensure UNMUTED first, then set the volume.
-                if (muted && muteBtn) {
-                    fireOpen(muteBtn);
-                    // Brief wait for state to flip before adjusting volume
-                    return setTimeout(() => applyVolumeNonZero(popover, $p, $handle, current, target, true), 80);
-                }
-                return applyVolumeNonZero(popover, $p, $handle, current, target, false);
-            } catch (e) {
-                finishClose({ success: false, error: 'apply error: ' + e.message });
-            }
-        };
-
-        // Sets a non-zero playback volume on an already-open, already-unmuted popover.
-        // Tries bootstrap-slider's API first, then track-coordinate clicks, then keyboard walk.
-        const applyVolumeNonZero = (popover, $p, $handle, current, target, didUnmute) => {
-            try {
-                const $slider = $p.find('.f9-slider').first();
-                if (typeof $slider.slider === 'function') {
-                    try {
-                        $slider.slider('setValue', target, true, true);
-                        return finishClose({ success: true, applied: target, method: 'bootstrap-slider-api', from: current, didUnmute });
-                    } catch (_) { /* fall through */ }
-                }
-                const track = popover.querySelector('.slider-track');
-                if (track) {
-                    const rect = track.getBoundingClientRect();
-                    // Vertical slider: bottom=0, top=100
-                    const clickY = rect.bottom - (rect.height * (target / 100));
-                    const clickX = rect.left + (rect.width / 2);
-                    const opts = { bubbles: true, cancelable: true, view: window, clientX: clickX, clientY: clickY, button: 0, buttons: 1 };
-                    track.dispatchEvent(new MouseEvent('mousedown', opts));
-                    track.dispatchEvent(new MouseEvent('mousemove', opts));
-                    // mouseup must go to window — bootstrap-slider listens there
-                    window.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
-                    return setTimeout(() => {
-                        const finalValue = parseInt($p.find('[role=slider]').first().attr('aria-valuenow') || '0', 10);
-                        finishClose({ success: true, applied: finalValue, method: 'track-coords', from: current, requested: target, didUnmute });
-                    }, 50);
-                }
-                // Last-ditch keyboard walk
-                const handle = $handle[0];
-                if (!handle) return finishClose({ success: false, error: 'slider track and handle both missing' });
-                handle.focus();
-                const diff = target - current;
-                const bigKey = diff > 0 ? 'PageUp' : 'PageDown';
-                const smallKey = diff > 0 ? 'ArrowUp' : 'ArrowDown';
-                let remaining = Math.abs(diff);
-                const step = () => {
-                    if (remaining >= 10) {
-                        handle.dispatchEvent(new KeyboardEvent('keydown', { key: bigKey, code: bigKey, bubbles: true, cancelable: true }));
-                        remaining -= 10;
-                        setTimeout(step, 30);
-                    } else if (remaining > 0) {
-                        handle.dispatchEvent(new KeyboardEvent('keydown', { key: smallKey, code: smallKey, bubbles: true, cancelable: true }));
-                        remaining -= 1;
-                        setTimeout(step, 30);
-                    } else {
-                        finishClose({ success: true, applied: target, method: 'keyboard-walk', from: current, didUnmute });
-                    }
-                };
-                step();
-            } catch (e) {
-                finishClose({ success: false, error: 'applyVolumeNonZero error: ' + e.message });
-            }
-        };
-
-        if (wasOpen) return apply();
-
-        // Fire mousedown+click on the icon — confirmed by manual testing to
-        // be the event sequence Five9's ItemView responds to.
-        try { fireOpen(iconEl); } catch (e) {
-            return resolve({ success: false, error: 'fireOpen threw: ' + e.message });
-        }
-
-        let waited = 0;
-        const iv = setInterval(() => {
-            waited += 50;
-            if (isOpen()) { clearInterval(iv); apply(); }
-            else if (waited >= 1500) {
-                clearInterval(iv);
-                resolve({ success: false, error: 'popover did not open after icon mousedown+click', iconTag: iconEl.tagName, iconCls: iconEl.className });
-            }
-        }, 50);
-    });
-}
 
 // --- INITIALIZATION ---
 (async () => {
