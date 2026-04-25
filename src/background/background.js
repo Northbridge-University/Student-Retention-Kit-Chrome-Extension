@@ -902,13 +902,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })();
   }
   else if (msg.type === 'triggerFive9SetPlaybackVolume') {
+      console.log(`[BG volume] received triggerFive9SetPlaybackVolume percent=${msg.percent}`);
       (async () => {
           const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
-          if (tabs.length === 0) return; // Silently skip — volume control isn't critical
+          console.log(`[BG volume] found ${tabs.length} Five9 tab(s)`);
+          if (tabs.length === 0) return;
           chrome.tabs.sendMessage(tabs[0].id, {
               type: 'executeFive9SetPlaybackVolume',
               percent: msg.percent
-          }, () => { /* fire-and-forget; ignore lastError */ void chrome.runtime.lastError; });
+          }, (response) => {
+              const err = chrome.runtime.lastError;
+              if (err) {
+                  console.warn(`[BG volume] sendMessage error: ${err.message}`);
+              } else {
+                  console.log(`[BG volume] tab response:`, response);
+              }
+          });
       })();
   }
   else if (msg.type === 'triggerFive9DisposeOnly') {
