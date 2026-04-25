@@ -4,6 +4,18 @@ Tiny Chrome native messaging host that lets the Student Retention Kit
 extension adjust **only** the Five9 Softphone's audio session volume — not
 the Windows endpoint volume Five9's own UI changes.
 
+> **Private add-on.** This folder is intended to live in its own repo
+> (`student-retention-kit-native-host`) and is **not** required by the
+> public extension. The Chrome Web Store build of the extension ships
+> without the volume feature; installing this is what unlocks it.
+>
+> Two pieces have to be installed locally:
+> 1. The extension overlay (`extension-overlay\apply-overlay.ps1`) —
+>    swaps the extension's stub `background-volume.js` for the real
+>    handler and adds the `nativeMessaging` permission.
+> 2. The native host itself (`install.ps1` in this folder) — registers
+>    the Windows binary that actually moves the per-process volume.
+
 ## Why this exists
 
 Five9's Softphone is a native Windows app (the browser tab is just a remote).
@@ -51,21 +63,27 @@ antivirus false positives compared to PyInstaller-style script bundling.
 
 ## Install (one-time, no admin needed)
 
-After building:
+Two scripts in order. **Run the overlay first**, otherwise the extension
+won't know how to talk to the host even after it's installed.
 
 ```powershell
-cd native-host
+# 1. Patch the local extension clone so the volume code is actually wired in.
+cd native-host\extension-overlay
+.\apply-overlay.ps1 -ExtensionPath C:\Users\you\Documents\GitHub\Student-Retention-Kit-Chrome-Extension
+
+# 2. Install the native binary + Chrome native-messaging registry key.
+cd ..
 PowerShell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-This will:
+What `install.ps1` does:
 
-1. Copy `Five9VolumeHost.exe` to `%LocalAppData%\StudentRetentionKit\`
-2. Generate a Chrome native messaging manifest pointing at it
-3. Register the manifest under `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.srk.five9volume`
+1. Copies the entire publish folder to `%LocalAppData%\StudentRetentionKit\`
+2. Generates a Chrome native messaging manifest pointing at the exe
+3. Registers the manifest under `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.srk.five9volume`
 
-After install: reload the extension and test a call. The Auto-End Calls
-volume settings will now control only Five9's audio.
+After both: reload the extension in `chrome://extensions` and test a call.
+The Auto-End Calls volume settings will now control only Five9's audio.
 
 ### SmartScreen behavior
 

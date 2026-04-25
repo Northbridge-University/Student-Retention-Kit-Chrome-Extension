@@ -4,6 +4,10 @@ import { startLoop, stopLoop, addToFoundUrlCache } from './looper.js';
 import { STORAGE_KEYS, CHECKER_MODES, MESSAGE_TYPES, EXTENSION_STATES, CONNECTION_TYPES, FIVE9_CONNECTION_STATES, CANVAS_DOMAIN, HIGHLIGHT_STATUS } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { decrypt } from '../utils/encryption.js';
+// Optional per-process Five9 volume handler. Public build is a no-op stub;
+// the native-host repo's apply-overlay.ps1 replaces this file with a real
+// handler that talks to the com.srk.five9volume native messaging host.
+import './background-volume.js';
 
 let logBuffer = [];
 const MAX_LOG_BUFFER_SIZE = 100;
@@ -900,32 +904,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               }
           });
       })();
-  }
-  else if (msg.type === 'triggerFive9SetPlaybackVolume') {
-      console.log(`SRK [volume] received percent=${msg.percent}`);
-      // Routes through the Windows native messaging host so we touch only
-      // Five9's per-process audio session — not the headset's master volume.
-      // Falls back silently if the host isn't installed (the auto-end timer
-      // continues to work; the user just won't get the volume juggling).
-      try {
-          chrome.runtime.sendNativeMessage(
-              'com.srk.five9volume',
-              msg.percent === 0
-                  ? { action: 'setMute',   muted:   true }
-                  : { action: 'setVolume', percent: msg.percent },
-              (response) => {
-                  const err = chrome.runtime.lastError;
-                  if (err) {
-                      console.warn(`SRK [volume] native host unavailable: ${err.message}`);
-                      console.warn('SRK [volume] install the host: see native-host/README.md');
-                  } else {
-                      console.log('SRK [volume] native host response:', response);
-                  }
-              }
-          );
-      } catch (e) {
-          console.warn('SRK [volume] sendNativeMessage threw:', e?.message);
-      }
   }
   else if (msg.type === 'triggerFive9DisposeOnly') {
       (async () => {
