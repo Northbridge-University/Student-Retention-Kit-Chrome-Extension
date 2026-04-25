@@ -51,9 +51,15 @@ if (-not (Test-Path $ManifestTemplate)) {
 }
 
 # --- 2. Copy files into a stable per-user location ---
+# Copy the entire directory containing the exe, not just the exe itself.
+# An AOT build produces a single self-contained exe (one file), but a
+# regular self-contained build produces an exe bootstrapper plus many
+# supporting DLLs (Five9VolumeHost.dll, the .NET runtime, etc.). Copying
+# the whole folder handles both cases and is a no-op for the AOT case.
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Copy-Item -Force -Path $ExeSource -Destination $ExeDest
-Write-Host "Copied: $ExeDest"
+$ExeSourceDir = Split-Path -Parent $ExeSource
+Copy-Item -Force -Recurse -Path (Join-Path $ExeSourceDir '*') -Destination $InstallDir
+Write-Host "Copied: $InstallDir"
 
 # Defensive: strip the "Mark of the Web" zone identifier if any. Files built
 # locally won't have one, but if you cloned via a zip download or the binary
