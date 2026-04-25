@@ -16,10 +16,11 @@ const DISPOSITION_CODES = {
 };
 
 // Call state tracking for monitoring
-let currentCallState = null; // null = no call, 'ACTIVE' = in call, 'WRAP_UP' = awaiting disposition
+// State values from Five9's per-call detail endpoint:
+//   OFFERED → RINGING_ON_OTHER_SIDE → TALKING → WRAP_UP → FINISHED
+let currentCallState = null;
 let currentInteractionId = null;
 let callStateMonitorInterval = null;
-let _diagDumpedKeys = false; // one-shot diagnostic for the /interactions response shape
 
 /**
  * Gets the disposition code for a given disposition type
@@ -44,43 +45,27 @@ async function monitorCallState() {
         if (!interactionsResp.ok) return;
         const interactions = await interactionsResp.json();
 
-        const activeCall = interactions.find(i => i.channelType === 'CALL');
+        const activeCallStub = interactions.find(i => i.channelType === 'CALL');
+
+        let activeCall = null;
+        if (activeCallStub) {
+            // The list endpoint only returns {channelType, interactionId} — fetch the
+            // per-call detail to get the actual `state` field (RINGING_ON_OTHER_SIDE,
+            // TALKING, WRAP_UP, FINISHED, etc.) and any other call metadata.
+            try {
+                const detailResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${activeCallStub.interactionId}`);
+                if (detailResp.ok) {
+                    activeCall = await detailResp.json();
+                }
+            } catch (_) {
+                // If the detail fetch fails, fall back to the stub (no state available)
+                activeCall = activeCallStub;
+            }
+        }
 
         if (activeCall) {
-            // DIAGNOSTIC: log the raw shape of the call object once so we can identify
-            // which field actually carries the call state (it isn't `.state` in all envs).
-            if (!_diagDumpedKeys) {
-                _diagDumpedKeys = true;
-                try {
-                    console.log('SRK DIAG: activeCall keys =', Object.keys(activeCall));
-                    console.log('SRK DIAG: activeCall snapshot =', JSON.stringify(activeCall));
-                } catch (_) {}
-
-                // Also fetch the per-call detail endpoint — the dispose response carries
-                // a `state` field, so this endpoint likely does too.
-                try {
-                    const detailUrl = `${FIVE9_BASE_URL}/appsvcs/rs/svc/agents/${metadata.userId}/interactions/calls/${activeCall.interactionId}`;
-                    const detailResp = await fetch(detailUrl);
-                    if (detailResp.ok) {
-                        const detail = await detailResp.json();
-                        console.log('SRK DIAG: per-call detail keys =', Object.keys(detail || {}));
-                        console.log('SRK DIAG: per-call detail snapshot =', JSON.stringify(detail));
-                    } else {
-                        console.log('SRK DIAG: per-call detail status =', detailResp.status);
-                    }
-                } catch (e) {
-                    console.log('SRK DIAG: per-call detail fetch error =', e.message);
-                }
-            }
-
-            // Try multiple known field locations: REST envs differ. Falls back to undefined
-            // if none match — the diagnostic above will tell us what to use.
-            const newState = activeCall.state
-                          ?? activeCall.callState
-                          ?? activeCall.status
-                          ?? activeCall.callStatus
-                          ?? (activeCall.call && activeCall.call.state);
-            const newInteractionId = activeCall.interactionId;
+            const newState = activeCall.state;
+            const newInteractionId = activeCall.interactionId || activeCall.id;
 
             const isNewCall = currentInteractionId !== newInteractionId;
             const isStateChange = !isNewCall && currentCallState !== newState;
