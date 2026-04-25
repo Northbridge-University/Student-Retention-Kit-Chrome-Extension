@@ -1463,7 +1463,7 @@ function _setFive9PlaybackVolumeInPage(percent) {
                     }
                     return finishClose({ success: true, applied: 0, method: 'mute-button', from: current });
                 }
-                // Arbitrary value — try bootstrap-slider API first
+                // Arbitrary value — try bootstrap-slider API first (cleanest)
                 const $slider = $p.find('.f9-slider').first();
                 let used = null;
                 try {
@@ -1472,10 +1472,33 @@ function _setFive9PlaybackVolumeInPage(percent) {
                         used = 'bootstrap-slider-api';
                     }
                 } catch (_) {}
-                if (used) return finishClose({ success: true, applied: target, method: used, from: current });
+                if (used) return finishClose({ success: true, applied: used === 'bootstrap-slider-api' ? target : current, method: used, from: current });
 
+                // Fallback: simulate a mousedown+drag+mouseup at the right Y on
+                // the slider-track. This is what bootstrap-slider actually
+                // listens for (the [role=slider] handle's keyboard events
+                // don't reliably move the value in Five9's vertical layout).
+                const track = popover.querySelector('.slider-track');
+                if (track) {
+                    const rect = track.getBoundingClientRect();
+                    // Vertical slider: bottom = 0%, top = 100%
+                    const clickY = rect.bottom - (rect.height * (target / 100));
+                    const clickX = rect.left + (rect.width / 2);
+                    const opts = { bubbles: true, cancelable: true, view: window, clientX: clickX, clientY: clickY, button: 0, buttons: 1 };
+                    track.dispatchEvent(new MouseEvent('mousedown', opts));
+                    track.dispatchEvent(new MouseEvent('mousemove', opts));
+                    // mouseup must dispatch on window — bootstrap-slider listens there
+                    window.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
+                    // Verify by re-reading aria-valuenow after a short delay
+                    return setTimeout(() => {
+                        const finalValue = parseInt($p.find('[role=slider]').first().attr('aria-valuenow') || '0', 10);
+                        finishClose({ success: true, applied: finalValue, method: 'track-coords', from: current, requested: target });
+                    }, 50);
+                }
+
+                // Last-ditch fallback: keyboard walk on the handle
                 const handle = $handle[0];
-                if (!handle) return finishClose({ success: false, error: 'slider handle missing' });
+                if (!handle) return finishClose({ success: false, error: 'slider track and handle both missing' });
                 handle.focus();
                 const diff = target - current;
                 const bigKey = diff > 0 ? 'PageUp' : 'PageDown';
