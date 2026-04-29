@@ -25,11 +25,6 @@ export default class CallManager {
         this.waitingForDisposition = false; // Track if call ended but waiting for disposition
         this._dispositionInProgress = false; // Guard against double-clicks during disposition
         this.isPaused = false; // Track if automation is paused between calls
-
-        // Auto-end timer state
-        this.autoEndTimeout = null;          // setTimeout handle for the actual hangup
-        this.autoEndCountdownInterval = null; // setInterval handle updating the displayed seconds
-        this.autoEndPendingForCallId = null; // interactionId we're counting down for (prevents stale fires)
     }
 
     /**
@@ -50,143 +45,22 @@ export default class CallManager {
     }
 
     /**
-     * Starts the auto-end countdown if eligible.
-     * Called when the Five9 call transitions to a connected/talking state.
-     * Eligibility: feature enabled in settings, automation mode running, not in demo,
-     * call still active, not already counting down for this call.
-     * @param {string|null} interactionId - Five9 call id, used to guard against stale fires
+     * Renders the call status text + indicator to reflect the current
+     * Five9 call phase. Driven by toggleCallState on dial (initial 'ringing')
+     * and by FIVE9_CALL_STATE_CHANGED in five9-integration.js as the call
+     * progresses (-> 'connected' once the line picks up).
+     * @param {'ringing'|'connected'} phase
      */
-    async startAutoEndTimer(interactionId = null) {
-        if (this.autoEndTimeout || this.autoEndCountdownInterval) {
-            console.log('⏱️ startAutoEndTimer skipped: already armed');
-            return;
-        }
-        if (!this.automationMode) {
-            console.log('⏱️ startAutoEndTimer skipped: not in automation mode');
-            return;
-        }
-        if (!this.isCallActive || this.waitingForDisposition) {
-            console.log(`⏱️ startAutoEndTimer skipped: isCallActive=${this.isCallActive} waitingForDisposition=${this.waitingForDisposition}`);
-            return;
-        }
+    setCallPhase(phase) {
+        if (!this.elements.callStatusText) return;
         if (this.debugMode) {
-            console.log('⏱️ startAutoEndTimer skipped: demo mode');
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> 🎭 Demo Call Active`;
             return;
         }
-
-        const data = await storageGet([
-            STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
-            STORAGE_KEYS.AUTO_END_CALLS_SECONDS,
-            STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION
-        ]);
-        if (!data[STORAGE_KEYS.AUTO_END_CALLS_ENABLED]) {
-            console.log('⏱️ startAutoEndTimer skipped: setting disabled');
-            return;
-        }
-
-        const rawSeconds = data[STORAGE_KEYS.AUTO_END_CALLS_SECONDS];
-        const seconds = Math.max(1, Math.min(60, (typeof rawSeconds === 'number' && rawSeconds > 0) ? rawSeconds : 5));
-        const disposition = data[STORAGE_KEYS.AUTO_END_CALLS_DISPOSITION] || 'Left Voicemail';
-
-        this.autoEndPendingForCallId = interactionId;
-
-        const countdownEl = this.elements.autoEndCountdown;
-        const secondsEl = this.elements.autoEndCountdownSeconds;
-        if (countdownEl) {
-            countdownEl.style.display = 'flex';
-        }
-        if (secondsEl) {
-            secondsEl.textContent = String(seconds);
-        }
-
-        let remaining = seconds;
-        this.autoEndCountdownInterval = setInterval(() => {
-            remaining -= 1;
-            if (secondsEl) {
-                secondsEl.textContent = String(Math.max(0, remaining));
-            }
-            if (remaining <= 0) {
-                clearInterval(this.autoEndCountdownInterval);
-                this.autoEndCountdownInterval = null;
-            }
-        }, 1000);
-
-        this.autoEndTimeout = setTimeout(async () => {
-            this.autoEndTimeout = null;
-            if (this.autoEndCountdownInterval) {
-                clearInterval(this.autoEndCountdownInterval);
-                this.autoEndCountdownInterval = null;
-            }
-            if (countdownEl) countdownEl.style.display = 'none';
-            this.autoEndPendingForCallId = null;
-
-            // Re-check eligibility at fire time (Keep Call may have been pressed,
-            // call may already be ending, etc.)
-            if (!this.isCallActive || this.waitingForDisposition || !this.automationMode) return;
-            console.log(`⏱️ Auto-end timer fired — applying disposition "${disposition}"`);
-            try {
-                await this.handleDisposition(disposition);
-            } catch (e) {
-                console.error('Auto-end disposition failed:', e);
-            }
-        }, seconds * 1000);
-
-        console.log(`⏱️ Auto-end timer armed: ${seconds}s → "${disposition}"`);
-    }
-
-    /**
-     * Cancels any pending auto-end timer and hides the countdown UI.
-     * @param {string} reason - "manual" (Keep Call clicked), "external" (call ended), "disposed", etc.
-     */
-    /**
-     * Sends the Five9 playback volume to a target percentage (0-100).
-     * Read-from-storage helper that respects the auto-end feature's settings.
-     * Only fires while in automation mode + non-demo + auto-end enabled.
-     * @param {string} stateKey - "ringing", "talking", or "keepCall"
-     */
-    async applyAutoEndVolume(stateKey) {
-        if (!this.automationMode || this.debugMode) return;
-        const data = await storageGet([
-            STORAGE_KEYS.AUTO_END_CALLS_ENABLED,
-            STORAGE_KEYS.AUTO_END_RINGING_VOLUME,
-            STORAGE_KEYS.AUTO_END_TALKING_VOLUME,
-            STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME
-        ]);
-        if (!data[STORAGE_KEYS.AUTO_END_CALLS_ENABLED]) return;
-        const map = {
-            ringing: data[STORAGE_KEYS.AUTO_END_RINGING_VOLUME],
-            talking: data[STORAGE_KEYS.AUTO_END_TALKING_VOLUME],
-            keepCall: data[STORAGE_KEYS.AUTO_END_KEEP_CALL_VOLUME]
-        };
-        let percent = map[stateKey];
-        if (typeof percent !== 'number') {
-            const fallbacks = { ringing: 0, talking: 25, keepCall: 100 };
-            percent = fallbacks[stateKey] ?? 100;
-        }
-        console.log(`SRK [volume] sidepanel → ${percent}% (${stateKey})`);
-        try {
-            chrome.runtime.sendMessage({ type: 'triggerFive9SetPlaybackVolume', percent });
-        } catch (e) {
-            console.warn('Volume message failed:', e);
-        }
-    }
-
-    cancelAutoEndTimer(reason = 'cancelled') {
-        const wasArmed = !!(this.autoEndTimeout || this.autoEndCountdownInterval);
-        if (this.autoEndTimeout) {
-            clearTimeout(this.autoEndTimeout);
-            this.autoEndTimeout = null;
-        }
-        if (this.autoEndCountdownInterval) {
-            clearInterval(this.autoEndCountdownInterval);
-            this.autoEndCountdownInterval = null;
-        }
-        this.autoEndPendingForCallId = null;
-        if (this.elements.autoEndCountdown) {
-            this.elements.autoEndCountdown.style.display = 'none';
-        }
-        if (wasArmed) {
-            console.log(`⏱️ Auto-end timer cancelled (${reason})`);
+        if (phase === 'ringing') {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING}; animation: blink 1s infinite;"></span> Ringing`;
+        } else {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> Connected`;
         }
     }
 
@@ -287,8 +161,7 @@ export default class CallManager {
 
             this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
             this.elements.dialBtn.style.transform = 'rotate(135deg)';
-            const statusText = this.debugMode ? '🎭 Demo Call Active' : 'Connected';
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> ${statusText}`;
+            this.setCallPhase('ringing');
 
             // Show Disposition Grid and reset button states
             if (this.elements.callDispositionSection) {
@@ -301,8 +174,6 @@ export default class CallManager {
             // Call is ending - show "Ending call" status
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
 
-            // Cancel any pending auto-end — user is taking over manually
-            this.cancelAutoEndTimer('manual-hangup');
 
             let hangupResult = { success: true, state: 'WRAP_UP' };
 
@@ -444,8 +315,7 @@ export default class CallManager {
         this.elements.dialBtn.style.opacity = '1';
         this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
         this.elements.dialBtn.style.transform = 'rotate(135deg)';
-        const statusText = this.debugMode ? '🎭 Demo Call Active' : 'Connected';
-        this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> ${statusText}`;
+        this.setCallPhase('ringing');
 
         // Show Disposition Grid and reset button states
         if (this.elements.callDispositionSection) {
@@ -656,7 +526,6 @@ export default class CallManager {
         this._dispositionInProgress = false;
         this.stopCallTimer();
         this.stopDispositionTimer();
-        this.cancelAutoEndTimer('automation-cancelled');
 
         // Exit automation mode
         this.automationMode = false;
@@ -784,7 +653,6 @@ export default class CallManager {
         // Stop any running timers
         this.stopCallTimer();
         this.stopDispositionTimer();
-        this.cancelAutoEndTimer('external-disposition');
 
         // Reset call state
         this.isCallActive = false;
@@ -841,7 +709,6 @@ export default class CallManager {
         // Stop call timer, start disposition timer
         this.stopCallTimer();
         this.startDispositionTimer();
-        this.cancelAutoEndTimer('external-disconnect');
 
         // Update state
         this.waitingForDisposition = true;
@@ -887,8 +754,6 @@ export default class CallManager {
         }
         this._dispositionInProgress = true;
 
-        // Stop any pending auto-end timer — disposition is taking over
-        this.cancelAutoEndTimer('disposition-set');
 
         console.log("Logged Disposition:", type);
 
@@ -1283,7 +1148,6 @@ export default class CallManager {
     cleanup() {
         this.stopCallTimer();
         this.stopDispositionTimer();
-        this.cancelAutoEndTimer('cleanup');
         this.selectedQueue = [];
         this.isCallActive = false;
     }
