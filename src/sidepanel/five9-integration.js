@@ -191,5 +191,21 @@ export function setupFive9StatusListeners(callManager, getSelectedQueue) {
                 callManager.handleExternalDisconnect();
             }
         }
+
+        // Update the call phase indicator as Five9 transitions through states.
+        // REST normalizes the connected state to "ACTIVE"; the WebSocket payload
+        // uses "TALKING". OFFERED / RINGING_ON_OTHER_SIDE both mean ringing.
+        // Skip while in demo mode (no real Five9 state) or while we're already
+        // waiting for disposition (post-call -- "Awaiting Disposition" stays).
+        if (message.type === 'FIVE9_CALL_STATE_CHANGED' &&
+            callManager && !callManager.debugMode &&
+            callManager.getCallActiveState() && !callManager.getWaitingForDisposition()) {
+            const ns = message.newState;
+            if (ns === 'ACTIVE' || ns === 'TALKING') {
+                callManager.setCallPhase('connected');
+            } else if (ns === 'OFFERED' || ns === 'RINGING_ON_OTHER_SIDE') {
+                callManager.setCallPhase('ringing');
+            }
+        }
     });
 }

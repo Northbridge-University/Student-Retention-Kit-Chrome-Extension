@@ -45,6 +45,26 @@ export default class CallManager {
     }
 
     /**
+     * Renders the call status text + indicator to reflect the current
+     * Five9 call phase. Driven by toggleCallState on dial (initial 'ringing')
+     * and by FIVE9_CALL_STATE_CHANGED in five9-integration.js as the call
+     * progresses (-> 'connected' once the line picks up).
+     * @param {'ringing'|'connected'} phase
+     */
+    setCallPhase(phase) {
+        if (!this.elements.callStatusText) return;
+        if (this.debugMode) {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> 🎭 Demo Call Active`;
+            return;
+        }
+        if (phase === 'ringing') {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING}; animation: blink 1s infinite;"></span> Ringing`;
+        } else {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> Connected`;
+        }
+    }
+
+    /**
      * Gets current call active state
      * @returns {boolean} Whether a call is currently active
      */
@@ -141,8 +161,7 @@ export default class CallManager {
 
             this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
             this.elements.dialBtn.style.transform = 'rotate(135deg)';
-            const statusText = this.debugMode ? '🎭 Demo Call Active' : 'Connected';
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> ${statusText}`;
+            this.setCallPhase('ringing');
 
             // Show Disposition Grid and reset button states
             if (this.elements.callDispositionSection) {
@@ -296,8 +315,7 @@ export default class CallManager {
         this.elements.dialBtn.style.opacity = '1';
         this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
         this.elements.dialBtn.style.transform = 'rotate(135deg)';
-        const statusText = this.debugMode ? '🎭 Demo Call Active' : 'Connected';
-        this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> ${statusText}`;
+        this.setCallPhase('ringing');
 
         // Show Disposition Grid and reset button states
         if (this.elements.callDispositionSection) {
