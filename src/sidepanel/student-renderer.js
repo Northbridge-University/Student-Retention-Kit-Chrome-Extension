@@ -158,6 +158,10 @@ export async function setActiveStudent(rawEntry, callManager) {
 
     if (elements.contactName) elements.contactName.textContent = data.name;
     if (elements.contactPhone) {
+        // Exit edit mode if the active student changes mid-edit
+        if (elements.contactPhone.contentEditable === 'true') {
+            elements.contactPhone.contentEditable = 'false';
+        }
         elements.contactPhone.textContent = displayPhone;
     }
 

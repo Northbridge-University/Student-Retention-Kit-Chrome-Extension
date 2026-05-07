@@ -1088,6 +1088,8 @@ function setupEventListeners() {
         elements.dialBtn.addEventListener('click', () => callManager.toggleCallState());
     }
 
+    setupPhoneEditing();
+
     if (elements.skipStudentBtn) {
         elements.skipStudentBtn.addEventListener('click', () => {
             if (callManager) {
@@ -1737,6 +1739,103 @@ function initializeDispositionButtons() {
             btn.style.cursor = 'pointer';
             btn.title = '';
         }
+    });
+}
+
+/**
+ * Formats a phone number string to dashed style.
+ * Accepts any input; strips non-digits, then:
+ *   - 10 digits        -> "XXX-XXX-XXXX"
+ *   - 11 digits (lead 1) -> "1-XXX-XXX-XXXX"
+ *   - 7 digits         -> "XXX-XXXX"
+ *   - anything else    -> null (treated as invalid by the caller)
+ * @param {string} input
+ * @returns {string|null}
+ */
+function formatPhoneNumber(input) {
+    if (!input) return null;
+    const digits = String(input).replace(/\D/g, '');
+    if (digits.length === 10) {
+        return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 11 && digits[0] === '1') {
+        return `1-${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 7) {
+        return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    }
+    return null;
+}
+
+/**
+ * Wires up click-to-edit on the contact phone number display.
+ *  - Click: enter text mode (only when a student is loaded and no call is in progress).
+ *  - Enter: confirm.
+ *  - Escape / blur with invalid input: revert to the previous value.
+ *  - Blur with valid input: format with dashes and update the student's directPhone
+ *    so the call dials the new number.
+ */
+function setupPhoneEditing() {
+    if (!elements.contactPhone) return;
+
+    let beforeEdit = '';
+
+    elements.contactPhone.addEventListener('click', () => {
+        if (elements.contactPhone.contentEditable === 'true') return;
+
+        const student = queueManager && queueManager.getCurrentStudent && queueManager.getCurrentStudent();
+        if (!student) return;
+
+        if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition())) {
+            return;
+        }
+
+        beforeEdit = elements.contactPhone.textContent.trim();
+        if (beforeEdit === 'No Phone Listed') {
+            elements.contactPhone.textContent = '';
+        }
+
+        elements.contactPhone.contentEditable = 'true';
+        elements.contactPhone.focus();
+
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(elements.contactPhone);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (_) { /* selection not supported in this context */ }
+    });
+
+    elements.contactPhone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            elements.contactPhone.blur();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            elements.contactPhone.textContent = beforeEdit || 'No Phone Listed';
+            elements.contactPhone.contentEditable = 'false';
+            elements.contactPhone.blur();
+        }
+    });
+
+    elements.contactPhone.addEventListener('blur', () => {
+        if (elements.contactPhone.contentEditable !== 'true') return;
+
+        const raw = elements.contactPhone.textContent.trim();
+        const formatted = formatPhoneNumber(raw);
+
+        if (formatted === null) {
+            // Invalid input — revert to the previous number
+            elements.contactPhone.textContent = beforeEdit || 'No Phone Listed';
+        } else {
+            elements.contactPhone.textContent = formatted;
+            const student = queueManager && queueManager.getCurrentStudent && queueManager.getCurrentStudent();
+            if (student) {
+                student.directPhone = formatted;
+            }
+        }
+        elements.contactPhone.contentEditable = 'false';
     });
 }
 
