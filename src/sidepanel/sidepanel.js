@@ -1101,7 +1101,7 @@ function setupEventListeners() {
         });
     }
 
-    // Previous Calls — click anywhere on a row (or its dial button) to redial
+    // Previous Calls — click a row to load that student's number into the dialer
     if (elements.previousCallsList) {
         elements.previousCallsList.addEventListener('click', (e) => {
             const row = e.target.closest('.previous-call-item');
@@ -1113,7 +1113,7 @@ function setupEventListeners() {
             const entry = entries[index];
             if (!entry) return;
 
-            callManager.redialFromHistory(entry);
+            callManager.loadFromHistory(entry);
         });
     }
 
@@ -1777,7 +1777,7 @@ function renderPreviousCalls(entries) {
         const phone = entry.directPhone || entry.phone || entry.Phone || entry.PrimaryPhone || '';
         const hasPhone = !!phone;
         const disabled = inActiveCall || !hasPhone;
-        const title = !hasPhone ? 'No phone number on file' : (inActiveCall ? 'Finish the current call first' : 'Click to dial back');
+        const title = !hasPhone ? 'No phone number on file' : (inActiveCall ? 'Finish the current call first' : 'Click to load this number');
         const timeText = formatPreviousCallTime(entry.timestamp);
         const safeName = (entry.name || 'Unknown Student')
             .replace(/&/g, '&amp;')
@@ -1791,9 +1791,6 @@ function renderPreviousCalls(entries) {
                     <span class="previous-call-name">${safeName}</span>
                     ${timeText ? `<span class="previous-call-time">${timeText}</span>` : ''}
                 </div>
-                <button class="previous-call-dial" title="${title}" tabindex="-1">
-                    <i class="fas fa-phone"></i>
-                </button>
             </div>
         `;
     }).join('');
