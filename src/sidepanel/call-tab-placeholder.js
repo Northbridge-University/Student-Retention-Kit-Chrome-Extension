@@ -418,7 +418,9 @@ export async function determineCallTabState(state = {}) {
         };
     }
 
-    // Check Five9 NO_TAB first - highest priority, shows regardless of student selection
+    // Five9 issues still take priority (shows regardless of student selection).
+    // The "No Student Selected" state is now rendered inline in the call section
+    // so users can manually enter a phone number, instead of blocking the UI.
     if (!debugMode) {
         const connectionState = await checkFive9ConnectionState();
 
@@ -429,32 +431,16 @@ export async function determineCallTabState(state = {}) {
             };
         }
 
-        // If no student is selected, show that message (second priority)
-        if (!hasStudentSelected) {
-            return {
-                showPlaceholder: true,
-                message: PLACEHOLDER_MESSAGES.NO_STUDENT_SELECTED
-            };
-        }
-
-        // Student is selected, check if awaiting connection
         if (connectionState === FIVE9_CONNECTION_STATES.AWAITING_CONNECTION) {
             return {
                 showPlaceholder: true,
                 message: PLACEHOLDER_MESSAGES.FIVE9_AWAITING_AGENT
             };
         }
-    } else {
-        // Debug mode - only check student selection
-        if (!hasStudentSelected) {
-            return {
-                showPlaceholder: true,
-                message: PLACEHOLDER_MESSAGES.NO_STUDENT_SELECTED
-            };
-        }
     }
 
-    // All checks passed - show the call section
+    // Show the call section. setActiveStudent renders the no-student state
+    // (greyed dial button + manual phone entry) when no student is loaded.
     return {
         showPlaceholder: false,
         message: null

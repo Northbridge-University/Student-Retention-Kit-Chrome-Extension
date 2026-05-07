@@ -83,11 +83,19 @@ export async function setActiveStudent(rawEntry, callManager) {
     const contactTab = document.getElementById('contact');
     if (!contactTab) return;
 
-    // Reset automation styles when switching (but not during active automation)
+    // Reset automation styles when switching (but not during active automation).
+    // Also reset any inline disable styling left behind by the no-student state
+    // so a freshly loaded student gets a working green dial button.
     if (!callManager?.automationMode) {
         if (elements.dialBtn) {
             elements.dialBtn.classList.remove('automation');
             elements.dialBtn.innerHTML = '<i class="fas fa-phone"></i>';
+            if (rawEntry) {
+                elements.dialBtn.disabled = false;
+                elements.dialBtn.style.cursor = 'pointer';
+                elements.dialBtn.style.opacity = '1';
+                elements.dialBtn.style.background = '';
+            }
         }
         if (callManager) {
             callManager.updateCallInterfaceState();
@@ -106,16 +114,24 @@ export async function setActiveStudent(rawEntry, callManager) {
         }
     }
 
-    // 1. Handle "No Student Selected" State - use unified placeholder system
+    // 1. Handle "No Student Selected" State.
+    // Five9 issues still show the placeholder; otherwise we render the section
+    // with a greyed dial button so the user can manually enter a number.
     if (!rawEntry) {
-        // Use cached debug mode to avoid async flash
         const debugMode = getCachedDebugMode();
 
-        // Update the call tab display with no student selected
         await updateCallTabDisplay({
             selectedQueue: [],
             debugMode: debugMode
         });
+
+        // If the placeholder is currently displayed (Five9 issue), don't render
+        // the no-student section underneath it.
+        if (elements.callTabPlaceholder && elements.callTabPlaceholder.style.display !== 'none') {
+            return;
+        }
+
+        renderNoStudentState();
         return;
     }
 
@@ -201,6 +217,48 @@ export async function setActiveStudent(rawEntry, callManager) {
 
 /**
  * Sets the automation mode UI with gray styling
+/**
+ * Renders the call section in the "No Student Selected" state. The contact card
+ * shows a generic avatar + "No Student Selected" header, the phone field is
+ * empty (and editable for manual entry), and the dial button is greyed out.
+ */
+function renderNoStudentState() {
+    if (elements.contactName) elements.contactName.textContent = 'No Student Selected';
+    if (elements.contactDetail) {
+        elements.contactDetail.textContent = '';
+        elements.contactDetail.style.display = 'none';
+    }
+    if (elements.contactPhone) {
+        if (elements.contactPhone.contentEditable === 'true') {
+            elements.contactPhone.contentEditable = 'false';
+        }
+        elements.contactPhone.textContent = '';
+    }
+    if (elements.contactAvatar) {
+        elements.contactAvatar.style.color = '#6b7280';
+        elements.contactAvatar.style.backgroundImage = 'none';
+        elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
+        elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+    }
+    if (elements.contactCard) {
+        elements.contactCard.style.borderLeftColor = '#9ca3af';
+    }
+    if (elements.dialBtn) {
+        elements.dialBtn.classList.remove('automation');
+        elements.dialBtn.innerHTML = '<i class="fas fa-phone"></i>';
+        elements.dialBtn.disabled = true;
+        elements.dialBtn.style.cursor = 'not-allowed';
+        elements.dialBtn.style.opacity = '0.5';
+        elements.dialBtn.style.background = '#9ca3af';
+        elements.dialBtn.style.transform = 'rotate(0deg)';
+    }
+    if (elements.upNextCard) elements.upNextCard.style.display = 'none';
+    if (elements.manageQueueBtn) elements.manageQueueBtn.style.display = 'none';
+    if (elements.callDispositionSection) elements.callDispositionSection.style.display = 'none';
+    if (elements.pauseAutomationBtn) elements.pauseAutomationBtn.style.display = 'none';
+}
+
+/**
  * @param {number} queueLength - Number of students in queue
  * @param {Array} [queue] - The full queue array, used to show "Up Next" preview
  */

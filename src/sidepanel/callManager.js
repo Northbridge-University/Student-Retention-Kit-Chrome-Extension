@@ -241,7 +241,7 @@ export default class CallManager {
             } else {
                 // Call fully completed (shouldn't normally happen without disposition)
                 this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`; // Turn green when ready
-                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
                 this.isCallActive = false;
                 this.waitingForDisposition = false;
             }
@@ -469,7 +469,7 @@ export default class CallManager {
         }
 
         if (this.elements.callStatusText) {
-            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
         }
 
         // Hide disposition section
@@ -587,7 +587,7 @@ export default class CallManager {
         }
 
         if (this.elements.callStatusText) {
-            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
         }
 
         // Hide disposition section
@@ -705,7 +705,7 @@ export default class CallManager {
         }
 
         if (this.elements.callStatusText) {
-            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
         }
 
         // Hide disposition section
@@ -936,7 +936,7 @@ export default class CallManager {
             this.elements.dialBtn.disabled = false;
             this.elements.dialBtn.style.cursor = 'pointer';
             this.elements.dialBtn.style.opacity = '1';
-            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
 
             // Hide Disposition Grid
             if (this.elements.callDispositionSection) {
@@ -1109,7 +1109,7 @@ export default class CallManager {
             } else {
                 // Five9 mode
                 this.elements.dialBtn.title = 'Live Mode - Calls via Five9 API';
-                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
             }
         }
     }
@@ -1325,7 +1325,7 @@ export default class CallManager {
                 this.elements.dialBtn.style.transform = 'rotate(0deg)';
             }
             if (this.elements.callStatusText) {
-                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Connect';
+                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
             }
 
             // Hide the Up Next card during the redial; restored via showPausedState/updateUpNextCard later.

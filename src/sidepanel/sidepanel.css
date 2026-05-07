@@ -406,6 +406,12 @@ input:focus, textarea:focus, select:focus {
     outline: none;
 }
 
+.phone-number-display:empty:not([contenteditable="true"])::before {
+    content: attr(data-empty-placeholder);
+    color: rgba(107, 114, 128, 0.6);
+    font-style: normal;
+}
+
 .other-contact-pill {
     display: inline-block;
     font-size: 0.85em;

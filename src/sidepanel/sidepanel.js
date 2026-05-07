@@ -1837,21 +1837,25 @@ async function findStudentByPhone(formattedPhone) {
 function setupPhoneEditing() {
     if (!elements.contactPhone) return;
 
+    // Discoverability: empty phone field shows this hint via CSS :empty + ::before.
+    elements.contactPhone.dataset.emptyPlaceholder = 'Enter phone number';
+
     let beforeEdit = '';
 
     elements.contactPhone.addEventListener('click', () => {
         if (elements.contactPhone.contentEditable === 'true') return;
 
-        if (!queueManager || queueManager.getLength() !== 1) return;
-        const student = queueManager.getCurrentStudent();
-        if (!student) return;
+        // Allow editing when zero or one student is loaded (zero = no-student state
+        // where the user is manually entering a number). Block multi-select queues.
+        if (!queueManager) return;
+        if (queueManager.getLength() > 1) return;
 
         if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition() || callManager.getAutomationModeState())) {
             return;
         }
 
         beforeEdit = elements.contactPhone.textContent.trim();
-        if (beforeEdit === 'No Phone Listed') {
+        if (beforeEdit === 'No Phone Listed' || beforeEdit === '') {
             elements.contactPhone.textContent = '';
         }
 
@@ -1875,7 +1879,7 @@ function setupPhoneEditing() {
         }
         if (e.key === 'Escape') {
             e.preventDefault();
-            elements.contactPhone.textContent = beforeEdit || 'No Phone Listed';
+            elements.contactPhone.textContent = beforeEdit;
             elements.contactPhone.contentEditable = 'false';
             elements.contactPhone.blur();
             return;
@@ -1911,8 +1915,8 @@ function setupPhoneEditing() {
         elements.contactPhone.contentEditable = 'false';
 
         if (formatted === null) {
-            // Invalid input — revert to the previous number
-            elements.contactPhone.textContent = beforeEdit || 'No Phone Listed';
+            // Invalid input — revert to the previous number (or empty for the no-student state)
+            elements.contactPhone.textContent = beforeEdit;
             return;
         }
 
