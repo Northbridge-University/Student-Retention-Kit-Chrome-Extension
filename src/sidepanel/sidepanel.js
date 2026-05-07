@@ -1,5 +1,5 @@
 // Sidepanel Main - Orchestrates all modules and manages app lifecycle
-import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES } from '../constants/index.js';
+import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES, GENERIC_AVATAR_URL } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
@@ -1787,9 +1787,14 @@ function renderPreviousCalls(entries) {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+        const hasPhoto = entry.Photo && entry.Photo !== GENERIC_AVATAR_URL;
+        const safePhoto = hasPhoto ? entry.Photo.replace(/'/g, '%27') : '';
+        const avatarInner = hasPhoto
+            ? `<div class="previous-call-avatar previous-call-avatar--photo" style="background-image:url('${safePhoto}');"></div>`
+            : `<div class="previous-call-avatar"><i class="fas fa-user"></i></div>`;
         return `
             <div class="previous-call-item${disabled ? ' disabled' : ''}" data-index="${index}" title="${title}">
-                <div class="previous-call-avatar"><i class="fas fa-user"></i></div>
+                ${avatarInner}
                 <div class="previous-call-info">
                     <span class="previous-call-name">${safeName}</span>
                     ${timeText ? `<span class="previous-call-time">${timeText}</span>` : ''}

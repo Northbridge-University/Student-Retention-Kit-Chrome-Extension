@@ -883,6 +883,13 @@ input:focus, textarea:focus, select:focus {
     flex-shrink: 0;
 }
 
+.previous-call-avatar--photo {
+    background-color: transparent;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
 .previous-call-info {
     flex-grow: 1;
     min-width: 0;
