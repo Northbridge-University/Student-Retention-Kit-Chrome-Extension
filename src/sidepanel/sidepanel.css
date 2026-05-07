@@ -611,6 +611,54 @@ input:focus, textarea:focus, select:focus {
     transition: background 0.15s, border-color 0.15s;
 }
 
+/* Pill-style toggle (used for Use Specific Submission Date and similar) */
+.toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    background: #cbd5e1;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.toggle-switch::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s;
+}
+
+.toggle-switch:hover {
+    background: #b7c2d3;
+}
+
+.toggle-switch.is-on {
+    background: var(--primary-color);
+}
+
+.toggle-switch.is-on:hover {
+    background: #004a82;
+}
+
+.toggle-switch.is-on::before {
+    transform: translateX(20px);
+}
+
+.toggle-switch:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 /* Subtle gray hover only on clickable cards, and only when they don't have
  * their own hover styling (e.g. Clear Master List / Report Issue use a red
  * destructive hover that should be left alone). */

@@ -560,13 +560,12 @@ function setupEventListeners() {
     // Specific Submission Date Toggle
     if (elements.useSpecificDateToggle) {
         elements.useSpecificDateToggle.addEventListener('click', async () => {
-            const isOn = elements.useSpecificDateToggle.classList.contains('fa-toggle-on');
+            const isOn = elements.useSpecificDateToggle.classList.contains('is-on');
             const newState = !isOn;
 
             // Update toggle visual
-            elements.useSpecificDateToggle.classList.toggle('fa-toggle-on', newState);
-            elements.useSpecificDateToggle.classList.toggle('fa-toggle-off', !newState);
-            elements.useSpecificDateToggle.style.color = newState ? '#22c55e' : 'gray';
+            elements.useSpecificDateToggle.classList.toggle('is-on', newState);
+            elements.useSpecificDateToggle.setAttribute('aria-pressed', newState ? 'true' : 'false');
 
             // Show/hide date picker
             if (elements.specificDatePicker) {
@@ -612,9 +611,8 @@ function setupEventListeners() {
 
             // Turn off the toggle
             if (elements.useSpecificDateToggle) {
-                elements.useSpecificDateToggle.classList.remove('fa-toggle-on');
-                elements.useSpecificDateToggle.classList.add('fa-toggle-off');
-                elements.useSpecificDateToggle.style.color = 'gray';
+                elements.useSpecificDateToggle.classList.remove('is-on');
+                elements.useSpecificDateToggle.setAttribute('aria-pressed', 'false');
             }
 
             // Hide the date picker
@@ -2158,9 +2156,8 @@ async function loadStorageData() {
     const specificDate = data[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
 
     if (elements.useSpecificDateToggle) {
-        elements.useSpecificDateToggle.classList.toggle('fa-toggle-on', useSpecificDate);
-        elements.useSpecificDateToggle.classList.toggle('fa-toggle-off', !useSpecificDate);
-        elements.useSpecificDateToggle.style.color = useSpecificDate ? '#22c55e' : 'gray';
+        elements.useSpecificDateToggle.classList.toggle('is-on', useSpecificDate);
+        elements.useSpecificDateToggle.setAttribute('aria-pressed', useSpecificDate ? 'true' : 'false');
     }
 
     if (elements.specificDatePicker) {
