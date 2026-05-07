@@ -55,6 +55,9 @@ export default class CallManager {
     setDebugMode(enabled) {
         this.debugMode = enabled;
         this.updateCallInterfaceState();
+        if (this.elements.demoModeBanner) {
+            this.elements.demoModeBanner.style.display = enabled ? '' : 'none';
+        }
     }
 
     /**
@@ -66,10 +69,6 @@ export default class CallManager {
      */
     setCallPhase(phase) {
         if (!this.elements.callStatusText) return;
-        if (this.debugMode) {
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> 🎭 Demo Call Active`;
-            return;
-        }
         if (phase === 'ringing') {
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING}; animation: blink 1s infinite;"></span> Ringing`;
         } else {
@@ -1102,15 +1101,13 @@ export default class CallManager {
         this.elements.dialBtn.style.cursor = 'pointer';
 
         if (!this.isCallActive) {
-            if (this.debugMode) {
-                // Demo mode
-                this.elements.dialBtn.title = 'Demo Mode - Simulates calling without Five9 API';
-                this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> 🎭 Demo Mode Active`;
-            } else {
-                // Five9 mode
-                this.elements.dialBtn.title = 'Live Mode - Calls via Five9 API';
-                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
-            }
+            // The status text reads "Ready to Dial" in both modes; the active
+            // mode is communicated via the demo banner (when on) and the dial
+            // button's tooltip.
+            this.elements.dialBtn.title = this.debugMode
+                ? 'Demo Mode - Simulates calling without Five9 API'
+                : 'Live Mode - Calls via Five9 API';
+            this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
         }
     }
 
