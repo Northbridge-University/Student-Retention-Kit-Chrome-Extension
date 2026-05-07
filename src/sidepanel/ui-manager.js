@@ -261,8 +261,10 @@ export function cacheDomElements() {
     // Connections Modal
     elements.connectionsModal = document.getElementById('connectionsModal');
     elements.closeConnectionsBtn = document.getElementById('closeConnectionsBtn');
+    // The configure entries are now click-anywhere setting cards (no separate
+    // Configure button), so configurePowerAutomateBtn aliases the parent card.
     elements.configureExcelBtn = document.getElementById('configureExcelBtn');
-    elements.configurePowerAutomateBtn = document.getElementById('configurePowerAutomateBtn');
+    elements.configurePowerAutomateBtn = document.getElementById('powerAutomateSettingCard');
     elements.configureCanvasBtn = document.getElementById('configureCanvasBtn');
     elements.configureFive9Btn = document.getElementById('configureFive9Btn');
     elements.connectionModalTitle = document.getElementById('connectionModalTitle');
