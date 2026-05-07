@@ -817,6 +817,119 @@ input:focus, textarea:focus, select:focus {
     border-color: rgba(234, 179, 8, 0.6);
 }
 
+/* Previous Calls Card */
+.previous-calls-card {
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 0.75rem;
+    padding: 10px 12px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.previous-calls-header {
+    font-size: 0.7em;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.previous-calls-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.previous-call-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.previous-call-item:hover:not(.disabled) {
+    background: white;
+    border-color: var(--primary-color);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.previous-call-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.previous-call-avatar {
+    width: 28px;
+    height: 28px;
+    background: #e0e7ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    font-size: 0.85em;
+    flex-shrink: 0;
+}
+
+.previous-call-info {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.previous-call-name {
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.previous-call-time {
+    font-size: 0.7em;
+    color: var(--text-secondary);
+}
+
+.previous-call-dial {
+    background: #10b981;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.75em;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.previous-call-item:hover:not(.disabled) .previous-call-dial {
+    background: #059669;
+    transform: scale(1.05);
+}
+
+.previous-call-item.disabled .previous-call-dial {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
 /* Context Menu */
 .context-menu {
     position: absolute;

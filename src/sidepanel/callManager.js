@@ -25,6 +25,16 @@ export default class CallManager {
         this.waitingForDisposition = false; // Track if call ended but waiting for disposition
         this._dispositionInProgress = false; // Guard against double-clicks during disposition
         this.isPaused = false; // Track if automation is paused between calls
+        this.previousCalls = []; // Last few completed calls (most recent first), capped at MAX_PREVIOUS_CALLS
+        this._redialingFromHistory = false; // True while a previous-calls redial is in flight
+        this._currentCallStudent = null; // Snapshot of who the active call is for (used to log to history)
+    }
+
+    /**
+     * Maximum number of entries to keep in the Previous Calls list
+     */
+    static get MAX_PREVIOUS_CALLS() {
+        return 3;
     }
 
     /**
@@ -144,8 +154,9 @@ export default class CallManager {
             this.waitingForDisposition = false;
 
             // --- INITIATE FIVE9 CALL (ONLY IF DEBUG MODE OFF) ---
+            const currentStudent = this.selectedQueue[0];
+            this._currentCallStudent = currentStudent || null;
             if (!this.debugMode) {
-                const currentStudent = this.selectedQueue[0];
                 if (currentStudent) {
                     const phoneNumber = this.getPhoneNumber(currentStudent);
                     if (phoneNumber && phoneNumber !== "No Phone Listed") {
@@ -170,6 +181,7 @@ export default class CallManager {
             }
 
             this.startCallTimer();
+            this.refreshPreviousCallsUI();
         } else {
             // Call is ending - show "Ending call" status
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
@@ -285,6 +297,7 @@ export default class CallManager {
         // Update current index to the next non-skipped student
         this.currentAutomationIndex = nextIndex;
         const currentStudent = this.selectedQueue[this.currentAutomationIndex];
+        this._currentCallStudent = currentStudent;
 
         // Update UI to show current student
         if (this.uiCallbacks.updateCurrentStudent) {
@@ -324,6 +337,7 @@ export default class CallManager {
         }
 
         this.startCallTimer();
+        this.refreshPreviousCallsUI();
     }
 
     /**
@@ -524,6 +538,8 @@ export default class CallManager {
         // End the current call
         this.isCallActive = false;
         this._dispositionInProgress = false;
+        this._redialingFromHistory = false;
+        this._currentCallStudent = null;
         this.stopCallTimer();
         this.stopDispositionTimer();
 
@@ -570,6 +586,8 @@ export default class CallManager {
         if (currentStudent && this.uiCallbacks.cancelAutomation) {
             this.uiCallbacks.cancelAutomation(currentStudent);
         }
+
+        this.refreshPreviousCallsUI();
 
         // Focus Five9 tab for disposition (only in non-demo mode)
         if (!this.debugMode) {
@@ -685,8 +703,24 @@ export default class CallManager {
         // Update last call timestamp
         await this.updateLastCallTimestamp();
 
+        // Add to previous-calls history
+        this.addToPreviousCalls(this._currentCallStudent);
+        this._currentCallStudent = null;
+        this.refreshPreviousCallsUI();
+
         // If in automation mode, move to next student
         if (this.automationMode) {
+            // If this was a redial from history, don't advance the queue index
+            if (this._redialingFromHistory) {
+                this._redialingFromHistory = false;
+                const queueStudent = this.selectedQueue[this.currentAutomationIndex];
+                if (queueStudent && this.uiCallbacks.updateCurrentStudent) {
+                    this.uiCallbacks.updateCurrentStudent(queueStudent);
+                }
+                this.showPausedState();
+                return;
+            }
+
             this.currentAutomationIndex++;
 
             // Check if paused — wait instead of calling next
@@ -836,17 +870,35 @@ export default class CallManager {
         // Update last call timestamp
         await this.updateLastCallTimestamp();
 
+        // Add to previous-calls history
+        this.addToPreviousCalls(this._currentCallStudent);
+
         // Clear waiting for disposition flag
         this.waitingForDisposition = false;
 
         // Check if in automation mode
         if (this.automationMode) {
+            // If this call was a redial from history, don't advance the queue index;
+            // restore the active student card to the queue's current student and pause.
+            if (this._redialingFromHistory) {
+                this._redialingFromHistory = false;
+                const queueStudent = this.selectedQueue[this.currentAutomationIndex];
+                if (queueStudent && this.uiCallbacks.updateCurrentStudent) {
+                    this.uiCallbacks.updateCurrentStudent(queueStudent);
+                }
+                this.showPausedState();
+                this._currentCallStudent = null;
+                this._dispositionInProgress = false;
+                return;
+            }
+
             // Move to next student
             this.currentAutomationIndex++;
 
             // Check if paused — wait instead of calling next
             if (this.isPaused) {
                 this.showPausedState();
+                this._currentCallStudent = null;
                 this._dispositionInProgress = false;
                 return;
             }
@@ -880,7 +932,10 @@ export default class CallManager {
         }
 
         // Clear the disposition-in-progress guard
+        this._currentCallStudent = null;
         this._dispositionInProgress = false;
+
+        this.refreshPreviousCallsUI();
     }
 
     /**
@@ -1112,6 +1167,143 @@ export default class CallManager {
     }
 
     /**
+     * Adds a student to the previous calls history (most recent first).
+     * Trims to MAX_PREVIOUS_CALLS and notifies the UI to re-render.
+     * @param {Object} student - The student that was just called
+     */
+    addToPreviousCalls(student) {
+        if (!student) return;
+
+        const entry = {
+            name: student.name || student.nameOriginal || 'Unknown Student',
+            nameOriginal: student.nameOriginal || student.name || null,
+            directPhone: student.directPhone || null,
+            phone: student.phone || null,
+            Phone: student.Phone || null,
+            PrimaryPhone: student.PrimaryPhone || null,
+            Photo: student.Photo || null,
+            timestamp: Date.now()
+        };
+
+        // Remove any existing entry with the same name (move-to-front behavior)
+        this.previousCalls = this.previousCalls.filter(p => p.name !== entry.name);
+
+        // Insert at the front
+        this.previousCalls.unshift(entry);
+
+        // Trim
+        if (this.previousCalls.length > CallManager.MAX_PREVIOUS_CALLS) {
+            this.previousCalls = this.previousCalls.slice(0, CallManager.MAX_PREVIOUS_CALLS);
+        }
+
+        this.refreshPreviousCallsUI();
+    }
+
+    /**
+     * Returns a copy of the current previous-calls list
+     * @returns {Array}
+     */
+    getPreviousCalls() {
+        return this.previousCalls.slice();
+    }
+
+    /**
+     * Re-renders the previous calls card. Used after call-state transitions so the
+     * disabled state of the dial-back rows stays accurate.
+     */
+    refreshPreviousCallsUI() {
+        if (this.uiCallbacks.renderPreviousCalls) {
+            this.uiCallbacks.renderPreviousCalls(this.previousCalls);
+        }
+    }
+
+    /**
+     * Redials a student from the previous calls history.
+     * - If a call is active or disposition is being processed, this is a no-op.
+     * - If automation mode is active, the queue stays intact and the redial is treated
+     *   as an out-of-band call: automation is paused so it doesn't auto-advance after
+     *   the redial's disposition. The user resumes automation manually.
+     * - If automation is not active, replaces the queue with the redialed student
+     *   and dials normally.
+     * @param {Object} historicEntry - The student snapshot from previousCalls
+     */
+    async redialFromHistory(historicEntry) {
+        if (!historicEntry) return;
+
+        // Don't redial while a call is in progress or disposition is being set
+        if (this.isCallActive || this.waitingForDisposition || this._dispositionInProgress) {
+            console.log('[CallManager] Ignoring redial — a call is already in progress');
+            return;
+        }
+
+        const phoneNumber = this.getPhoneNumber(historicEntry);
+        if (!phoneNumber || phoneNumber === "No Phone Listed") {
+            console.warn(`[CallManager] Cannot redial ${historicEntry.name}: no phone number`);
+            return;
+        }
+
+        if (this.automationMode) {
+            // Pause automation so the queue doesn't advance after this redial's disposition
+            this.isPaused = true;
+            this._redialingFromHistory = true;
+
+            if (this.elements.pauseAutomationBtn) {
+                this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-play"></i> Resume Automation';
+                this.elements.pauseAutomationBtn.classList.add('paused');
+            }
+
+            // Update the contact card to show the redialed student
+            if (this.uiCallbacks.updateCurrentStudent) {
+                this.uiCallbacks.updateCurrentStudent(historicEntry);
+            }
+
+            this._currentCallStudent = historicEntry;
+
+            // Initiate the call
+            if (!this.debugMode) {
+                this.initiateCall(phoneNumber);
+            } else {
+                console.log(`📞 [DEMO MODE] Simulating redial to: ${historicEntry.name || 'Unknown'}`);
+            }
+
+            // Set call active state (mirrors callNextStudentInQueue)
+            this.isCallActive = true;
+            this.waitingForDisposition = false;
+            if (this.elements.dialBtn) {
+                this.elements.dialBtn.disabled = false;
+                this.elements.dialBtn.style.cursor = 'pointer';
+                this.elements.dialBtn.style.opacity = '1';
+                this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
+                this.elements.dialBtn.style.transform = 'rotate(135deg)';
+            }
+            this.setCallPhase('ringing');
+
+            // Show Disposition Grid and reset button states
+            if (this.elements.callDispositionSection) {
+                this.elements.callDispositionSection.style.display = 'flex';
+                this.resetDispositionButtons();
+            }
+
+            // Hide the Up Next card during the redial; it will be restored when
+            // automation resumes (showPausedState calls updateUpNextCard).
+            if (this.elements.upNextCard) {
+                this.elements.upNextCard.style.display = 'none';
+            }
+
+            this.startCallTimer();
+            this.refreshPreviousCallsUI();
+        } else {
+            // Not in automation: replace the queue with this single student and dial
+            if (this.uiCallbacks.cancelAutomation) {
+                this.uiCallbacks.cancelAutomation(historicEntry);
+            }
+
+            // Wait a tick for the UI to settle, then dial
+            setTimeout(() => this.toggleCallState(), 0);
+        }
+    }
+
+    /**
      * Force-ends the current call with a default disposition.
      * Used when the ribbon sends a new student while a call is active.
      * @param {string} [disposition="No Answer"] - The disposition to use
@@ -1135,6 +1327,9 @@ export default class CallManager {
             }
         }
 
+        // Drop any in-flight redial-from-history flag so dispose runs the regular path
+        this._redialingFromHistory = false;
+
         // Allow forceEndCall to bypass the disposition guard since it's internal
         this._dispositionInProgress = false;
 
@@ -1150,5 +1345,8 @@ export default class CallManager {
         this.stopDispositionTimer();
         this.selectedQueue = [];
         this.isCallActive = false;
+        this.previousCalls = [];
+        this._redialingFromHistory = false;
+        this._currentCallStudent = null;
     }
 }

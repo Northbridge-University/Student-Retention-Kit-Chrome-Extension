@@ -214,6 +214,9 @@ async function initializeApp() {
         cancelAutomation: (currentStudent) => {
             queueManager.setQueue([currentStudent]);
             setActiveStudent(currentStudent, callManager);
+        },
+        renderPreviousCalls: (entries) => {
+            renderPreviousCalls(entries);
         }
     };
     callManager = new CallManager(elements, uiCallbacks);
@@ -1098,6 +1101,22 @@ function setupEventListeners() {
         });
     }
 
+    // Previous Calls — click anywhere on a row (or its dial button) to redial
+    if (elements.previousCallsList) {
+        elements.previousCallsList.addEventListener('click', (e) => {
+            const row = e.target.closest('.previous-call-item');
+            if (!row || !callManager) return;
+            if (row.classList.contains('disabled')) return;
+
+            const index = parseInt(row.dataset.index, 10);
+            const entries = callManager.getPreviousCalls();
+            const entry = entries[index];
+            if (!entry) return;
+
+            callManager.redialFromHistory(entry);
+        });
+    }
+
     // Disposition buttons
     const dispositionContainer = document.querySelector('.disposition-grid');
     if (dispositionContainer) {
@@ -1716,6 +1735,71 @@ function initializeDispositionButtons() {
             btn.title = '';
         }
     });
+}
+
+/**
+ * Formats a previous-call timestamp for display (today: time, otherwise short date)
+ * @param {number} ts - Unix timestamp in ms
+ */
+function formatPreviousCallTime(ts) {
+    if (!ts) return '';
+    const now = new Date();
+    const d = new Date(ts);
+    if (now.toDateString() === d.toDateString()) {
+        let h = d.getHours();
+        const m = d.getMinutes().toString().padStart(2, '0');
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+    }
+    const mo = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${mo}-${day}`;
+}
+
+/**
+ * Renders the Previous Calls card with the given entries.
+ * Hides the card when there are no entries.
+ * @param {Array} entries - Recent call entries (most recent first)
+ */
+function renderPreviousCalls(entries) {
+    if (!elements.previousCallsCard || !elements.previousCallsList) return;
+
+    if (!entries || entries.length === 0) {
+        elements.previousCallsCard.style.display = 'none';
+        elements.previousCallsList.innerHTML = '';
+        return;
+    }
+
+    const inActiveCall = !!(callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition()));
+
+    const html = entries.map((entry, index) => {
+        const phone = entry.directPhone || entry.phone || entry.Phone || entry.PrimaryPhone || '';
+        const hasPhone = !!phone;
+        const disabled = inActiveCall || !hasPhone;
+        const title = !hasPhone ? 'No phone number on file' : (inActiveCall ? 'Finish the current call first' : 'Click to dial back');
+        const timeText = formatPreviousCallTime(entry.timestamp);
+        const safeName = (entry.name || 'Unknown Student')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        return `
+            <div class="previous-call-item${disabled ? ' disabled' : ''}" data-index="${index}" title="${title}">
+                <div class="previous-call-avatar"><i class="fas fa-user"></i></div>
+                <div class="previous-call-info">
+                    <span class="previous-call-name">${safeName}</span>
+                    ${timeText ? `<span class="previous-call-time">${timeText}</span>` : ''}
+                </div>
+                <button class="previous-call-dial" title="${title}" tabindex="-1">
+                    <i class="fas fa-phone"></i>
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    elements.previousCallsList.innerHTML = html;
+    elements.previousCallsCard.style.display = 'flex';
 }
 
 /**

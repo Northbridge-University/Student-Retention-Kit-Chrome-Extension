@@ -45,6 +45,10 @@ export function cacheDomElements() {
     elements.skipStudentBtn = document.getElementById('skipStudentBtn');
     elements.pauseAutomationBtn = document.getElementById('pauseAutomationBtn');
 
+    // Call Tab - Previous Calls Card
+    elements.previousCallsCard = document.getElementById('previousCallsCard');
+    elements.previousCallsList = document.getElementById('previousCallsList');
+
     // Call Tab - Student Card & Placeholder Logic
     const contactTab = document.getElementById('contact');
     if (contactTab) {

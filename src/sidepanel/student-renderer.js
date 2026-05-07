@@ -136,16 +136,6 @@ export async function setActiveStudent(rawEntry, callManager) {
 
     const data = resolveStudentData(rawEntry, reformatEnabled);
 
-    // Generate initials from name
-    const nameParts = data.name.trim().split(/\s+/);
-    let initials = '';
-    if (nameParts.length > 0) {
-        const firstInitial = nameParts[0][0] || '';
-        const lastInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : '';
-        initials = (firstInitial + lastInitial).toUpperCase();
-        if (!initials) initials = '?';
-    }
-
     const displayPhone = data.phone ? data.phone : "No Phone Listed";
 
     // AVATAR LOGIC
@@ -153,14 +143,16 @@ export async function setActiveStudent(rawEntry, callManager) {
         elements.contactAvatar.style.color = '';
         if (data.Photo && data.Photo !== GENERIC_AVATAR_URL) {
             elements.contactAvatar.textContent = '';
+            elements.contactAvatar.innerHTML = '';
             elements.contactAvatar.style.backgroundImage = `url('${data.Photo}')`;
             elements.contactAvatar.style.backgroundSize = 'cover';
             elements.contactAvatar.style.backgroundPosition = 'center';
             elements.contactAvatar.style.backgroundColor = 'transparent';
         } else {
             elements.contactAvatar.style.backgroundImage = 'none';
-            elements.contactAvatar.textContent = initials;
+            elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
             elements.contactAvatar.style.backgroundColor = '#e0e7ff';
+            elements.contactAvatar.style.color = 'var(--primary-color)';
         }
     }
 

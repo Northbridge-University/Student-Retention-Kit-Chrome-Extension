@@ -66,7 +66,7 @@
         
         <div class="setting-card" style="margin-bottom: 15px; border-left: 4px solid #10b981;">
             <div style="display:flex; align-items:center; gap:12px;">
-                 <div style="width:40px; height:40px; background:#e0e7ff; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--primary-color); font-weight:bold; font-size: 0.9em;">JD</div>
+                 <div style="width:40px; height:40px; background:#e0e7ff; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--primary-color); font-size: 1.1em;"><i class="fas fa-user"></i></div>
                  <div>
                      <div style="font-weight:bold; color: #1a202c;">Doe, Jane</div>
                      <div style="font-size:0.8em; color:var(--text-secondary);">Parent: Mrs. Doe</div>
@@ -151,6 +151,15 @@
         <button id="pauseAutomationBtn" class="pause-automation-btn" style="display:none;">
             <i class="fas fa-pause"></i> Pause After This Call
         </button>
+
+        <div id="previousCallsCard" class="previous-calls-card" style="display:none;">
+            <div class="previous-calls-header">
+                <i class="fas fa-history"></i> Previous Calls
+            </div>
+            <div id="previousCallsList" class="previous-calls-list">
+                <!-- Items populated dynamically -->
+            </div>
+        </div>
 
       </div>
     </div>
