@@ -97,6 +97,12 @@ export async function setActiveStudent(rawEntry, callManager) {
                 elements.dialBtn.style.background = '';
             }
         }
+        // Restore the status bar + timer visibility when a student loads;
+        // they're hidden (but still take layout space) in the no-student state.
+        if (rawEntry) {
+            if (elements.callStatusText) elements.callStatusText.style.visibility = '';
+            if (elements.callTimer) elements.callTimer.style.visibility = '';
+        }
         if (callManager) {
             callManager.updateCallInterfaceState();
 
@@ -252,6 +258,10 @@ function renderNoStudentState() {
         elements.dialBtn.style.background = '#9ca3af';
         elements.dialBtn.style.transform = 'rotate(0deg)';
     }
+    // Hide (but reserve the space for) the call status text and timer so the
+    // call interface card doesn't shift around when a student loads.
+    if (elements.callStatusText) elements.callStatusText.style.visibility = 'hidden';
+    if (elements.callTimer) elements.callTimer.style.visibility = 'hidden';
     if (elements.upNextCard) elements.upNextCard.style.display = 'none';
     if (elements.manageQueueBtn) elements.manageQueueBtn.style.display = 'none';
     if (elements.callDispositionSection) elements.callDispositionSection.style.display = 'none';
