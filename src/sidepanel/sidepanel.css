@@ -389,7 +389,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .phone-number-display:hover:not([contenteditable="true"]) {
-    border-color: #9ca3af;
+    border-color: rgba(156, 163, 175, 0.5);
     background: rgba(255, 255, 255, 0.4);
 }
 

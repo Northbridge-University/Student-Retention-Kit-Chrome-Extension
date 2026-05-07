@@ -1811,11 +1811,34 @@ function setupPhoneEditing() {
         if (e.key === 'Enter') {
             e.preventDefault();
             elements.contactPhone.blur();
-        } else if (e.key === 'Escape') {
+            return;
+        }
+        if (e.key === 'Escape') {
             e.preventDefault();
             elements.contactPhone.textContent = beforeEdit || 'No Phone Listed';
             elements.contactPhone.contentEditable = 'false';
             elements.contactPhone.blur();
+            return;
+        }
+
+        // Allow modifier combos (copy/paste/select-all/etc.)
+        if (e.ctrlKey || e.metaKey) return;
+        // Allow non-printable keys (arrows, Backspace, Tab, etc. — all have length > 1)
+        if (e.key.length > 1) return;
+        // Allow digits and common phone-format characters; block everything else (letters, etc.)
+        if (!/^[0-9+\-\s().]$/.test(e.key)) {
+            e.preventDefault();
+        }
+    });
+
+    // Sanitize pasted text: keep only digits and phone-format characters
+    elements.contactPhone.addEventListener('paste', (e) => {
+        if (elements.contactPhone.contentEditable !== 'true') return;
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
+        const cleaned = pasted.replace(/[^0-9+\-\s().]/g, '');
+        if (cleaned) {
+            document.execCommand('insertText', false, cleaned);
         }
     });
 
