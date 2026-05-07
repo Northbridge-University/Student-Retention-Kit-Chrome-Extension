@@ -106,6 +106,44 @@ export function updateImportStatus(statusData) {
     }
 
     switch (status) {
+        case 'awaiting_confirmation':
+            // Master List sheet is missing — the add-in has opened a confirmation
+            // dialog in Excel and is waiting for the user. Show a paused/waiting
+            // state instead of letting the previous step look stuck or complete.
+            setStatusIcon('hourglass-half', '#d29922');
+            setStatusText(
+                'Waiting for confirmation',
+                message || 'Confirm in the Excel dialog to create a Master List sheet.'
+            );
+            // Mark the current active step as paused (visually distinct from error/completed)
+            const waitingActiveStep = elements.importStatusSteps?.querySelector('.import-step.active');
+            if (waitingActiveStep) {
+                waitingActiveStep.classList.remove('active');
+                waitingActiveStep.classList.add('pending');
+                const icon = waitingActiveStep.querySelector('.import-step-icon');
+                if (icon) {
+                    icon.className = 'fas fa-hourglass-half import-step-icon';
+                    icon.style.fontSize = '0.75em';
+                }
+            }
+            break;
+
+        case 'cancelled':
+            setStatusIcon('ban', '#6c757d');
+            setStatusText('Import cancelled', message || 'No Master List sheet was created.');
+            // Mark the current active step as skipped
+            const cancelledActiveStep = elements.importStatusSteps?.querySelector('.import-step.active');
+            if (cancelledActiveStep) {
+                cancelledActiveStep.classList.remove('active');
+                cancelledActiveStep.classList.add('skipped');
+                const icon = cancelledActiveStep.querySelector('.import-step-icon');
+                if (icon) {
+                    icon.className = 'fas fa-minus-circle import-step-icon';
+                    icon.style.fontSize = '0.7em';
+                }
+            }
+            break;
+
         case 'received':
             setStatusIcon('spinner', '#217346');
             setStatusText('Excel received payload', message || 'Validating data...');
