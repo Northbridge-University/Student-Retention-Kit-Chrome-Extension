@@ -62,7 +62,7 @@ export function cacheDomElements() {
         if (!callTabPlaceholder) {
             callTabPlaceholder = document.createElement('div');
             callTabPlaceholder.id = 'callTabPlaceholder';
-            callTabPlaceholder.style.cssText = 'display:none; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:80px; height:100%; min-height:400px; color:#9ca3af; text-align:center; padding-left:20px; padding-right:20px;';
+            callTabPlaceholder.style.cssText = 'display:none; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:80px; flex: 1 1 auto; min-height:0; color:#9ca3af; text-align:center; padding-left:20px; padding-right:20px;';
             // Default content - will be updated dynamically
             callTabPlaceholder.innerHTML = `
                 <i class="fas fa-user-graduate" style="font-size:3em; margin-bottom:15px; opacity:0.5;"></i>
