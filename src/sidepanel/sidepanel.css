@@ -600,7 +600,8 @@ input:focus, textarea:focus, select:focus {
 .fa-spinner { animation: spin 1s linear infinite; }
 
 .setting-card {
-    background: rgba(243, 244, 246, 0.7);
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(0, 0, 0, 0.04);
     border-radius: 0.75rem;
     padding: 12px;
     margin-bottom: 10px;
@@ -848,13 +849,13 @@ input:focus, textarea:focus, select:focus {
 
 /* Previous Calls Card — pinned to the bottom of the Call tab */
 .previous-calls-card {
-    background: rgba(243, 244, 246, 0.7);
+    background: rgba(255, 255, 255, 0.55);
     border-radius: 0.75rem;
     padding: 10px 12px;
     margin-top: 10px;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.04);
     flex-shrink: 0;
 }
 
