@@ -611,7 +611,11 @@ input:focus, textarea:focus, select:focus {
     transition: background 0.15s, border-color 0.15s;
 }
 
-.setting-card:hover {
+/* Subtle gray hover only on clickable cards, and only when they don't have
+ * their own hover styling (e.g. Clear Master List / Report Issue use a red
+ * destructive hover that should be left alone). */
+.setting-card[style*="cursor: pointer"]:not(#clearMasterListBtn):not(#reportIssueBtn):hover,
+.setting-card[style*="cursor:pointer"]:not(#clearMasterListBtn):not(#reportIssueBtn):hover {
     background: rgba(229, 231, 235, 0.6);
     border-color: rgba(0, 0, 0, 0.08);
 }
