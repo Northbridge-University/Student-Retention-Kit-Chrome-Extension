@@ -860,7 +860,7 @@ input:focus, textarea:focus, select:focus {
 
 .previous-call-item:hover:not(.disabled) {
     background: white;
-    border-color: var(--primary-color);
+    border-color: #9ca3af;
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
@@ -873,12 +873,12 @@ input:focus, textarea:focus, select:focus {
 .previous-call-avatar {
     width: 28px;
     height: 28px;
-    background: #e0e7ff;
+    background: #e5e7eb;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--primary-color);
+    color: #6b7280;
     font-size: 0.85em;
     flex-shrink: 0;
 }

@@ -151,8 +151,8 @@ export async function setActiveStudent(rawEntry, callManager) {
         } else {
             elements.contactAvatar.style.backgroundImage = 'none';
             elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
-            elements.contactAvatar.style.backgroundColor = '#e0e7ff';
-            elements.contactAvatar.style.color = 'var(--primary-color)';
+            elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+            elements.contactAvatar.style.color = '#6b7280';
         }
     }
 
