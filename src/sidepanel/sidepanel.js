@@ -170,6 +170,19 @@ let isDebugMode = false;
 // filter was saved yet). Saving while this is true auto-starts the scan so the
 // user doesn't have to click Start a second time.
 let pendingAutoStartAfterFilterSave = false;
+
+// Download button state: disabled while in cooldown OR when the master list is
+// empty (nothing to export). refreshDownloadButtonState() applies both.
+let downloadCooldownActive = false;
+let masterListIsEmpty = true;
+function refreshDownloadButtonState() {
+    if (!elements.downloadMasterBtn) return;
+    const disabled = downloadCooldownActive || masterListIsEmpty;
+    elements.downloadMasterBtn.disabled = disabled;
+    elements.downloadMasterBtn.title = masterListIsEmpty
+        ? 'No data to download — update the master list first'
+        : (downloadCooldownActive ? 'Please wait before downloading again' : 'Download CSV');
+}
 let embedHelperEnabled = true;
 let highlightColor = '#ffff00';
 
@@ -1690,11 +1703,13 @@ function setupEventListeners() {
         elements.downloadMasterBtn.addEventListener('click', async () => {
             if (elements.downloadMasterBtn.disabled) return;
 
-            elements.downloadMasterBtn.disabled = true;
+            downloadCooldownActive = true;
+            refreshDownloadButtonState();
             if (downloadCooldownTimer) clearTimeout(downloadCooldownTimer);
             downloadCooldownTimer = setTimeout(() => {
-                elements.downloadMasterBtn.disabled = false;
+                downloadCooldownActive = false;
                 downloadCooldownTimer = null;
+                refreshDownloadButtonState();
             }, DOWNLOAD_COOLDOWN_MS);
 
             try {
@@ -2091,6 +2106,10 @@ async function loadStorageData() {
     // Update Start button based on master list (gradebook links check)
     updateStartButtonForMasterList();
 
+    // Disable Download when there's nothing to export
+    masterListIsEmpty = masterEntries.length === 0;
+    refreshDownloadButtonState();
+
     if (elements.lastUpdatedText && data[STORAGE_KEYS.LAST_UPDATED]) {
         elements.lastUpdatedText.textContent = data[STORAGE_KEYS.LAST_UPDATED];
     }
@@ -2163,6 +2182,9 @@ chrome.storage.local.onChanged.addListener((changes) => {
         updateCampusFilter(newMasterEntries);
         // Update Start button based on master list (gradebook links check)
         updateStartButtonForMasterList();
+        // Disable Download when there's nothing to export
+        masterListIsEmpty = newMasterEntries.length === 0;
+        refreshDownloadButtonState();
     }
 
     // Handle name format toggle changes - re-render all displays
