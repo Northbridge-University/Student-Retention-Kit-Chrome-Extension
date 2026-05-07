@@ -608,6 +608,12 @@ input:focus, textarea:focus, select:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.setting-card:hover {
+    background: rgba(229, 231, 235, 0.6);
+    border-color: rgba(0, 0, 0, 0.08);
 }
 
 #clearMasterListBtn:hover,
