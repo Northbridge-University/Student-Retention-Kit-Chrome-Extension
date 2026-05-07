@@ -1768,12 +1768,36 @@ function formatPhoneNumber(input) {
 }
 
 /**
+ * Looks up a student in the master list whose phone digits match the given number.
+ * Compares digits-only versions so format differences are ignored.
+ * @param {string} formattedPhone
+ * @returns {Promise<Object|null>}
+ */
+async function findStudentByPhone(formattedPhone) {
+    const targetDigits = String(formattedPhone || '').replace(/\D/g, '');
+    if (!targetDigits) return null;
+
+    try {
+        const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+        const students = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
+        return students.find(s => {
+            const candidates = [s.directPhone, s.phone, s.Phone, s.PrimaryPhone].filter(Boolean);
+            return candidates.some(p => String(p).replace(/\D/g, '') === targetDigits);
+        }) || null;
+    } catch (err) {
+        console.warn('[Phone Lookup] Failed to read master list:', err);
+        return null;
+    }
+}
+
+/**
  * Wires up click-to-edit on the contact phone number display.
- *  - Click: enter text mode (only when a student is loaded and no call is in progress).
+ *  - Click: enter text mode (only when a single student is loaded and no call is in progress).
  *  - Enter: confirm.
  *  - Escape / blur with invalid input: revert to the previous value.
- *  - Blur with valid input: format with dashes and update the student's directPhone
- *    so the call dials the new number.
+ *  - Blur with valid input: format with dashes, then look up the new number in the
+ *    master list. If a student is found, that student is loaded into the contact
+ *    card; otherwise an "Unknown" entry is shown so the call still dials the number.
  */
 function setupPhoneEditing() {
     if (!elements.contactPhone) return;
@@ -1783,10 +1807,11 @@ function setupPhoneEditing() {
     elements.contactPhone.addEventListener('click', () => {
         if (elements.contactPhone.contentEditable === 'true') return;
 
-        const student = queueManager && queueManager.getCurrentStudent && queueManager.getCurrentStudent();
+        if (!queueManager || queueManager.getLength() !== 1) return;
+        const student = queueManager.getCurrentStudent();
         if (!student) return;
 
-        if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition())) {
+        if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition() || callManager.getAutomationModeState())) {
             return;
         }
 
@@ -1842,23 +1867,36 @@ function setupPhoneEditing() {
         }
     });
 
-    elements.contactPhone.addEventListener('blur', () => {
+    elements.contactPhone.addEventListener('blur', async () => {
         if (elements.contactPhone.contentEditable !== 'true') return;
 
         const raw = elements.contactPhone.textContent.trim();
         const formatted = formatPhoneNumber(raw);
 
+        elements.contactPhone.contentEditable = 'false';
+
         if (formatted === null) {
             // Invalid input — revert to the previous number
             elements.contactPhone.textContent = beforeEdit || 'No Phone Listed';
-        } else {
-            elements.contactPhone.textContent = formatted;
-            const student = queueManager && queueManager.getCurrentStudent && queueManager.getCurrentStudent();
-            if (student) {
-                student.directPhone = formatted;
-            }
+            return;
         }
-        elements.contactPhone.contentEditable = 'false';
+
+        elements.contactPhone.textContent = formatted;
+        if (!queueManager) return;
+
+        // Look up the new number in the master list.
+        const found = await findStudentByPhone(formatted);
+        if (found) {
+            // Clone so we don't mutate the master list entry; force the formatted phone
+            // so the contact card and dial use the dashed version.
+            queueManager.setQueue([{ ...found, directPhone: formatted }]);
+        } else {
+            queueManager.setQueue([{
+                name: 'Unknown',
+                directPhone: formatted,
+                phone: formatted
+            }]);
+        }
     });
 }
 
