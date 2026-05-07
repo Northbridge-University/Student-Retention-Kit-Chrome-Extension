@@ -712,9 +712,9 @@ export async function updateFive9Status() {
 
         if (callDemoEnabled) {
             elements.five9StatusText.textContent = 'Demo Mode';
-            elements.five9StatusText.style.color = '#8b5cf6';
+            elements.five9StatusText.style.color = '#6b7280';
             if (elements.five9StatusDot) {
-                elements.five9StatusDot.style.backgroundColor = '#8b5cf6';
+                elements.five9StatusDot.style.backgroundColor = '#6b7280';
                 elements.five9StatusDot.title = 'Call Demo mode is active - Five9 connection not required';
             }
             return;
