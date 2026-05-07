@@ -66,7 +66,7 @@
         
         <div class="setting-card" style="margin-bottom: 15px; border-left: 4px solid #10b981;">
             <div style="display:flex; align-items:center; gap:12px;">
-                 <div style="width:40px; height:40px; background:#e0e7ff; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--primary-color); font-weight:bold; font-size: 0.9em;">JD</div>
+                 <div style="width:40px; height:40px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size: 1.1em;"><i class="fas fa-user"></i></div>
                  <div>
                      <div style="font-weight:bold; color: #1a202c;">Doe, Jane</div>
                      <div style="font-size:0.8em; color:var(--text-secondary);">Parent: Mrs. Doe</div>
@@ -77,7 +77,7 @@
 
         <div class="call-interface-card">
             <div class="call-status-bar">
-                <span class="status-indicator ready"></span> Ready to Connect
+                <span class="status-indicator ready"></span> Ready to Dial
             </div>
             <div class="call-timer">00:00</div>
             
@@ -95,6 +95,14 @@
                 </button>
 
                 <button class="control-btn secondary-action speaker" title="Speaker"><i class="fas fa-volume-up"></i></button>
+            </div>
+        </div>
+
+        <div id="demoModeBanner" class="setting-card" style="display:none; background: rgba(107, 114, 128, 0.1); border-left: 4px solid #6b7280; padding: 8px 12px; margin-bottom: 10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:0.95em; font-weight:700; color:#6b7280; text-transform:uppercase; white-space:nowrap; letter-spacing:0.5px;">
+                    <i class="fas fa-flask" style="margin-right:8px;"></i>Demo Mode
+                </span>
             </div>
         </div>
 
@@ -153,6 +161,16 @@
         </button>
 
       </div>
+
+      <div id="previousCallsCard" class="previous-calls-card" style="display:none;">
+          <div class="previous-calls-header">
+              <i class="fas fa-history"></i> Previous Calls
+          </div>
+          <div id="previousCallsList" class="previous-calls-list">
+              <!-- Items populated dynamically -->
+          </div>
+      </div>
+
     </div>
 
     <div id="data" class="tab-content">
@@ -318,24 +336,19 @@
             <div style="flex-grow:1;">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
                     <span>Use Specific Submission Date</span>
-                    <i id="useSpecificDateToggle" class="fas fa-toggle-off" style="color:gray; font-size:2.5em; cursor: pointer;"></i>
+                    <button id="useSpecificDateToggle" class="toggle-switch" type="button" aria-pressed="false"></button>
                 </div>
                 <div id="specificDatePicker" style="display:none; margin-top:8px;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <input type="date" id="specificDateInput" style="flex-grow:1; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-primary); color:var(--text-primary);">
-                        <button id="clearSpecificDateBtn" class="btn-secondary" style="width:auto; margin:0; padding:8px 12px;">
-                            <i class="fas fa-times"></i> Clear
-                        </button>
-                    </div>
+                    <input type="date" id="specificDateInput" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-primary); color:var(--text-primary);">
                     <div style="font-size:0.85em; color:var(--text-secondary); margin-top:4px;">
-                        When cleared, automatically uses today's date
+                        Set the date for submission checker to check
                     </div>
                 </div>
             </div>
         </div>
 
         <h3>Connections</h3>
-        <div class="setting-card">
+        <div class="setting-card" id="configureExcelBtn" style="cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <img src="../../assets/excel-logo.png" style="width:28px; height:28px; border-radius:4px;" alt="Excel">
                 <div style="flex-grow:1;">
@@ -346,11 +359,9 @@
                     </div>
                 </div>
             </div>
-            <button id="configureExcelBtn" class="btn-secondary" style="width:auto; margin:0; padding: 8px 16px;">
-                <i class="fas fa-cog" style="margin-right:6px;"></i>Configure
-            </button>
+            <i class="fas fa-chevron-right" style="color:var(--text-secondary); font-size:1em;"></i>
         </div>
-        <div id="powerAutomateSettingCard" class="setting-card" style="display:none;">
+        <div id="powerAutomateSettingCard" class="setting-card" style="display:none; cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <img src="../../assets/power-automate-icon.png" style="width:28px; height:28px; border-radius:4px;" alt="Power Automate">
                 <div style="flex-grow:1;">
@@ -361,11 +372,9 @@
                     </div>
                 </div>
             </div>
-            <button id="configurePowerAutomateBtn" class="btn-secondary" style="width:auto; margin:0; padding: 8px 16px;">
-                <i class="fas fa-cog" style="margin-right:6px;"></i>Configure
-            </button>
+            <i class="fas fa-chevron-right" style="color:var(--text-secondary); font-size:1em;"></i>
         </div>
-        <div class="setting-card">
+        <div class="setting-card" id="configureCanvasBtn" style="cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <img src="../../assets/canvas-logo.png" style="width:28px; height:28px; border-radius:4px;" alt="Canvas">
                 <div style="flex-grow:1;">
@@ -376,11 +385,9 @@
                     </div>
                 </div>
             </div>
-            <button id="configureCanvasBtn" class="btn-secondary" style="width:auto; margin:0; padding: 8px 16px;">
-                <i class="fas fa-cog" style="margin-right:6px;"></i>Configure
-            </button>
+            <i class="fas fa-chevron-right" style="color:var(--text-secondary); font-size:1em;"></i>
         </div>
-        <div class="setting-card">
+        <div class="setting-card" id="configureFive9Btn" style="cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
                 <img src="../../assets/five9-logo.jpg" style="width:28px; height:28px; border-radius:4px;" alt="Five9">
                 <div style="flex-grow:1;">
@@ -391,9 +398,7 @@
                     </div>
                 </div>
             </div>
-            <button id="configureFive9Btn" class="btn-secondary" style="width:auto; margin:0; padding: 8px 16px;">
-                <i class="fas fa-cog" style="margin-right:6px;"></i>Configure
-            </button>
+            <i class="fas fa-chevron-right" style="color:var(--text-secondary); font-size:1em;"></i>
         </div>
 
         <h3>Resources</h3>

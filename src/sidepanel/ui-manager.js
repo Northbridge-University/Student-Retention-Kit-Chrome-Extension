@@ -44,6 +44,11 @@ export function cacheDomElements() {
     elements.upNextName = document.getElementById('upNextName');
     elements.skipStudentBtn = document.getElementById('skipStudentBtn');
     elements.pauseAutomationBtn = document.getElementById('pauseAutomationBtn');
+    elements.demoModeBanner = document.getElementById('demoModeBanner');
+
+    // Call Tab - Previous Calls Card
+    elements.previousCallsCard = document.getElementById('previousCallsCard');
+    elements.previousCallsList = document.getElementById('previousCallsList');
 
     // Call Tab - Student Card & Placeholder Logic
     const contactTab = document.getElementById('contact');
@@ -58,7 +63,7 @@ export function cacheDomElements() {
         if (!callTabPlaceholder) {
             callTabPlaceholder = document.createElement('div');
             callTabPlaceholder.id = 'callTabPlaceholder';
-            callTabPlaceholder.style.cssText = 'display:none; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:80px; height:100%; min-height:400px; color:#9ca3af; text-align:center; padding-left:20px; padding-right:20px;';
+            callTabPlaceholder.style.cssText = 'display:none; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:80px; flex: 1 1 auto; min-height:0; color:#9ca3af; text-align:center; padding-left:20px; padding-right:20px;';
             // Default content - will be updated dynamically
             callTabPlaceholder.innerHTML = `
                 <i class="fas fa-user-graduate" style="font-size:3em; margin-bottom:15px; opacity:0.5;"></i>
@@ -136,7 +141,6 @@ export function cacheDomElements() {
     elements.useSpecificDateToggle = document.getElementById('useSpecificDateToggle');
     elements.specificDatePicker = document.getElementById('specificDatePicker');
     elements.specificDateInput = document.getElementById('specificDateInput');
-    elements.clearSpecificDateBtn = document.getElementById('clearSpecificDateBtn');
 
     // Scan Filter Modal
     elements.scanFilterModal = document.getElementById('scanFilterModal');
@@ -256,8 +260,10 @@ export function cacheDomElements() {
     // Connections Modal
     elements.connectionsModal = document.getElementById('connectionsModal');
     elements.closeConnectionsBtn = document.getElementById('closeConnectionsBtn');
+    // The configure entries are now click-anywhere setting cards (no separate
+    // Configure button), so configurePowerAutomateBtn aliases the parent card.
     elements.configureExcelBtn = document.getElementById('configureExcelBtn');
-    elements.configurePowerAutomateBtn = document.getElementById('configurePowerAutomateBtn');
+    elements.configurePowerAutomateBtn = document.getElementById('powerAutomateSettingCard');
     elements.configureCanvasBtn = document.getElementById('configureCanvasBtn');
     elements.configureFive9Btn = document.getElementById('configureFive9Btn');
     elements.connectionModalTitle = document.getElementById('connectionModalTitle');

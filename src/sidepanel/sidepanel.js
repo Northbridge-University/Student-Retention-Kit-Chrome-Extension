@@ -1,5 +1,5 @@
 // Sidepanel Main - Orchestrates all modules and manages app lifecycle
-import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES } from '../constants/index.js';
+import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES, GENERIC_AVATAR_URL } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
@@ -166,6 +166,23 @@ let isScanning = false;
 let callManager;
 let queueManager;
 let isDebugMode = false;
+// True when the Scan Filter modal was opened from the Start button (because no
+// filter was saved yet). Saving while this is true auto-starts the scan so the
+// user doesn't have to click Start a second time.
+let pendingAutoStartAfterFilterSave = false;
+
+// Download button state: disabled while in cooldown OR when the master list is
+// empty (nothing to export). refreshDownloadButtonState() applies both.
+let downloadCooldownActive = false;
+let masterListIsEmpty = true;
+function refreshDownloadButtonState() {
+    if (!elements.downloadMasterBtn) return;
+    const disabled = downloadCooldownActive || masterListIsEmpty;
+    elements.downloadMasterBtn.disabled = disabled;
+    elements.downloadMasterBtn.title = masterListIsEmpty
+        ? 'No data to download — update the master list first'
+        : (downloadCooldownActive ? 'Please wait before downloading again' : 'Download CSV');
+}
 let embedHelperEnabled = true;
 let highlightColor = '#ffff00';
 
@@ -214,6 +231,9 @@ async function initializeApp() {
         cancelAutomation: (currentStudent) => {
             queueManager.setQueue([currentStudent]);
             setActiveStudent(currentStudent, callManager);
+        },
+        renderPreviousCalls: (entries) => {
+            renderPreviousCalls(entries);
         }
     };
     callManager = new CallManager(elements, uiCallbacks);
@@ -240,6 +260,9 @@ async function initializeApp() {
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
+
+    // Restore the Previous Calls list from storage
+    await callManager.loadPreviousCalls();
 
     // Start Five9 connection monitoring
     startFive9ConnectionMonitor(() => queueManager.getQueue());
@@ -550,13 +573,12 @@ function setupEventListeners() {
     // Specific Submission Date Toggle
     if (elements.useSpecificDateToggle) {
         elements.useSpecificDateToggle.addEventListener('click', async () => {
-            const isOn = elements.useSpecificDateToggle.classList.contains('fa-toggle-on');
+            const isOn = elements.useSpecificDateToggle.classList.contains('is-on');
             const newState = !isOn;
 
             // Update toggle visual
-            elements.useSpecificDateToggle.classList.toggle('fa-toggle-on', newState);
-            elements.useSpecificDateToggle.classList.toggle('fa-toggle-off', !newState);
-            elements.useSpecificDateToggle.style.color = newState ? '#22c55e' : 'gray';
+            elements.useSpecificDateToggle.classList.toggle('is-on', newState);
+            elements.useSpecificDateToggle.setAttribute('aria-pressed', newState ? 'true' : 'false');
 
             // Show/hide date picker
             if (elements.specificDatePicker) {
@@ -588,34 +610,6 @@ function setupEventListeners() {
             const selectedDate = e.target.value;
             await storageSet({
                 [STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE]: selectedDate
-            });
-        });
-    }
-
-    // Clear Specific Date Button
-    if (elements.clearSpecificDateBtn) {
-        elements.clearSpecificDateBtn.addEventListener('click', async () => {
-            // Clear the date input
-            if (elements.specificDateInput) {
-                elements.specificDateInput.value = '';
-            }
-
-            // Turn off the toggle
-            if (elements.useSpecificDateToggle) {
-                elements.useSpecificDateToggle.classList.remove('fa-toggle-on');
-                elements.useSpecificDateToggle.classList.add('fa-toggle-off');
-                elements.useSpecificDateToggle.style.color = 'gray';
-            }
-
-            // Hide the date picker
-            if (elements.specificDatePicker) {
-                elements.specificDatePicker.style.display = 'none';
-            }
-
-            // Clear from storage
-            await storageSet({
-                [STORAGE_KEYS.USE_SPECIFIC_DATE]: false,
-                [STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE]: null
             });
         });
     }
@@ -808,7 +802,10 @@ function setupEventListeners() {
     }
 
     if (elements.closeScanFilterBtn) {
-        elements.closeScanFilterBtn.addEventListener('click', closeScanFilterModal);
+        elements.closeScanFilterBtn.addEventListener('click', () => {
+            pendingAutoStartAfterFilterSave = false;
+            closeScanFilterModal();
+        });
     }
 
     if (elements.failingToggle) {
@@ -827,7 +824,16 @@ function setupEventListeners() {
     }
 
     if (elements.saveScanFilterBtn) {
-        elements.saveScanFilterBtn.addEventListener('click', saveScanFilterSettings);
+        elements.saveScanFilterBtn.addEventListener('click', async () => {
+            await saveScanFilterSettings();
+            // First-time flow: Start was clicked, modal opened because no filter
+            // existed. Now that the filter is saved, kick off scanning so the
+            // user doesn't have to click Start again.
+            if (pendingAutoStartAfterFilterSave) {
+                pendingAutoStartAfterFilterSave = false;
+                await toggleScanState();
+            }
+        });
     }
 
     // Queue Modal
@@ -1003,6 +1009,7 @@ function setupEventListeners() {
     // Modal outside click handlers
     window.addEventListener('click', (e) => {
         if (elements.scanFilterModal && e.target === elements.scanFilterModal) {
+            pendingAutoStartAfterFilterSave = false;
             closeScanFilterModal();
         }
         if (elements.queueModal && e.target === elements.queueModal) {
@@ -1082,6 +1089,8 @@ function setupEventListeners() {
         elements.dialBtn.addEventListener('click', () => callManager.toggleCallState());
     }
 
+    setupPhoneEditing();
+
     if (elements.skipStudentBtn) {
         elements.skipStudentBtn.addEventListener('click', () => {
             if (callManager) {
@@ -1095,6 +1104,22 @@ function setupEventListeners() {
             if (callManager) {
                 callManager.togglePause();
             }
+        });
+    }
+
+    // Previous Calls — click a row to load that student's number into the dialer
+    if (elements.previousCallsList) {
+        elements.previousCallsList.addEventListener('click', (e) => {
+            const row = e.target.closest('.previous-call-item');
+            if (!row || !callManager) return;
+            if (row.classList.contains('disabled')) return;
+
+            const index = parseInt(row.dataset.index, 10);
+            const entries = callManager.getPreviousCalls();
+            const entry = entries[index];
+            if (!entry) return;
+
+            callManager.loadFromHistory(entry);
         });
     }
 
@@ -1672,7 +1697,27 @@ function setupEventListeners() {
     }
 
     if (elements.downloadMasterBtn) {
-        elements.downloadMasterBtn.addEventListener('click', exportReport);
+        // 5-second cooldown so the button can't be spammed
+        const DOWNLOAD_COOLDOWN_MS = 5000;
+        let downloadCooldownTimer = null;
+        elements.downloadMasterBtn.addEventListener('click', async () => {
+            if (elements.downloadMasterBtn.disabled) return;
+
+            downloadCooldownActive = true;
+            refreshDownloadButtonState();
+            if (downloadCooldownTimer) clearTimeout(downloadCooldownTimer);
+            downloadCooldownTimer = setTimeout(() => {
+                downloadCooldownActive = false;
+                downloadCooldownTimer = null;
+                refreshDownloadButtonState();
+            }, DOWNLOAD_COOLDOWN_MS);
+
+            try {
+                await exportReport();
+            } catch (err) {
+                console.error('Export failed:', err);
+            }
+        });
     }
 }
 
@@ -1716,6 +1761,269 @@ function initializeDispositionButtons() {
             btn.title = '';
         }
     });
+}
+
+/**
+ * Formats a phone number string to dashed style.
+ * Accepts any input; strips non-digits, then:
+ *   - 10 digits        -> "XXX-XXX-XXXX"
+ *   - 11 digits (lead 1) -> "1-XXX-XXX-XXXX"
+ *   - 7 digits         -> "XXX-XXXX"
+ *   - anything else    -> null (treated as invalid by the caller)
+ * @param {string} input
+ * @returns {string|null}
+ */
+function formatPhoneNumber(input) {
+    if (!input) return null;
+    const digits = String(input).replace(/\D/g, '');
+    if (digits.length === 10) {
+        return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 11 && digits[0] === '1') {
+        return `1-${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 7) {
+        return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    }
+    return null;
+}
+
+/**
+ * Looks up a student in the master list whose phone digits match the given number.
+ * Compares digits-only versions so format differences are ignored.
+ * @param {string} formattedPhone
+ * @returns {Promise<Object|null>}
+ */
+async function findStudentByPhone(formattedPhone) {
+    const targetDigits = String(formattedPhone || '').replace(/\D/g, '');
+    if (!targetDigits) return null;
+
+    try {
+        const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+        const students = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
+        return students.find(s => {
+            const candidates = [s.directPhone, s.phone, s.Phone, s.PrimaryPhone].filter(Boolean);
+            return candidates.some(p => String(p).replace(/\D/g, '') === targetDigits);
+        }) || null;
+    } catch (err) {
+        console.warn('[Phone Lookup] Failed to read master list:', err);
+        return null;
+    }
+}
+
+/**
+ * Wires up click-to-edit on the contact phone number display.
+ *  - Click: enter text mode (only when a single student is loaded and no call is in progress).
+ *  - Enter: confirm.
+ *  - Escape / blur with invalid input: revert to the previous value.
+ *  - Blur with valid input: format with dashes, then look up the new number in the
+ *    master list. If a student is found, that student is loaded into the contact
+ *    card; otherwise an "Unknown" entry is shown so the call still dials the number.
+ */
+function setupPhoneEditing() {
+    if (!elements.contactPhone) return;
+
+    // Discoverability: empty phone field shows this hint via CSS :empty + ::before.
+    elements.contactPhone.dataset.emptyPlaceholder = 'Enter phone number';
+
+    let beforeEdit = '';
+
+    elements.contactPhone.addEventListener('click', () => {
+        if (elements.contactPhone.contentEditable === 'true') return;
+
+        // Allow editing when zero or one student is loaded (zero = no-student state
+        // where the user is manually entering a number). Block multi-select queues.
+        if (!queueManager) return;
+        if (queueManager.getLength() > 1) return;
+
+        if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition() || callManager.getAutomationModeState())) {
+            return;
+        }
+
+        beforeEdit = elements.contactPhone.textContent.trim();
+        if (beforeEdit === 'No Phone Listed' || beforeEdit === '') {
+            elements.contactPhone.textContent = '';
+        }
+
+        elements.contactPhone.contentEditable = 'true';
+        elements.contactPhone.focus();
+
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(elements.contactPhone);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (_) { /* selection not supported in this context */ }
+    });
+
+    elements.contactPhone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            elements.contactPhone.blur();
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            elements.contactPhone.textContent = beforeEdit;
+            elements.contactPhone.contentEditable = 'false';
+            elements.contactPhone.blur();
+            return;
+        }
+
+        // Allow modifier combos (copy/paste/select-all/etc.)
+        if (e.ctrlKey || e.metaKey) return;
+        // Allow non-printable keys (arrows, Backspace, Tab, etc. — all have length > 1)
+        if (e.key.length > 1) return;
+        // Allow digits and common phone-format characters; block everything else (letters, etc.)
+        if (!/^[0-9+\-\s().]$/.test(e.key)) {
+            e.preventDefault();
+        }
+    });
+
+    // Sanitize pasted text: keep only digits and phone-format characters
+    elements.contactPhone.addEventListener('paste', (e) => {
+        if (elements.contactPhone.contentEditable !== 'true') return;
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
+        const cleaned = pasted.replace(/[^0-9+\-\s().]/g, '');
+        if (cleaned) {
+            document.execCommand('insertText', false, cleaned);
+        }
+    });
+
+    elements.contactPhone.addEventListener('blur', async () => {
+        if (elements.contactPhone.contentEditable !== 'true') return;
+
+        const raw = elements.contactPhone.textContent.trim();
+        elements.contactPhone.contentEditable = 'false';
+
+        // Cleared the field entirely — drop back to the No Student Selected state.
+        if (raw === '') {
+            elements.contactPhone.textContent = '';
+            if (queueManager) {
+                queueManager.clearQueue();
+            }
+            return;
+        }
+
+        const formatted = formatPhoneNumber(raw);
+
+        if (formatted === null) {
+            // Invalid input (e.g. "1334") — revert to the previous number.
+            elements.contactPhone.textContent = beforeEdit;
+            return;
+        }
+
+        elements.contactPhone.textContent = formatted;
+        if (!queueManager) return;
+
+        // Look up the new number in the master list.
+        const found = await findStudentByPhone(formatted);
+        if (found) {
+            // Clone so we don't mutate the master list entry; force the formatted phone
+            // so the contact card and dial use the dashed version.
+            queueManager.setQueue([{ ...found, directPhone: formatted }]);
+        } else {
+            queueManager.setQueue([{
+                name: 'Unknown',
+                directPhone: formatted,
+                phone: formatted
+            }]);
+        }
+    });
+}
+
+/**
+ * Returns the ordinal suffix for a day-of-month number (1st, 2nd, 3rd, 4th, ...).
+ */
+function dayOrdinalSuffix(n) {
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return 'th';
+    switch (n % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+    }
+}
+
+/**
+ * Formats a previous-call timestamp for display:
+ *   - today     -> "3:45 PM"
+ *   - yesterday -> "Yesterday"
+ *   - older     -> "March 5th"
+ * @param {number} ts - Unix timestamp in ms
+ */
+function formatPreviousCallTime(ts) {
+    if (!ts) return '';
+    const now = new Date();
+    const d = new Date(ts);
+
+    if (now.toDateString() === d.toDateString()) {
+        let h = d.getHours();
+        const m = d.getMinutes().toString().padStart(2, '0');
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (yesterday.toDateString() === d.toDateString()) {
+        return 'Yesterday';
+    }
+
+    const month = d.toLocaleString('en-US', { month: 'long' });
+    const day = d.getDate();
+    return `${month} ${day}${dayOrdinalSuffix(day)}`;
+}
+
+/**
+ * Renders the Previous Calls card with the given entries.
+ * Hides the card when there are no entries.
+ * @param {Array} entries - Recent call entries (most recent first)
+ */
+function renderPreviousCalls(entries) {
+    if (!elements.previousCallsCard || !elements.previousCallsList) return;
+
+    if (!entries || entries.length === 0) {
+        elements.previousCallsCard.style.display = 'none';
+        elements.previousCallsList.innerHTML = '';
+        return;
+    }
+
+    const inActiveCall = !!(callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition()));
+
+    const html = entries.map((entry, index) => {
+        const phone = entry.directPhone || entry.phone || entry.Phone || entry.PrimaryPhone || '';
+        const hasPhone = !!phone;
+        const disabled = inActiveCall || !hasPhone;
+        const title = !hasPhone ? 'No phone number on file' : (inActiveCall ? 'Finish the current call first' : 'Click to load this number');
+        const timeText = formatPreviousCallTime(entry.timestamp);
+        const safeName = (entry.name || 'Unknown Student')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        const hasPhoto = entry.Photo && entry.Photo !== GENERIC_AVATAR_URL;
+        const safePhoto = hasPhoto ? entry.Photo.replace(/'/g, '%27') : '';
+        const avatarInner = hasPhoto
+            ? `<div class="previous-call-avatar previous-call-avatar--photo" style="background-image:url('${safePhoto}');"></div>`
+            : `<div class="previous-call-avatar"><i class="fas fa-user"></i></div>`;
+        return `
+            <div class="previous-call-item${disabled ? ' disabled' : ''}" data-index="${index}" title="${title}">
+                ${avatarInner}
+                <div class="previous-call-info">
+                    <span class="previous-call-name">${safeName}</span>
+                    ${timeText ? `<span class="previous-call-time">${timeText}</span>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    elements.previousCallsList.innerHTML = html;
+    elements.previousCallsCard.style.display = 'flex';
 }
 
 /**
@@ -1798,6 +2106,10 @@ async function loadStorageData() {
     // Update Start button based on master list (gradebook links check)
     updateStartButtonForMasterList();
 
+    // Disable Download when there's nothing to export
+    masterListIsEmpty = masterEntries.length === 0;
+    refreshDownloadButtonState();
+
     if (elements.lastUpdatedText && data[STORAGE_KEYS.LAST_UPDATED]) {
         elements.lastUpdatedText.textContent = data[STORAGE_KEYS.LAST_UPDATED];
     }
@@ -1836,9 +2148,8 @@ async function loadStorageData() {
     const specificDate = data[STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE];
 
     if (elements.useSpecificDateToggle) {
-        elements.useSpecificDateToggle.classList.toggle('fa-toggle-on', useSpecificDate);
-        elements.useSpecificDateToggle.classList.toggle('fa-toggle-off', !useSpecificDate);
-        elements.useSpecificDateToggle.style.color = useSpecificDate ? '#22c55e' : 'gray';
+        elements.useSpecificDateToggle.classList.toggle('is-on', useSpecificDate);
+        elements.useSpecificDateToggle.setAttribute('aria-pressed', useSpecificDate ? 'true' : 'false');
     }
 
     if (elements.specificDatePicker) {
@@ -1871,6 +2182,9 @@ chrome.storage.local.onChanged.addListener((changes) => {
         updateCampusFilter(newMasterEntries);
         // Update Start button based on master list (gradebook links check)
         updateStartButtonForMasterList();
+        // Disable Download when there's nothing to export
+        masterListIsEmpty = newMasterEntries.length === 0;
+        refreshDownloadButtonState();
     }
 
     // Handle name format toggle changes - re-render all displays
@@ -2117,8 +2431,11 @@ async function toggleScanState() {
         const hasScanFilterSetting = scanFilterData[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] !== undefined;
 
         if (!hasScanFilterSetting) {
-            // No scan filter saved - open the modal for the user to configure
+            // No scan filter saved - open the modal for the user to configure.
+            // Mark this open as "first-time from Start" so that saving the filter
+            // also kicks off the scan, avoiding a second click on Start.
             console.log('No scan filter setting found - opening Scan Filter modal');
+            pendingAutoStartAfterFilterSave = true;
             openScanFilterModal();
             return; // Don't start scanning until user configures the filter
         }

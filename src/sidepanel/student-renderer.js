@@ -83,11 +83,25 @@ export async function setActiveStudent(rawEntry, callManager) {
     const contactTab = document.getElementById('contact');
     if (!contactTab) return;
 
-    // Reset automation styles when switching (but not during active automation)
+    // Reset automation styles when switching (but not during active automation).
+    // Also reset any inline disable styling left behind by the no-student state
+    // so a freshly loaded student gets a working green dial button.
     if (!callManager?.automationMode) {
         if (elements.dialBtn) {
             elements.dialBtn.classList.remove('automation');
             elements.dialBtn.innerHTML = '<i class="fas fa-phone"></i>';
+            if (rawEntry) {
+                elements.dialBtn.disabled = false;
+                elements.dialBtn.style.cursor = 'pointer';
+                elements.dialBtn.style.opacity = '1';
+                elements.dialBtn.style.background = '';
+            }
+        }
+        // Restore the status bar + timer visibility when a student loads;
+        // they're hidden (but still take layout space) in the no-student state.
+        if (rawEntry) {
+            if (elements.callStatusText) elements.callStatusText.style.visibility = '';
+            if (elements.callTimer) elements.callTimer.style.visibility = '';
         }
         if (callManager) {
             callManager.updateCallInterfaceState();
@@ -106,16 +120,24 @@ export async function setActiveStudent(rawEntry, callManager) {
         }
     }
 
-    // 1. Handle "No Student Selected" State - use unified placeholder system
+    // 1. Handle "No Student Selected" State.
+    // Five9 issues still show the placeholder; otherwise we render the section
+    // with a greyed dial button so the user can manually enter a number.
     if (!rawEntry) {
-        // Use cached debug mode to avoid async flash
         const debugMode = getCachedDebugMode();
 
-        // Update the call tab display with no student selected
         await updateCallTabDisplay({
             selectedQueue: [],
             debugMode: debugMode
         });
+
+        // If the placeholder is currently displayed (Five9 issue), don't render
+        // the no-student section underneath it.
+        if (elements.callTabPlaceholder && elements.callTabPlaceholder.style.display !== 'none') {
+            return;
+        }
+
+        renderNoStudentState();
         return;
     }
 
@@ -136,16 +158,6 @@ export async function setActiveStudent(rawEntry, callManager) {
 
     const data = resolveStudentData(rawEntry, reformatEnabled);
 
-    // Generate initials from name
-    const nameParts = data.name.trim().split(/\s+/);
-    let initials = '';
-    if (nameParts.length > 0) {
-        const firstInitial = nameParts[0][0] || '';
-        const lastInitial = nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : '';
-        initials = (firstInitial + lastInitial).toUpperCase();
-        if (!initials) initials = '?';
-    }
-
     const displayPhone = data.phone ? data.phone : "No Phone Listed";
 
     // AVATAR LOGIC
@@ -153,19 +165,25 @@ export async function setActiveStudent(rawEntry, callManager) {
         elements.contactAvatar.style.color = '';
         if (data.Photo && data.Photo !== GENERIC_AVATAR_URL) {
             elements.contactAvatar.textContent = '';
+            elements.contactAvatar.innerHTML = '';
             elements.contactAvatar.style.backgroundImage = `url('${data.Photo}')`;
             elements.contactAvatar.style.backgroundSize = 'cover';
             elements.contactAvatar.style.backgroundPosition = 'center';
             elements.contactAvatar.style.backgroundColor = 'transparent';
         } else {
             elements.contactAvatar.style.backgroundImage = 'none';
-            elements.contactAvatar.textContent = initials;
-            elements.contactAvatar.style.backgroundColor = '#e0e7ff';
+            elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
+            elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+            elements.contactAvatar.style.color = '#6b7280';
         }
     }
 
     if (elements.contactName) elements.contactName.textContent = data.name;
     if (elements.contactPhone) {
+        // Exit edit mode if the active student changes mid-edit
+        if (elements.contactPhone.contentEditable === 'true') {
+            elements.contactPhone.contentEditable = 'false';
+        }
         elements.contactPhone.textContent = displayPhone;
     }
 
@@ -205,6 +223,52 @@ export async function setActiveStudent(rawEntry, callManager) {
 
 /**
  * Sets the automation mode UI with gray styling
+/**
+ * Renders the call section in the "No Student Selected" state. The contact card
+ * shows a generic avatar + "No Student Selected" header, the phone field is
+ * empty (and editable for manual entry), and the dial button is greyed out.
+ */
+function renderNoStudentState() {
+    if (elements.contactName) elements.contactName.textContent = 'No Student Selected';
+    if (elements.contactDetail) {
+        elements.contactDetail.textContent = '';
+        elements.contactDetail.style.display = 'none';
+    }
+    if (elements.contactPhone) {
+        if (elements.contactPhone.contentEditable === 'true') {
+            elements.contactPhone.contentEditable = 'false';
+        }
+        elements.contactPhone.textContent = '';
+    }
+    if (elements.contactAvatar) {
+        elements.contactAvatar.style.color = '#6b7280';
+        elements.contactAvatar.style.backgroundImage = 'none';
+        elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
+        elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+    }
+    if (elements.contactCard) {
+        elements.contactCard.style.borderLeftColor = '#9ca3af';
+    }
+    if (elements.dialBtn) {
+        elements.dialBtn.classList.remove('automation');
+        elements.dialBtn.innerHTML = '<i class="fas fa-phone"></i>';
+        elements.dialBtn.disabled = true;
+        elements.dialBtn.style.cursor = 'not-allowed';
+        elements.dialBtn.style.opacity = '0.5';
+        elements.dialBtn.style.background = '#9ca3af';
+        elements.dialBtn.style.transform = 'rotate(0deg)';
+    }
+    // Hide (but reserve the space for) the call status text and timer so the
+    // call interface card doesn't shift around when a student loads.
+    if (elements.callStatusText) elements.callStatusText.style.visibility = 'hidden';
+    if (elements.callTimer) elements.callTimer.style.visibility = 'hidden';
+    if (elements.upNextCard) elements.upNextCard.style.display = 'none';
+    if (elements.manageQueueBtn) elements.manageQueueBtn.style.display = 'none';
+    if (elements.callDispositionSection) elements.callDispositionSection.style.display = 'none';
+    if (elements.pauseAutomationBtn) elements.pauseAutomationBtn.style.display = 'none';
+}
+
+/**
  * @param {number} queueLength - Number of students in queue
  * @param {Array} [queue] - The full queue array, used to show "Up Next" preview
  */
