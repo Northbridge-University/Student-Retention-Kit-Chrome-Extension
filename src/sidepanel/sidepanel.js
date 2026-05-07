@@ -601,33 +601,6 @@ function setupEventListeners() {
         });
     }
 
-    // Clear Specific Date Button
-    if (elements.clearSpecificDateBtn) {
-        elements.clearSpecificDateBtn.addEventListener('click', async () => {
-            // Clear the date input
-            if (elements.specificDateInput) {
-                elements.specificDateInput.value = '';
-            }
-
-            // Turn off the toggle
-            if (elements.useSpecificDateToggle) {
-                elements.useSpecificDateToggle.classList.remove('is-on');
-                elements.useSpecificDateToggle.setAttribute('aria-pressed', 'false');
-            }
-
-            // Hide the date picker
-            if (elements.specificDatePicker) {
-                elements.specificDatePicker.style.display = 'none';
-            }
-
-            // Clear from storage
-            await storageSet({
-                [STORAGE_KEYS.USE_SPECIFIC_DATE]: false,
-                [STORAGE_KEYS.SPECIFIC_SUBMISSION_DATE]: null
-            });
-        });
-    }
-
     // Review Tutorial Button
     const reviewTutorialBtn = document.getElementById('reviewTutorialBtn');
     if (reviewTutorialBtn) {
