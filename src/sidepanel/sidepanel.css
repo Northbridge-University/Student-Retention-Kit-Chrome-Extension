@@ -872,15 +872,15 @@ input:focus, textarea:focus, select:focus {
 }
 
 .previous-call-avatar {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     background: #e5e7eb;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #6b7280;
-    font-size: 0.85em;
+    font-size: 1.05em;
     flex-shrink: 0;
 }
 

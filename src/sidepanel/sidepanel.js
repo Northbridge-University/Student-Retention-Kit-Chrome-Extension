@@ -1741,13 +1741,31 @@ function initializeDispositionButtons() {
 }
 
 /**
- * Formats a previous-call timestamp for display (today: time, otherwise short date)
+ * Returns the ordinal suffix for a day-of-month number (1st, 2nd, 3rd, 4th, ...).
+ */
+function dayOrdinalSuffix(n) {
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return 'th';
+    switch (n % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+    }
+}
+
+/**
+ * Formats a previous-call timestamp for display:
+ *   - today     -> "3:45 PM"
+ *   - yesterday -> "Yesterday"
+ *   - older     -> "March 5th"
  * @param {number} ts - Unix timestamp in ms
  */
 function formatPreviousCallTime(ts) {
     if (!ts) return '';
     const now = new Date();
     const d = new Date(ts);
+
     if (now.toDateString() === d.toDateString()) {
         let h = d.getHours();
         const m = d.getMinutes().toString().padStart(2, '0');
@@ -1755,9 +1773,16 @@ function formatPreviousCallTime(ts) {
         h = h % 12 || 12;
         return `${h}:${m} ${ampm}`;
     }
-    const mo = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    return `${mo}-${day}`;
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (yesterday.toDateString() === d.toDateString()) {
+        return 'Yesterday';
+    }
+
+    const month = d.toLocaleString('en-US', { month: 'long' });
+    const day = d.getDate();
+    return `${month} ${day}${dayOrdinalSuffix(day)}`;
 }
 
 /**
