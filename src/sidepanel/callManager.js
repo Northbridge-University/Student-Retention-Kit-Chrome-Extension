@@ -1186,7 +1186,7 @@ export default class CallManager {
 
     /**
      * Adds a student to the previous calls history (most recent first).
-     * Trims to MAX_PREVIOUS_CALLS and notifies the UI to re-render.
+     * Trims to MAX_PREVIOUS_CALLS, persists to storage, and notifies the UI.
      * @param {Object} student - The student that was just called
      */
     addToPreviousCalls(student) {
@@ -1214,7 +1214,39 @@ export default class CallManager {
             this.previousCalls = this.previousCalls.slice(0, CallManager.MAX_PREVIOUS_CALLS);
         }
 
+        this.savePreviousCalls();
         this.refreshPreviousCallsUI();
+    }
+
+    /**
+     * Persists the previous calls list to chrome.storage so it survives
+     * side-panel close/reopen (and browser restarts).
+     */
+    async savePreviousCalls() {
+        try {
+            await chrome.storage.local.set({
+                [STORAGE_KEYS.PREVIOUS_CALLS]: this.previousCalls
+            });
+        } catch (err) {
+            console.warn('[CallManager] Failed to save previous calls:', err);
+        }
+    }
+
+    /**
+     * Loads the previous calls list from storage and renders the card.
+     * Called once at startup.
+     */
+    async loadPreviousCalls() {
+        try {
+            const result = await chrome.storage.local.get(STORAGE_KEYS.PREVIOUS_CALLS);
+            const stored = result[STORAGE_KEYS.PREVIOUS_CALLS];
+            if (Array.isArray(stored)) {
+                this.previousCalls = stored.slice(0, CallManager.MAX_PREVIOUS_CALLS);
+                this.refreshPreviousCallsUI();
+            }
+        } catch (err) {
+            console.warn('[CallManager] Failed to load previous calls:', err);
+        }
     }
 
     /**

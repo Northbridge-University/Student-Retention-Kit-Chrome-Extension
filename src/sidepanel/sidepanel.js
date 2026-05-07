@@ -244,6 +244,9 @@ async function initializeApp() {
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
 
+    // Restore the Previous Calls list from storage
+    await callManager.loadPreviousCalls();
+
     // Start Five9 connection monitoring
     startFive9ConnectionMonitor(() => queueManager.getQueue());
 

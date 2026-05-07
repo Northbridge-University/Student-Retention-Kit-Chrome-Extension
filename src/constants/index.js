@@ -197,6 +197,7 @@ export const STORAGE_KEYS = {
     CAMPUS_LIST: 'campusList',
     CAMPUS_PREFIX: 'campusPrefix',
     CANVAS_API_CACHE: 'canvasApiCache',
+    PREVIOUS_CALLS: 'previousCalls',
 
     // === OTHER (flat for backwards compatibility or misc) ===
     LOOP_STATUS: 'loopStatus',
