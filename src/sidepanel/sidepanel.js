@@ -1696,7 +1696,25 @@ function setupEventListeners() {
     }
 
     if (elements.downloadMasterBtn) {
-        elements.downloadMasterBtn.addEventListener('click', exportReport);
+        // 5-second cooldown so the button can't be spammed
+        const DOWNLOAD_COOLDOWN_MS = 5000;
+        let downloadCooldownTimer = null;
+        elements.downloadMasterBtn.addEventListener('click', async () => {
+            if (elements.downloadMasterBtn.disabled) return;
+
+            elements.downloadMasterBtn.disabled = true;
+            if (downloadCooldownTimer) clearTimeout(downloadCooldownTimer);
+            downloadCooldownTimer = setTimeout(() => {
+                elements.downloadMasterBtn.disabled = false;
+                downloadCooldownTimer = null;
+            }, DOWNLOAD_COOLDOWN_MS);
+
+            try {
+                await exportReport();
+            } catch (err) {
+                console.error('Export failed:', err);
+            }
+        });
     }
 }
 

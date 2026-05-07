@@ -309,6 +309,13 @@ input:focus, textarea:focus, select:focus {
     background: rgba(0,0,0,0.1);
 }
 
+.btn-secondary:disabled,
+.btn-secondary:disabled:hover {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: rgba(0,0,0,0.05);
+}
+
 /* SUBMISSION CHECKER */
 .loop-status {
     font-size: 0.85em;
