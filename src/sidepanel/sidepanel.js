@@ -166,6 +166,10 @@ let isScanning = false;
 let callManager;
 let queueManager;
 let isDebugMode = false;
+// True when the Scan Filter modal was opened from the Start button (because no
+// filter was saved yet). Saving while this is true auto-starts the scan so the
+// user doesn't have to click Start a second time.
+let pendingAutoStartAfterFilterSave = false;
 let embedHelperEnabled = true;
 let highlightColor = '#ffff00';
 
@@ -814,7 +818,10 @@ function setupEventListeners() {
     }
 
     if (elements.closeScanFilterBtn) {
-        elements.closeScanFilterBtn.addEventListener('click', closeScanFilterModal);
+        elements.closeScanFilterBtn.addEventListener('click', () => {
+            pendingAutoStartAfterFilterSave = false;
+            closeScanFilterModal();
+        });
     }
 
     if (elements.failingToggle) {
@@ -833,7 +840,16 @@ function setupEventListeners() {
     }
 
     if (elements.saveScanFilterBtn) {
-        elements.saveScanFilterBtn.addEventListener('click', saveScanFilterSettings);
+        elements.saveScanFilterBtn.addEventListener('click', async () => {
+            await saveScanFilterSettings();
+            // First-time flow: Start was clicked, modal opened because no filter
+            // existed. Now that the filter is saved, kick off scanning so the
+            // user doesn't have to click Start again.
+            if (pendingAutoStartAfterFilterSave) {
+                pendingAutoStartAfterFilterSave = false;
+                await toggleScanState();
+            }
+        });
     }
 
     // Queue Modal
@@ -1009,6 +1025,7 @@ function setupEventListeners() {
     // Modal outside click handlers
     window.addEventListener('click', (e) => {
         if (elements.scanFilterModal && e.target === elements.scanFilterModal) {
+            pendingAutoStartAfterFilterSave = false;
             closeScanFilterModal();
         }
         if (elements.queueModal && e.target === elements.queueModal) {
@@ -2409,8 +2426,11 @@ async function toggleScanState() {
         const hasScanFilterSetting = scanFilterData[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] !== undefined;
 
         if (!hasScanFilterSetting) {
-            // No scan filter saved - open the modal for the user to configure
+            // No scan filter saved - open the modal for the user to configure.
+            // Mark this open as "first-time from Start" so that saving the filter
+            // also kicks off the scan, avoiding a second click on Start.
             console.log('No scan filter setting found - opening Scan Filter modal');
+            pendingAutoStartAfterFilterSave = true;
             openScanFilterModal();
             return; // Don't start scanning until user configures the filter
         }
