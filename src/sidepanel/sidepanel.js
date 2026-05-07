@@ -1910,12 +1910,21 @@ function setupPhoneEditing() {
         if (elements.contactPhone.contentEditable !== 'true') return;
 
         const raw = elements.contactPhone.textContent.trim();
-        const formatted = formatPhoneNumber(raw);
-
         elements.contactPhone.contentEditable = 'false';
 
+        // Cleared the field entirely — drop back to the No Student Selected state.
+        if (raw === '') {
+            elements.contactPhone.textContent = '';
+            if (queueManager) {
+                queueManager.clearQueue();
+            }
+            return;
+        }
+
+        const formatted = formatPhoneNumber(raw);
+
         if (formatted === null) {
-            // Invalid input — revert to the previous number (or empty for the no-student state)
+            // Invalid input (e.g. "1334") — revert to the previous number.
             elements.contactPhone.textContent = beforeEdit;
             return;
         }
