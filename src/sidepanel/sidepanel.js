@@ -1107,6 +1107,14 @@ function setupEventListeners() {
         });
     }
 
+    if (elements.stopAutomationBtn) {
+        elements.stopAutomationBtn.addEventListener('click', () => {
+            if (callManager) {
+                callManager.cancelAutomation();
+            }
+        });
+    }
+
     // Previous Calls — click a row to load that student's number into the dialer
     if (elements.previousCallsList) {
         elements.previousCallsList.addEventListener('click', (e) => {

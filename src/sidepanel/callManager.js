@@ -454,6 +454,9 @@ export default class CallManager {
         if (this.elements.pauseAutomationBtn) {
             this.elements.pauseAutomationBtn.style.display = 'none';
         }
+        if (this.elements.stopAutomationBtn) {
+            this.elements.stopAutomationBtn.style.display = 'none';
+        }
         this.isPaused = false;
 
         // Reset call UI to regular mode
@@ -506,7 +509,10 @@ export default class CallManager {
                 this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-pause"></i> Pause After This Call';
                 this.elements.pauseAutomationBtn.classList.remove('paused');
 
-                // Resuming abandons any loaded previous-call redial
+                // Resuming hides the Stop button and abandons any loaded previous-call redial
+                if (this.elements.stopAutomationBtn) {
+                    this.elements.stopAutomationBtn.style.display = 'none';
+                }
                 this._pendingRedialStudent = null;
                 this._redialingFromHistory = false;
 
@@ -537,6 +543,11 @@ export default class CallManager {
         // Hide disposition section
         if (this.elements.callDispositionSection) {
             this.elements.callDispositionSection.style.display = 'none';
+        }
+
+        // Reveal the Stop Automation option while we're paused between calls
+        if (this.elements.stopAutomationBtn) {
+            this.elements.stopAutomationBtn.style.display = '';
         }
 
         // Update Up Next card
@@ -572,6 +583,9 @@ export default class CallManager {
         }
         if (this.elements.pauseAutomationBtn) {
             this.elements.pauseAutomationBtn.style.display = 'none';
+        }
+        if (this.elements.stopAutomationBtn) {
+            this.elements.stopAutomationBtn.style.display = 'none';
         }
 
         // Reset call UI to regular mode

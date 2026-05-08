@@ -905,6 +905,30 @@ input:focus, textarea:focus, select:focus {
     border-color: rgba(234, 179, 8, 0.6);
 }
 
+/* Stop Automation Button — same shape as the pause button, light pastel red */
+.stop-automation-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(252, 165, 165, 0.4);
+    border-radius: 0.75rem;
+    background: rgba(252, 165, 165, 0.15);
+    color: #b91c1c;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.stop-automation-btn:hover {
+    background: rgba(252, 165, 165, 0.25);
+    border-color: rgba(252, 165, 165, 0.6);
+}
+
 /* Previous Calls Card — pinned to the bottom of the Call tab */
 .previous-calls-card {
     background: rgba(255, 255, 255, 0.55);
