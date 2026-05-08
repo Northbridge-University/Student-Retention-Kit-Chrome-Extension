@@ -1,5 +1,19 @@
 // [2025-12-17] Version 1.0 - Five9 Connector
 // This script runs on https://*.five9.com/* to handle call automation.
+// Wrapped in an IIFE so chrome.scripting.executeScript can re-inject it after
+// an extension reload without hitting "Identifier 'X' has already been declared"
+// from top-level `let`/`const` collisions in the same isolated world.
+
+(function () {
+'use strict';
+
+// Tear down the previous generation's poll interval (if any) before installing
+// the new one. The orphaned chrome.runtime listeners from older injections are
+// inert post-reload, so we only need to stop the wasted setInterval calls.
+if (typeof window.__SRK_FIVE9_POLL_INTERVAL !== 'undefined') {
+    try { clearInterval(window.__SRK_FIVE9_POLL_INTERVAL); } catch (_) {}
+    window.__SRK_FIVE9_POLL_INTERVAL = undefined;
+}
 
 // Configuration
 const FIVE9_POLL_INTERVAL_MS = 2000;
@@ -198,6 +212,8 @@ function startCallStateMonitor() {
 
     console.log("SRK: Starting call state monitor");
     callStateMonitorInterval = setInterval(monitorCallState, FIVE9_POLL_INTERVAL_MS);
+    // Expose the interval id so a future re-injection can clear it.
+    window.__SRK_FIVE9_POLL_INTERVAL = callStateMonitorInterval;
     // Run immediately too
     monitorCallState();
 }
@@ -653,3 +669,5 @@ async function handleFive9RestartStation(sendResponse) {
         sendResponse({ success: false, error: error.message });
     }
 }
+
+})(); // end Five9 Connector IIFE
