@@ -29,6 +29,7 @@ export default class CallManager {
         this._redialingFromHistory = false; // True while a previous-calls redial is in flight
         this._pendingRedialStudent = null; // Loaded by loadFromHistory; consumed by next toggleCallState
         this._currentCallStudent = null; // Snapshot of who the active call is for (used to log to history)
+        this._phaseHasBeenConnected = false; // True once Five9 reports ACTIVE/TALKING for the current call
     }
 
     /**
@@ -72,6 +73,12 @@ export default class CallManager {
         if (phase === 'ringing') {
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING}; animation: blink 1s infinite;"></span> Ringing`;
         } else {
+            // Mirror Five9: the ring-time stopwatch ends and the talk-time
+            // stopwatch starts fresh on the first transition to connected.
+            if (!this._phaseHasBeenConnected) {
+                this._phaseHasBeenConnected = true;
+                this.startCallTimer();
+            }
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> Connected`;
         }
     }
@@ -659,6 +666,9 @@ export default class CallManager {
         clearInterval(this.callTimerInterval);
         this.callTimerInterval = null;
         this.elements.callTimer.textContent = "00:00";
+        // Reset the phase tracker so the next call's first ACTIVE/TALKING event
+        // restarts the timer as a fresh talk-time count.
+        this._phaseHasBeenConnected = false;
     }
 
     /**
