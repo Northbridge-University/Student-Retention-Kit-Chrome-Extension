@@ -6,9 +6,9 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
   <Description DefaultValue="An add-in for tracking student retention tasks."/>
-
+  
   <IconUrl DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-32.png"/>
-
+  
   <SupportUrl DefaultValue="https://github.com/vsblanco/Student-Retention-Add-in"/>
   <AppDomains>
     <AppDomain>https://vsblanco.github.io</AppDomain>
@@ -189,7 +189,7 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/background-services/commands.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/commands.html"/>
         <bt:Url id="StudentView.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=student-view"/>
         <bt:Url id="Settings.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=settings"/>
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=create-lda"/>
@@ -233,8 +233,7 @@
       <Scopes>
         <Scope>openid</Scope>
         <Scope>profile</Scope>
-        <Scope>User.Read</Scope>
-        <Scope>User.ReadBasic.All</Scope>
+        <Scope>api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user</Scope>
       </Scopes>
     </WebApplicationInfo>
   </VersionOverrides>
