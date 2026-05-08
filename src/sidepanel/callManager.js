@@ -258,6 +258,9 @@ export default class CallManager {
             }
 
             this.stopCallTimer();
+            // Reflect the new isCallActive / waitingForDisposition values in the
+            // Previous Calls list (now disabled while awaiting disposition).
+            this.refreshPreviousCallsUI();
         }
     }
 
@@ -566,6 +569,10 @@ export default class CallManager {
 
         // Update Up Next card
         this.updateUpNextCard();
+
+        // Re-render Previous Calls so the items pick up the now-cleared
+        // isCallActive/waitingForDisposition state and become clickable.
+        this.refreshPreviousCallsUI();
     }
 
     /**
@@ -900,6 +907,8 @@ export default class CallManager {
         }
 
         // Keep disposition section visible if it was showing
+        // Re-render Previous Calls so items show as disabled while we wait.
+        this.refreshPreviousCallsUI();
     }
 
     /**
@@ -1009,11 +1018,13 @@ export default class CallManager {
         // Update last call timestamp
         await this.updateLastCallTimestamp();
 
+        // Clear waiting for disposition flag BEFORE rendering Previous Calls so
+        // the items aren't drawn as disabled with the stale "in active call"
+        // tooltip. (The renderer keys off isCallActive + waitingForDisposition.)
+        this.waitingForDisposition = false;
+
         // Add to previous-calls history
         this.addToPreviousCalls(this._currentCallStudent);
-
-        // Clear waiting for disposition flag
-        this.waitingForDisposition = false;
 
         // Check if in automation mode
         if (this.automationMode) {
