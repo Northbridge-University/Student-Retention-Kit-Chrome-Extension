@@ -1300,6 +1300,37 @@ async function injectScriptIntoTab(tabId, url) {
   }
 }
 
+const FIVE9_CONTENT_SCRIPT_FILE = "src/content/five9Connector.js";
+
+/**
+ * Re-injects the Five9 connector into already-open Five9 tabs. After an
+ * extension reload, the original content script is orphaned (its runtime
+ * port is gone) so messages stop flowing. Re-injection avoids forcing the
+ * user to refresh their Five9 tab — and lose their station — to recover.
+ */
+async function reinjectFive9Connector() {
+  try {
+    const tabs = await chrome.tabs.query({ url: "https://*.five9.com/*" });
+    for (const tab of tabs) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: [FIVE9_CONTENT_SCRIPT_FILE]
+        });
+        console.log(`[SRK] SUCCESS: Re-injected five9Connector into tab ${tab.id}`);
+      } catch (err) {
+        console.warn(`[SRK] FAILED to re-inject five9Connector into tab ${tab.id}: ${err.message}`);
+      }
+    }
+  } catch (err) {
+    console.warn('[SRK] reinjectFive9Connector error:', err);
+  }
+}
+
+// Run once when the service worker boots so a /reload or extension update
+// reconnects to existing Five9 tabs without a page refresh.
+reinjectFive9Connector();
+
 // 1. On Install / Reload
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[SRK] Extension installed/updated. Running storage migration...");
@@ -1334,6 +1365,9 @@ chrome.runtime.onInstalled.addListener(async () => {
   for (const tab of tabs) {
     injectScriptIntoTab(tab.id, tab.url);
   }
+
+  // Restore the Five9 connector in any open Five9 tabs after install/update.
+  reinjectFive9Connector();
 });
 
 // 2. On Browser Startup
@@ -1351,6 +1385,9 @@ chrome.runtime.onStartup.addListener(async () => {
   for (const tab of tabs) {
     injectScriptIntoTab(tab.id, tab.url);
   }
+
+  // Restore the Five9 connector in any open Five9 tabs.
+  reinjectFive9Connector();
 });
 
 // Monitor Five9 tab closes to reset connection state

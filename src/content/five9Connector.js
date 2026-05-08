@@ -1,5 +1,19 @@
 // [2025-12-17] Version 1.0 - Five9 Connector
 // This script runs on https://*.five9.com/* to handle call automation.
+// Wrapped in an IIFE so chrome.scripting.executeScript can re-inject it after
+// an extension reload without hitting "Identifier 'X' has already been declared"
+// from top-level `let`/`const` collisions in the same isolated world.
+
+(function () {
+'use strict';
+
+// Tear down the previous generation's poll interval (if any) before installing
+// the new one. The orphaned chrome.runtime listeners from older injections are
+// inert post-reload, so we only need to stop the wasted setInterval calls.
+if (typeof window.__SRK_FIVE9_POLL_INTERVAL !== 'undefined') {
+    try { clearInterval(window.__SRK_FIVE9_POLL_INTERVAL); } catch (_) {}
+    window.__SRK_FIVE9_POLL_INTERVAL = undefined;
+}
 
 // Configuration
 const FIVE9_POLL_INTERVAL_MS = 2000;
@@ -35,11 +49,48 @@ function getDispositionCode(dispositionType) {
 /**
  * Monitors call state changes and notifies the extension
  */
+// Tracks the last station-connection state we reported to the background, so
+// the periodic probe only fires FIVE9_STATION_RESTART_VERIFIED on transitions
+// (false -> true) instead of every poll.
+let stationConnectionLastReported = null;
+
+/**
+ * Actively probes the agent's station endpoint to confirm Five9 is connected.
+ * Lets the extension flip out of "Awaiting Agent Connection" within one poll
+ * cycle instead of waiting for Five9's next heartbeat POST.
+ * @param {string} userId
+ */
+async function probeStationConnection(userId) {
+    let connected = false;
+    try {
+        const stationResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/agents/${userId}/station`);
+        if (stationResp.ok) {
+            const station = await stationResp.json();
+            connected = !!(station && (station.stationType || station.stationId || station.type));
+        }
+    } catch (_) {
+        // Network error / station endpoint unavailable — leave connected = false
+    }
+
+    if (connected && stationConnectionLastReported !== true) {
+        chrome.runtime.sendMessage({ type: 'FIVE9_STATION_RESTART_VERIFIED' });
+        stationConnectionLastReported = true;
+    } else if (!connected && stationConnectionLastReported === true) {
+        stationConnectionLastReported = false;
+    } else if (stationConnectionLastReported === null) {
+        stationConnectionLastReported = connected;
+    }
+}
+
 async function monitorCallState() {
     try {
         const metadataResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/auth/metadata`);
         if (!metadataResp.ok) return;
         const metadata = await metadataResp.json();
+
+        // Ping the station endpoint each cycle to keep the background's
+        // five9ConnectionState in sync without waiting for the heartbeat.
+        await probeStationConnection(metadata.userId);
 
         const interactionsResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
         if (!interactionsResp.ok) return;
@@ -67,6 +118,17 @@ async function monitorCallState() {
             const newState = activeCall.state;
             const newInteractionId = activeCall.interactionId || activeCall.id;
 
+            // Pull the customer phone number from whichever field Five9 exposes
+            // for this interaction (REST detail responses vary by call direction).
+            const phoneNumber =
+                (activeCall.customer && (activeCall.customer.number || activeCall.customer.phone || activeCall.customer.phoneNumber)) ||
+                activeCall.dnis ||
+                activeCall.ani ||
+                activeCall.phoneNumber ||
+                activeCall.phone ||
+                activeCall.number ||
+                null;
+
             const isNewCall = currentInteractionId !== newInteractionId;
             const isStateChange = !isNewCall && currentCallState !== newState;
 
@@ -74,12 +136,13 @@ async function monitorCallState() {
                 // First time seeing this call — emit its initial state so listeners
                 // (e.g. auto-end timer) can react to fresh-call appearances, not just
                 // transitions within an already-tracked call.
-                console.log(`SRK: New call detected: ${newInteractionId} initial state=${newState}`);
+                console.log(`SRK: New call detected: ${newInteractionId} initial state=${newState} phone=${phoneNumber}`);
                 chrome.runtime.sendMessage({
                     type: 'FIVE9_CALL_STATE_CHANGED',
                     previousState: null,
                     newState: newState,
-                    interactionId: newInteractionId
+                    interactionId: newInteractionId,
+                    phoneNumber: phoneNumber
                 });
             } else if (isStateChange) {
                 console.log(`SRK: Call state changed: ${currentCallState} -> ${newState}`);
@@ -88,7 +151,8 @@ async function monitorCallState() {
                     type: 'FIVE9_CALL_STATE_CHANGED',
                     previousState: currentCallState,
                     newState: newState,
-                    interactionId: newInteractionId
+                    interactionId: newInteractionId,
+                    phoneNumber: phoneNumber
                 });
 
                 // If state changed to FINISHED, the disposition was set
@@ -148,6 +212,8 @@ function startCallStateMonitor() {
 
     console.log("SRK: Starting call state monitor");
     callStateMonitorInterval = setInterval(monitorCallState, FIVE9_POLL_INTERVAL_MS);
+    // Expose the interval id so a future re-injection can clear it.
+    window.__SRK_FIVE9_POLL_INTERVAL = callStateMonitorInterval;
     // Run immediately too
     monitorCallState();
 }
@@ -603,3 +669,5 @@ async function handleFive9RestartStation(sendResponse) {
         sendResponse({ success: false, error: error.message });
     }
 }
+
+})(); // end Five9 Connector IIFE

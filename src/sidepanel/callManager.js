@@ -29,6 +29,8 @@ export default class CallManager {
         this._redialingFromHistory = false; // True while a previous-calls redial is in flight
         this._pendingRedialStudent = null; // Loaded by loadFromHistory; consumed by next toggleCallState
         this._currentCallStudent = null; // Snapshot of who the active call is for (used to log to history)
+        this._phaseHasBeenConnected = false; // True once Five9 reports ACTIVE/TALKING for the current call
+        this._adoptingExternalCall = false; // Re-entry guard for handleExternalCallStart's async lookup
     }
 
     /**
@@ -72,6 +74,12 @@ export default class CallManager {
         if (phase === 'ringing') {
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING}; animation: blink 1s infinite;"></span> Ringing`;
         } else {
+            // Mirror Five9: the ring-time stopwatch ends and the talk-time
+            // stopwatch starts fresh on the first transition to connected.
+            if (!this._phaseHasBeenConnected) {
+                this._phaseHasBeenConnected = true;
+                this.startCallTimer();
+            }
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.ERROR}; animation: blink 1s infinite;"></span> Connected`;
         }
     }
@@ -195,62 +203,92 @@ export default class CallManager {
             this.startCallTimer();
             this.refreshPreviousCallsUI();
         } else {
-            // Call is ending - show "Ending call" status
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
-
-
-            let hangupResult = { success: true, state: 'WRAP_UP' };
-
-            // --- HANGUP FIVE9 CALL (ONLY IF DEBUG MODE OFF) ---
-            if (!this.debugMode) {
-                hangupResult = await this.hangupCall(); // Trigger Five9 API hangup and wait for response
-            } else {
-                console.log("📞 [DEMO MODE] Simulating hangup (Five9 API not called)");
-            }
-            // -------------------------
-
-            // Set button to gray while awaiting disposition
-            this.elements.dialBtn.style.background = `${CONFIG.COLORS.MUTED}`;
-            this.elements.dialBtn.style.transform = 'rotate(0deg)';
-
-            // Check the interaction state
-            const state = hangupResult?.state || 'WRAP_UP';
-            console.log("📊 Call state after hangup:", state);
-
-            if (state === 'WRAP_UP') {
-                // Call disconnected but waiting for disposition
-                this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Awaiting Disposition`;
-
-                // KEEP call active to block pings until disposition is set
-                this.isCallActive = true;
-                this.waitingForDisposition = true;
-
-                // Disable dial button while awaiting disposition
+            // Call is ending. Lock out other call-state transitions (a second
+            // dial click or a parallel disposition click) until the hangup
+            // completes; otherwise we'd race against ourselves on Five9 and
+            // produce double-hangups or post-hangup re-dials.
+            this._dispositionInProgress = true;
+            // Disable the dial button immediately so subsequent clicks during
+            // the await don't even queue events.
+            if (this.elements.dialBtn) {
                 this.elements.dialBtn.disabled = true;
                 this.elements.dialBtn.style.cursor = 'not-allowed';
                 this.elements.dialBtn.style.opacity = '0.6';
+            }
+            try {
+                this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
 
-                // Start disposition timer to show waiting time
-                this.startDispositionTimer();
 
-                // Focus Five9 tab for disposition (only in non-demo mode)
+                let hangupResult = { success: true, state: 'WRAP_UP' };
+
+                // --- HANGUP FIVE9 CALL (ONLY IF DEBUG MODE OFF) ---
                 if (!this.debugMode) {
-                    this.focusFive9Tab();
+                    hangupResult = await this.hangupCall(); // Trigger Five9 API hangup and wait for response
+                } else {
+                    console.log("📞 [DEMO MODE] Simulating hangup (Five9 API not called)");
                 }
-            } else {
-                // Call fully completed (shouldn't normally happen without disposition)
-                this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`; // Turn green when ready
-                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
-                this.isCallActive = false;
-                this.waitingForDisposition = false;
-            }
+                // -------------------------
 
-            // Hide custom input area if it was open
-            if (this.elements.otherInputArea) {
-                this.elements.otherInputArea.style.display = 'none';
-            }
+                // Set button to gray while awaiting disposition
+                this.elements.dialBtn.style.background = `${CONFIG.COLORS.MUTED}`;
+                this.elements.dialBtn.style.transform = 'rotate(0deg)';
 
-            this.stopCallTimer();
+                // Check the interaction state
+                const state = hangupResult?.state || 'WRAP_UP';
+                console.log("📊 Call state after hangup:", state);
+
+                if (state === 'WRAP_UP') {
+                    // Call disconnected but waiting for disposition
+                    this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Awaiting Disposition`;
+
+                    // KEEP call active to block pings until disposition is set
+                    this.isCallActive = true;
+                    this.waitingForDisposition = true;
+
+                    // Dial button stays disabled while awaiting disposition
+                    // (already disabled at the top of this branch).
+
+                    // If a disposition button was clicked during the hangup,
+                    // its no-op handler left the grid greyed out. Reset so the
+                    // user can actually pick a code now.
+                    this.resetDispositionButtons();
+
+                    // Start disposition timer to show waiting time
+                    this.startDispositionTimer();
+
+                    // Focus Five9 tab for disposition (only in non-demo mode)
+                    if (!this.debugMode) {
+                        this.focusFive9Tab();
+                    }
+                } else {
+                    // Call fully completed (shouldn't normally happen without disposition)
+                    this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`; // Turn green when ready
+                    this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
+                    this.isCallActive = false;
+                    this.waitingForDisposition = false;
+                    // Re-enable so the user can dial again.
+                    if (this.elements.dialBtn) {
+                        this.elements.dialBtn.disabled = false;
+                        this.elements.dialBtn.style.cursor = 'pointer';
+                        this.elements.dialBtn.style.opacity = '1';
+                    }
+                }
+
+                // Hide custom input area if it was open
+                if (this.elements.otherInputArea) {
+                    this.elements.otherInputArea.style.display = 'none';
+                }
+
+                this.stopCallTimer();
+                // Reflect the new isCallActive / waitingForDisposition values in the
+                // Previous Calls list (now disabled while awaiting disposition).
+                this.refreshPreviousCallsUI();
+            } finally {
+                // Release the lock so handleDisposition can run when the user
+                // picks a code (or so the user can dial again if the call
+                // fully completed without disposition).
+                this._dispositionInProgress = false;
+            }
         }
     }
 
@@ -363,8 +401,19 @@ export default class CallManager {
             return;
         }
 
-        // Find next non-skipped student
-        const nextIndex = this.findNextNonSkippedIndex(this.currentAutomationIndex + 1);
+        // The "Up Next" student is whichever queue entry will be dialed when
+        // the current operation finishes:
+        //   • Regular automation call → the entry AFTER currentAutomationIndex.
+        //   • Paused between calls → currentAutomationIndex itself (already
+        //     incremented after the prior dispose).
+        //   • Staged or in-flight redial → currentAutomationIndex itself (the
+        //     redial is out-of-band; the queue resumes from this index).
+        const usePausedIndex = this._redialingFromHistory
+            || (this.isPaused && !this.isCallActive);
+        const startFrom = usePausedIndex
+            ? this.currentAutomationIndex
+            : this.currentAutomationIndex + 1;
+        const nextIndex = this.findNextNonSkippedIndex(startFrom);
 
         if (nextIndex !== -1) {
             // Show next non-skipped student
@@ -420,21 +469,26 @@ export default class CallManager {
     updateSkipButtonState() {
         if (!this.elements.skipStudentBtn) return;
 
-        // Check if there's a non-skipped student after the current one
-        const upNextIndex = this.findNextNonSkippedIndex(this.currentAutomationIndex + 1);
-        const hasUpNext = this.automationMode && upNextIndex !== -1;
+        // skipToNext early-returns unless we're in an active automation call,
+        // so disable the button outside that state. Otherwise the user could
+        // see an enabled-looking button (during paused / staged redial) that
+        // does nothing on click.
+        const enabledNow = this.automationMode && this.isCallActive;
 
-        if (hasUpNext) {
-            // Enable skip button
-            this.elements.skipStudentBtn.disabled = false;
-            this.elements.skipStudentBtn.style.opacity = '1';
-            this.elements.skipStudentBtn.style.cursor = 'pointer';
-        } else {
-            // Disable skip button
-            this.elements.skipStudentBtn.disabled = true;
-            this.elements.skipStudentBtn.style.opacity = '0.3';
-            this.elements.skipStudentBtn.style.cursor = 'not-allowed';
+        if (enabledNow) {
+            const upNextIndex = this.findNextNonSkippedIndex(this.currentAutomationIndex + 1);
+            const hasUpNext = upNextIndex !== -1;
+            if (hasUpNext) {
+                this.elements.skipStudentBtn.disabled = false;
+                this.elements.skipStudentBtn.style.opacity = '1';
+                this.elements.skipStudentBtn.style.cursor = 'pointer';
+                return;
+            }
         }
+
+        this.elements.skipStudentBtn.disabled = true;
+        this.elements.skipStudentBtn.style.opacity = '0.3';
+        this.elements.skipStudentBtn.style.cursor = 'not-allowed';
     }
 
     /**
@@ -453,6 +507,12 @@ export default class CallManager {
         }
         if (this.elements.pauseAutomationBtn) {
             this.elements.pauseAutomationBtn.style.display = 'none';
+        }
+        if (this.elements.stopAutomationBtn) {
+            this.elements.stopAutomationBtn.style.display = 'none';
+        }
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
         this.isPaused = false;
 
@@ -506,7 +566,14 @@ export default class CallManager {
                 this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-pause"></i> Pause After This Call';
                 this.elements.pauseAutomationBtn.classList.remove('paused');
 
-                // Resuming abandons any loaded previous-call redial
+                // Resuming hides the Stop + Cancel buttons and abandons any
+                // loaded previous-call redial.
+                if (this.elements.stopAutomationBtn) {
+                    this.elements.stopAutomationBtn.style.display = 'none';
+                }
+                if (this.elements.cancelRedialBtn) {
+                    this.elements.cancelRedialBtn.style.display = 'none';
+                }
                 this._pendingRedialStudent = null;
                 this._redialingFromHistory = false;
 
@@ -519,11 +586,34 @@ export default class CallManager {
     }
 
     /**
+     * Returns how many automation queue entries are still queued to be called
+     * starting from the current index (skipped indices excluded).
+     * @returns {number}
+     */
+    getRemainingAutomationCount() {
+        if (!this.automationMode) return 0;
+        let count = 0;
+        for (let i = this.currentAutomationIndex; i < this.selectedQueue.length; i++) {
+            if (!this.skippedIndices.has(i)) count++;
+        }
+        return count;
+    }
+
+    /**
      * Shows the paused state UI between calls
      */
     showPausedState() {
         if (this.elements.dialBtn) {
-            this.elements.dialBtn.style.background = `${CONFIG.COLORS.WARNING}`;
+            // Restore the gray automation styling. We re-add the .automation
+            // class (and its fa-robot icon) so the button looks identical to
+            // the pre-redial paused state — loadFromHistory strips both when
+            // staging a previous-call redial, and without restoring them
+            // showPausedState's inline yellow + fa-phone would show through
+            // after Cancel instead of the original gray-robot look.
+            this.elements.dialBtn.classList.add('automation');
+            this.elements.dialBtn.innerHTML = '<i class="fas fa-robot"></i>';
+            // Clear the inline background so .automation's gray !important wins.
+            this.elements.dialBtn.style.background = '';
             this.elements.dialBtn.style.transform = 'rotate(0deg)';
             this.elements.dialBtn.disabled = true;
             this.elements.dialBtn.style.cursor = 'not-allowed';
@@ -534,13 +624,50 @@ export default class CallManager {
             this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Paused`;
         }
 
+        // Replace the contact card's name with the remaining-queue count while
+        // paused. setActiveStudent will overwrite it back to the student's
+        // name on the next state transition (resume / stop / cancel-redial).
+        if (this.elements.contactName) {
+            const remaining = this.getRemainingAutomationCount();
+            if (remaining > 0) {
+                this.elements.contactName.textContent = `${remaining} student${remaining === 1 ? '' : 's'} left`;
+            }
+        }
+
+        // Hide the days-out / other-contact detail line while paused — the
+        // count is what matters here, not the queued student's stats.
+        // setActiveStudent restores it on the next transition.
+        if (this.elements.contactDetail) {
+            this.elements.contactDetail.style.display = 'none';
+        }
+
+        // Swap the avatar to a gray play/resume glyph so the card looks like
+        // a generic "queue paused" header instead of mixing the queued
+        // student's photo with the count text. setActiveStudent will restore
+        // the photo / fa-user icon on the next transition.
+        if (this.elements.contactAvatar) {
+            this.elements.contactAvatar.style.backgroundImage = 'none';
+            this.elements.contactAvatar.innerHTML = '<i class="fas fa-play"></i>';
+            this.elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+            this.elements.contactAvatar.style.color = '#6b7280';
+        }
+
         // Hide disposition section
         if (this.elements.callDispositionSection) {
             this.elements.callDispositionSection.style.display = 'none';
         }
 
+        // Reveal the Stop Automation option while we're paused between calls
+        if (this.elements.stopAutomationBtn) {
+            this.elements.stopAutomationBtn.style.display = '';
+        }
+
         // Update Up Next card
         this.updateUpNextCard();
+
+        // Re-render Previous Calls so the items pick up the now-cleared
+        // isCallActive/waitingForDisposition state and become clickable.
+        this.refreshPreviousCallsUI();
     }
 
     /**
@@ -572,6 +699,12 @@ export default class CallManager {
         }
         if (this.elements.pauseAutomationBtn) {
             this.elements.pauseAutomationBtn.style.display = 'none';
+        }
+        if (this.elements.stopAutomationBtn) {
+            this.elements.stopAutomationBtn.style.display = 'none';
+        }
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
 
         // Reset call UI to regular mode
@@ -619,6 +752,13 @@ export default class CallManager {
         let seconds = 0;
         this.elements.callTimer.textContent = "00:00";
         clearInterval(this.callTimerInterval);
+        // The call and disposition timers share elements.callTimer as their
+        // display surface. If the disposition timer was running, kill it now
+        // so the two intervals don't fight over textContent every tick.
+        if (this.dispositionTimerInterval) {
+            clearInterval(this.dispositionTimerInterval);
+            this.dispositionTimerInterval = null;
+        }
 
         this.callTimerInterval = setInterval(() => {
             seconds++;
@@ -635,6 +775,9 @@ export default class CallManager {
         clearInterval(this.callTimerInterval);
         this.callTimerInterval = null;
         this.elements.callTimer.textContent = "00:00";
+        // Reset the phase tracker so the next call's first ACTIVE/TALKING event
+        // restarts the timer as a fresh talk-time count.
+        this._phaseHasBeenConnected = false;
     }
 
     /**
@@ -644,6 +787,14 @@ export default class CallManager {
         let seconds = 0;
         this.elements.callTimer.textContent = "00:00";
         clearInterval(this.dispositionTimerInterval);
+        // Same shared-element guard as startCallTimer: if the call timer is
+        // still ticking, stop it before the disposition timer takes over so
+        // they don't both write to elements.callTimer.
+        if (this.callTimerInterval) {
+            clearInterval(this.callTimerInterval);
+            this.callTimerInterval = null;
+            this._phaseHasBeenConnected = false;
+        }
 
         this.dispositionTimerInterval = setInterval(() => {
             seconds++;
@@ -751,6 +902,105 @@ export default class CallManager {
     }
 
     /**
+     * Adopts a call that was started directly in Five9 (the user dialed from
+     * the Five9 UI rather than through this extension). Looks up the phone
+     * number against the master list and either loads that student or shows
+     * an "Unknown Caller" entry, then sets up the active-call UI so the
+     * extension stays in sync with Five9.
+     *
+     * No-op when:
+     *  - we're already tracking a call (extension-initiated or previously adopted)
+     *  - we're waiting for / processing a disposition
+     *  - automation is running (an external call would disrupt the queue)
+     *
+     * @param {string|null} phoneNumber - The customer's number from Five9
+     * @param {string} state - The current Five9 call state (OFFERED, RINGING_*, ACTIVE, TALKING, ...)
+     */
+    async handleExternalCallStart(phoneNumber, state) {
+        if (this.isCallActive || this.waitingForDisposition || this._dispositionInProgress) return;
+        if (this.automationMode) return;
+        if (this.debugMode) return; // Demo mode ignores real Five9 events
+        // Re-entry guard: the master-list lookup below is async, so two rapid
+        // FIVE9_CALL_STATE_CHANGED events (e.g. OFFERED → TALKING in quick
+        // succession) could both pass the isCallActive check before either
+        // commits the flag. Without this, both would adopt the same call and
+        // double-render the contact card / queue / timer.
+        if (this._adoptingExternalCall) return;
+        this._adoptingExternalCall = true;
+
+        try {
+            // Look up the master list by digits-only phone match
+            let target = null;
+            try {
+                const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+                const students = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
+                const targetDigits = String(phoneNumber || '').replace(/\D/g, '');
+                if (targetDigits) {
+                    const found = students.find(s => {
+                        const candidates = [s.directPhone, s.phone, s.Phone, s.PrimaryPhone].filter(Boolean);
+                        return candidates.some(p => String(p).replace(/\D/g, '') === targetDigits);
+                    });
+                    if (found) {
+                        target = { ...found, directPhone: phoneNumber };
+                    }
+                }
+            } catch (err) {
+                console.warn('[CallManager] handleExternalCallStart: master-list lookup failed', err);
+            }
+
+            if (!target) {
+                target = {
+                    name: 'Unknown Caller',
+                    directPhone: phoneNumber || '',
+                    phone: phoneNumber || ''
+                };
+            }
+
+            // Set call-active state up front so setActiveStudent / updateCallInterfaceState
+            // don't reset the dial button to "Ready to Dial".
+            this.isCallActive = true;
+            this.waitingForDisposition = false;
+            this._currentCallStudent = target;
+
+        // Load the resolved student into the contact card (and queue) via the
+        // sidepanel callback so the rest of the UI follows the same path as a
+        // manual selection.
+        if (this.uiCallbacks.adoptExternalCall) {
+            this.uiCallbacks.adoptExternalCall(target);
+        }
+
+        // Active-call dial button (red, rotated) — overrides the green default
+        // setActiveStudent applied a moment ago.
+        if (this.elements.dialBtn) {
+            this.elements.dialBtn.disabled = false;
+            this.elements.dialBtn.style.cursor = 'pointer';
+            this.elements.dialBtn.style.opacity = '1';
+            this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
+            this.elements.dialBtn.style.transform = 'rotate(135deg)';
+        }
+
+            // Reflect Five9's current state — if it's already TALKING when we
+            // detected it (e.g. panel opened mid-call), setCallPhase will start
+            // the talk-time timer fresh just like a normal connect.
+            if (state === 'ACTIVE' || state === 'TALKING') {
+                this.setCallPhase('connected');
+            } else {
+                this.setCallPhase('ringing');
+            }
+
+            if (this.elements.callDispositionSection) {
+                this.elements.callDispositionSection.style.display = 'flex';
+                this.resetDispositionButtons();
+            }
+
+            this.startCallTimer();
+            this.refreshPreviousCallsUI();
+        } finally {
+            this._adoptingExternalCall = false;
+        }
+    }
+
+    /**
      * Handles call disconnected externally (through Five9 UI)
      * Updates state to awaiting disposition
      */
@@ -778,6 +1028,8 @@ export default class CallManager {
         }
 
         // Keep disposition section visible if it was showing
+        // Re-render Previous Calls so items show as disabled while we wait.
+        this.refreshPreviousCallsUI();
     }
 
     /**
@@ -887,11 +1139,13 @@ export default class CallManager {
         // Update last call timestamp
         await this.updateLastCallTimestamp();
 
+        // Clear waiting for disposition flag BEFORE rendering Previous Calls so
+        // the items aren't drawn as disabled with the stale "in active call"
+        // tooltip. (The renderer keys off isCallActive + waitingForDisposition.)
+        this.waitingForDisposition = false;
+
         // Add to previous-calls history
         this.addToPreviousCalls(this._currentCallStudent);
-
-        // Clear waiting for disposition flag
-        this.waitingForDisposition = false;
 
         // Check if in automation mode
         if (this.automationMode) {
@@ -1325,9 +1579,16 @@ export default class CallManager {
                 this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
             }
 
-            // Hide the Up Next card during the redial; restored via showPausedState/updateUpNextCard later.
-            if (this.elements.upNextCard) {
-                this.elements.upNextCard.style.display = 'none';
+            // Keep the Up Next card visible — the queue's current student is
+            // still next once the user resumes (or cancels this redial), and
+            // updateUpNextCard's paused-aware logic now points at the right
+            // index during paused state.
+            this.updateUpNextCard();
+
+            // Show the Cancel button so the user can revert this staged redial
+            // and go back to the queue's current student.
+            if (this.elements.cancelRedialBtn) {
+                this.elements.cancelRedialBtn.style.display = '';
             }
         } else {
             // Not in automation: replace the queue with this student so the regular
@@ -1335,6 +1596,37 @@ export default class CallManager {
             if (this.uiCallbacks.cancelAutomation) {
                 this.uiCallbacks.cancelAutomation(historicEntry);
             }
+        }
+
+        this.refreshPreviousCallsUI();
+    }
+
+    /**
+     * Reverts a staged redial (or custom-phone selection) made during a paused
+     * automation, restoring the contact card to the queue's current student.
+     * No-op if there's nothing staged or we're not paused.
+     */
+    clearStagedRedial() {
+        if (!this.automationMode || !this.isPaused) return;
+        if (!this._pendingRedialStudent && !this._redialingFromHistory) return;
+
+        this._pendingRedialStudent = null;
+        this._redialingFromHistory = false;
+
+        // Re-show the paused UI directly: showPausedState overwrites the
+        // contact card with the queue-summary view (count + play avatar +
+        // hidden detail line) so we don't need to load the queue student
+        // first. Doing so caused setActiveStudent's async tail (it awaits
+        // chrome.storage.local for the reformatNameEnabled setting) to
+        // race against showPausedState's synchronous DOM writes — the
+        // queue student's name/avatar/detail would land AFTER our paused
+        // overrides and visibly clobber them. The next resume runs through
+        // callNextStudentInQueue → updateCurrentStudent, which loads the
+        // queue student into the card right before dialing.
+        this.showPausedState();
+
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
 
         this.refreshPreviousCallsUI();
@@ -1380,8 +1672,15 @@ export default class CallManager {
             this.resetDispositionButtons();
         }
 
-        if (this.elements.upNextCard) {
-            this.elements.upNextCard.style.display = 'none';
+        // Keep the Up Next card visible during the redial call so the user
+        // sees who the queue will resume to once this call finishes. The
+        // _redialingFromHistory flag steers updateUpNextCard to point at
+        // currentAutomationIndex (the actual next-after-redial), not +1.
+        this.updateUpNextCard();
+
+        // The redial is now in flight — Cancel no longer applies.
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
 
         this.startCallTimer();

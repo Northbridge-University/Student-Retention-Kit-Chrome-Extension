@@ -24,11 +24,13 @@ export const RELEASE_NOTES = {
     // The key should match the version in manifest.json
 	'15.1': {
         title: 'Latest Updates',
-        date: 'May 7, 2026',
+        date: 'May 8, 2026',
         updates: [
 			'Improved Call Page UI',
 			'Added Previous Calls list',
-			'You can now manually input numbers'
+			'You can now manually input numbers',
+			'Improved call reliability',
+			'Fixed bugs'
         ]
     },
 	'15.0': {

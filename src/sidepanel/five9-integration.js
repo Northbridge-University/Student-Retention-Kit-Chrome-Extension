@@ -192,19 +192,33 @@ export function setupFive9StatusListeners(callManager, getSelectedQueue) {
             }
         }
 
-        // Update the call phase indicator as Five9 transitions through states.
-        // REST normalizes the connected state to "ACTIVE"; the WebSocket payload
-        // uses "TALKING". OFFERED / RINGING_ON_OTHER_SIDE both mean ringing.
-        // Skip while in demo mode (no real Five9 state) or while we're already
-        // waiting for disposition (post-call -- "Awaiting Disposition" stays).
-        if (message.type === 'FIVE9_CALL_STATE_CHANGED' &&
-            callManager && !callManager.debugMode &&
-            callManager.getCallActiveState() && !callManager.getWaitingForDisposition()) {
+        if (message.type === 'FIVE9_CALL_STATE_CHANGED' && callManager && !callManager.debugMode) {
             const ns = message.newState;
-            if (ns === 'ACTIVE' || ns === 'TALKING') {
-                callManager.setCallPhase('connected');
-            } else if (ns === 'OFFERED' || ns === 'RINGING_ON_OTHER_SIDE') {
-                callManager.setCallPhase('ringing');
+            const ps = message.previousState;
+            const isActiveState = ns === 'ACTIVE' || ns === 'TALKING' ||
+                                  ns === 'OFFERED' || ns === 'RINGING_ON_OTHER_SIDE';
+
+            // External call start: Five9 reports a brand-new call (previousState === null)
+            // and the extension isn't currently tracking one. Adopt the call so the
+            // sidepanel UI mirrors what Five9 is doing.
+            if (ps === null && isActiveState &&
+                !callManager.getCallActiveState() &&
+                !callManager.getWaitingForDisposition()) {
+                callManager.handleExternalCallStart(message.phoneNumber, ns);
+                return;
+            }
+
+            // Otherwise, update the call phase indicator as Five9 transitions through
+            // states. REST normalizes the connected state to "ACTIVE"; the WebSocket
+            // payload uses "TALKING". OFFERED / RINGING_ON_OTHER_SIDE both mean ringing.
+            // Skip while we're already waiting for disposition (post-call -- "Awaiting
+            // Disposition" stays).
+            if (callManager.getCallActiveState() && !callManager.getWaitingForDisposition()) {
+                if (ns === 'ACTIVE' || ns === 'TALKING') {
+                    callManager.setCallPhase('connected');
+                } else if (ns === 'OFFERED' || ns === 'RINGING_ON_OTHER_SIDE') {
+                    callManager.setCallPhase('ringing');
+                }
             }
         }
     });
