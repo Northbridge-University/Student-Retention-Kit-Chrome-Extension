@@ -967,6 +967,13 @@ input:focus, textarea:focus, select:focus {
     flex-shrink: 0;
 }
 
+/* Hide Previous Calls while a Five9 placeholder is blocking the call section
+ * (NO_TAB / AWAITING_CONNECTION / connection error / restart). Five9 isn't
+ * ready, so dialing back makes no sense. */
+#contact.placeholder-active #previousCallsCard {
+    display: none !important;
+}
+
 .previous-calls-header {
     font-size: 0.7em;
     font-weight: 700;

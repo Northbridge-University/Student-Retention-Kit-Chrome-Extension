@@ -311,6 +311,10 @@ function renderPlaceholder(messageConfig) {
 function showPlaceholder() {
     if (!elements.callTabPlaceholder) return;
     elements.callTabPlaceholder.style.display = 'flex';
+    // Tag the contact tab so CSS can hide pinned-bottom cards (e.g. Previous
+    // Calls) while a Five9 placeholder is blocking interaction.
+    const contactTab = document.getElementById('contact');
+    if (contactTab) contactTab.classList.add('placeholder-active');
 }
 
 /**
@@ -320,6 +324,8 @@ function hidePlaceholder() {
     if (!elements.callTabPlaceholder) return;
     elements.callTabPlaceholder.style.display = 'none';
     currentPlaceholderMessage = null;
+    const contactTab = document.getElementById('contact');
+    if (contactTab) contactTab.classList.remove('placeholder-active');
 }
 
 /**
