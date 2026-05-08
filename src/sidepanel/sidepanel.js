@@ -1127,9 +1127,13 @@ function setupEventListeners() {
         });
     }
 
-    // Previous Calls — click a row to load that student's number into the dialer
+    // Previous Calls — click a row to load that student's number into the dialer.
+    // Before handing off to callManager.loadFromHistory we look the number up
+    // against the current master list so the contact card can show the rich
+    // student data (days out, gradebook, photo, etc.) even though the previous-
+    // calls cache only stores name + phone fields.
     if (elements.previousCallsList) {
-        elements.previousCallsList.addEventListener('click', (e) => {
+        elements.previousCallsList.addEventListener('click', async (e) => {
             const row = e.target.closest('.previous-call-item');
             if (!row || !callManager) return;
             if (row.classList.contains('disabled')) return;
@@ -1139,7 +1143,13 @@ function setupEventListeners() {
             const entry = entries[index];
             if (!entry) return;
 
-            callManager.loadFromHistory(entry);
+            const phone = entry.directPhone || entry.phone || entry.Phone || entry.PrimaryPhone || '';
+            const found = phone ? await findStudentByPhone(phone) : null;
+            const target = found
+                ? { ...found, directPhone: phone || found.directPhone || null }
+                : entry;
+
+            callManager.loadFromHistory(target);
         });
     }
 
