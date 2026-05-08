@@ -67,6 +67,17 @@ async function monitorCallState() {
             const newState = activeCall.state;
             const newInteractionId = activeCall.interactionId || activeCall.id;
 
+            // Pull the customer phone number from whichever field Five9 exposes
+            // for this interaction (REST detail responses vary by call direction).
+            const phoneNumber =
+                (activeCall.customer && (activeCall.customer.number || activeCall.customer.phone || activeCall.customer.phoneNumber)) ||
+                activeCall.dnis ||
+                activeCall.ani ||
+                activeCall.phoneNumber ||
+                activeCall.phone ||
+                activeCall.number ||
+                null;
+
             const isNewCall = currentInteractionId !== newInteractionId;
             const isStateChange = !isNewCall && currentCallState !== newState;
 
@@ -74,12 +85,13 @@ async function monitorCallState() {
                 // First time seeing this call — emit its initial state so listeners
                 // (e.g. auto-end timer) can react to fresh-call appearances, not just
                 // transitions within an already-tracked call.
-                console.log(`SRK: New call detected: ${newInteractionId} initial state=${newState}`);
+                console.log(`SRK: New call detected: ${newInteractionId} initial state=${newState} phone=${phoneNumber}`);
                 chrome.runtime.sendMessage({
                     type: 'FIVE9_CALL_STATE_CHANGED',
                     previousState: null,
                     newState: newState,
-                    interactionId: newInteractionId
+                    interactionId: newInteractionId,
+                    phoneNumber: phoneNumber
                 });
             } else if (isStateChange) {
                 console.log(`SRK: Call state changed: ${currentCallState} -> ${newState}`);
@@ -88,7 +100,8 @@ async function monitorCallState() {
                     type: 'FIVE9_CALL_STATE_CHANGED',
                     previousState: currentCallState,
                     newState: newState,
-                    interactionId: newInteractionId
+                    interactionId: newInteractionId,
+                    phoneNumber: phoneNumber
                 });
 
                 // If state changed to FINISHED, the disposition was set

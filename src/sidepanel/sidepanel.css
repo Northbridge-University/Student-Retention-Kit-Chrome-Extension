@@ -905,14 +905,14 @@ input:focus, textarea:focus, select:focus {
     border-color: rgba(234, 179, 8, 0.6);
 }
 
-/* Stop Automation Button — same shape as the pause button, light pastel red */
+/* Stop Automation Button — neutral gray at rest, light pastel red on hover */
 .stop-automation-btn {
     width: 100%;
     padding: 10px;
-    border: 1px solid rgba(252, 165, 165, 0.4);
+    border: 1px solid rgba(107, 114, 128, 0.3);
     border-radius: 0.75rem;
-    background: rgba(252, 165, 165, 0.15);
-    color: #b91c1c;
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
     font-size: 0.85em;
     font-weight: 600;
     cursor: pointer;
@@ -925,8 +925,9 @@ input:focus, textarea:focus, select:focus {
 }
 
 .stop-automation-btn:hover {
-    background: rgba(252, 165, 165, 0.25);
-    border-color: rgba(252, 165, 165, 0.6);
+    background: rgba(252, 165, 165, 0.2);
+    border-color: rgba(252, 165, 165, 0.5);
+    color: #b91c1c;
 }
 
 /* Cancel Redial Button — same shape, neutral gray. Reverts a staged redial or

@@ -234,6 +234,10 @@ async function initializeApp() {
         },
         renderPreviousCalls: (entries) => {
             renderPreviousCalls(entries);
+        },
+        adoptExternalCall: (student) => {
+            queueManager.setQueue([student]);
+            setActiveStudent(student, callManager);
         }
     };
     callManager = new CallManager(elements, uiCallbacks);

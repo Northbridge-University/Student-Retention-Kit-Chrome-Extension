@@ -785,6 +785,94 @@ export default class CallManager {
     }
 
     /**
+     * Adopts a call that was started directly in Five9 (the user dialed from
+     * the Five9 UI rather than through this extension). Looks up the phone
+     * number against the master list and either loads that student or shows
+     * an "Unknown Caller" entry, then sets up the active-call UI so the
+     * extension stays in sync with Five9.
+     *
+     * No-op when:
+     *  - we're already tracking a call (extension-initiated or previously adopted)
+     *  - we're waiting for / processing a disposition
+     *  - automation is running (an external call would disrupt the queue)
+     *
+     * @param {string|null} phoneNumber - The customer's number from Five9
+     * @param {string} state - The current Five9 call state (OFFERED, RINGING_*, ACTIVE, TALKING, ...)
+     */
+    async handleExternalCallStart(phoneNumber, state) {
+        if (this.isCallActive || this.waitingForDisposition || this._dispositionInProgress) return;
+        if (this.automationMode) return;
+        if (this.debugMode) return; // Demo mode ignores real Five9 events
+
+        // Look up the master list by digits-only phone match
+        let target = null;
+        try {
+            const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+            const students = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
+            const targetDigits = String(phoneNumber || '').replace(/\D/g, '');
+            if (targetDigits) {
+                const found = students.find(s => {
+                    const candidates = [s.directPhone, s.phone, s.Phone, s.PrimaryPhone].filter(Boolean);
+                    return candidates.some(p => String(p).replace(/\D/g, '') === targetDigits);
+                });
+                if (found) {
+                    target = { ...found, directPhone: phoneNumber };
+                }
+            }
+        } catch (err) {
+            console.warn('[CallManager] handleExternalCallStart: master-list lookup failed', err);
+        }
+
+        if (!target) {
+            target = {
+                name: 'Unknown Caller',
+                directPhone: phoneNumber || '',
+                phone: phoneNumber || ''
+            };
+        }
+
+        // Set call-active state up front so setActiveStudent / updateCallInterfaceState
+        // don't reset the dial button to "Ready to Dial".
+        this.isCallActive = true;
+        this.waitingForDisposition = false;
+        this._currentCallStudent = target;
+
+        // Load the resolved student into the contact card (and queue) via the
+        // sidepanel callback so the rest of the UI follows the same path as a
+        // manual selection.
+        if (this.uiCallbacks.adoptExternalCall) {
+            this.uiCallbacks.adoptExternalCall(target);
+        }
+
+        // Active-call dial button (red, rotated) — overrides the green default
+        // setActiveStudent applied a moment ago.
+        if (this.elements.dialBtn) {
+            this.elements.dialBtn.disabled = false;
+            this.elements.dialBtn.style.cursor = 'pointer';
+            this.elements.dialBtn.style.opacity = '1';
+            this.elements.dialBtn.style.background = `${CONFIG.COLORS.ERROR}`;
+            this.elements.dialBtn.style.transform = 'rotate(135deg)';
+        }
+
+        // Reflect Five9's current state — if it's already TALKING when we
+        // detected it (e.g. panel opened mid-call), setCallPhase will start
+        // the talk-time timer fresh just like a normal connect.
+        if (state === 'ACTIVE' || state === 'TALKING') {
+            this.setCallPhase('connected');
+        } else {
+            this.setCallPhase('ringing');
+        }
+
+        if (this.elements.callDispositionSection) {
+            this.elements.callDispositionSection.style.display = 'flex';
+            this.resetDispositionButtons();
+        }
+
+        this.startCallTimer();
+        this.refreshPreviousCallsUI();
+    }
+
+    /**
      * Handles call disconnected externally (through Five9 UI)
      * Updates state to awaiting disposition
      */
