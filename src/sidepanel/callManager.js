@@ -30,6 +30,7 @@ export default class CallManager {
         this._pendingRedialStudent = null; // Loaded by loadFromHistory; consumed by next toggleCallState
         this._currentCallStudent = null; // Snapshot of who the active call is for (used to log to history)
         this._phaseHasBeenConnected = false; // True once Five9 reports ACTIVE/TALKING for the current call
+        this._adoptingExternalCall = false; // Re-entry guard for handleExternalCallStart's async lookup
     }
 
     /**
@@ -202,65 +203,92 @@ export default class CallManager {
             this.startCallTimer();
             this.refreshPreviousCallsUI();
         } else {
-            // Call is ending - show "Ending call" status
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
-
-
-            let hangupResult = { success: true, state: 'WRAP_UP' };
-
-            // --- HANGUP FIVE9 CALL (ONLY IF DEBUG MODE OFF) ---
-            if (!this.debugMode) {
-                hangupResult = await this.hangupCall(); // Trigger Five9 API hangup and wait for response
-            } else {
-                console.log("📞 [DEMO MODE] Simulating hangup (Five9 API not called)");
-            }
-            // -------------------------
-
-            // Set button to gray while awaiting disposition
-            this.elements.dialBtn.style.background = `${CONFIG.COLORS.MUTED}`;
-            this.elements.dialBtn.style.transform = 'rotate(0deg)';
-
-            // Check the interaction state
-            const state = hangupResult?.state || 'WRAP_UP';
-            console.log("📊 Call state after hangup:", state);
-
-            if (state === 'WRAP_UP') {
-                // Call disconnected but waiting for disposition
-                this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Awaiting Disposition`;
-
-                // KEEP call active to block pings until disposition is set
-                this.isCallActive = true;
-                this.waitingForDisposition = true;
-
-                // Disable dial button while awaiting disposition
+            // Call is ending. Lock out other call-state transitions (a second
+            // dial click or a parallel disposition click) until the hangup
+            // completes; otherwise we'd race against ourselves on Five9 and
+            // produce double-hangups or post-hangup re-dials.
+            this._dispositionInProgress = true;
+            // Disable the dial button immediately so subsequent clicks during
+            // the await don't even queue events.
+            if (this.elements.dialBtn) {
                 this.elements.dialBtn.disabled = true;
                 this.elements.dialBtn.style.cursor = 'not-allowed';
                 this.elements.dialBtn.style.opacity = '0.6';
+            }
+            try {
+                this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Ending call...`;
 
-                // Start disposition timer to show waiting time
-                this.startDispositionTimer();
 
-                // Focus Five9 tab for disposition (only in non-demo mode)
+                let hangupResult = { success: true, state: 'WRAP_UP' };
+
+                // --- HANGUP FIVE9 CALL (ONLY IF DEBUG MODE OFF) ---
                 if (!this.debugMode) {
-                    this.focusFive9Tab();
+                    hangupResult = await this.hangupCall(); // Trigger Five9 API hangup and wait for response
+                } else {
+                    console.log("📞 [DEMO MODE] Simulating hangup (Five9 API not called)");
                 }
-            } else {
-                // Call fully completed (shouldn't normally happen without disposition)
-                this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`; // Turn green when ready
-                this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
-                this.isCallActive = false;
-                this.waitingForDisposition = false;
-            }
+                // -------------------------
 
-            // Hide custom input area if it was open
-            if (this.elements.otherInputArea) {
-                this.elements.otherInputArea.style.display = 'none';
-            }
+                // Set button to gray while awaiting disposition
+                this.elements.dialBtn.style.background = `${CONFIG.COLORS.MUTED}`;
+                this.elements.dialBtn.style.transform = 'rotate(0deg)';
 
-            this.stopCallTimer();
-            // Reflect the new isCallActive / waitingForDisposition values in the
-            // Previous Calls list (now disabled while awaiting disposition).
-            this.refreshPreviousCallsUI();
+                // Check the interaction state
+                const state = hangupResult?.state || 'WRAP_UP';
+                console.log("📊 Call state after hangup:", state);
+
+                if (state === 'WRAP_UP') {
+                    // Call disconnected but waiting for disposition
+                    this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Awaiting Disposition`;
+
+                    // KEEP call active to block pings until disposition is set
+                    this.isCallActive = true;
+                    this.waitingForDisposition = true;
+
+                    // Dial button stays disabled while awaiting disposition
+                    // (already disabled at the top of this branch).
+
+                    // If a disposition button was clicked during the hangup,
+                    // its no-op handler left the grid greyed out. Reset so the
+                    // user can actually pick a code now.
+                    this.resetDispositionButtons();
+
+                    // Start disposition timer to show waiting time
+                    this.startDispositionTimer();
+
+                    // Focus Five9 tab for disposition (only in non-demo mode)
+                    if (!this.debugMode) {
+                        this.focusFive9Tab();
+                    }
+                } else {
+                    // Call fully completed (shouldn't normally happen without disposition)
+                    this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`; // Turn green when ready
+                    this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
+                    this.isCallActive = false;
+                    this.waitingForDisposition = false;
+                    // Re-enable so the user can dial again.
+                    if (this.elements.dialBtn) {
+                        this.elements.dialBtn.disabled = false;
+                        this.elements.dialBtn.style.cursor = 'pointer';
+                        this.elements.dialBtn.style.opacity = '1';
+                    }
+                }
+
+                // Hide custom input area if it was open
+                if (this.elements.otherInputArea) {
+                    this.elements.otherInputArea.style.display = 'none';
+                }
+
+                this.stopCallTimer();
+                // Reflect the new isCallActive / waitingForDisposition values in the
+                // Previous Calls list (now disabled while awaiting disposition).
+                this.refreshPreviousCallsUI();
+            } finally {
+                // Release the lock so handleDisposition can run when the user
+                // picks a code (or so the user can dial again if the call
+                // fully completed without disposition).
+                this._dispositionInProgress = false;
+            }
         }
     }
 
@@ -825,39 +853,47 @@ export default class CallManager {
         if (this.isCallActive || this.waitingForDisposition || this._dispositionInProgress) return;
         if (this.automationMode) return;
         if (this.debugMode) return; // Demo mode ignores real Five9 events
+        // Re-entry guard: the master-list lookup below is async, so two rapid
+        // FIVE9_CALL_STATE_CHANGED events (e.g. OFFERED → TALKING in quick
+        // succession) could both pass the isCallActive check before either
+        // commits the flag. Without this, both would adopt the same call and
+        // double-render the contact card / queue / timer.
+        if (this._adoptingExternalCall) return;
+        this._adoptingExternalCall = true;
 
-        // Look up the master list by digits-only phone match
-        let target = null;
         try {
-            const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
-            const students = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
-            const targetDigits = String(phoneNumber || '').replace(/\D/g, '');
-            if (targetDigits) {
-                const found = students.find(s => {
-                    const candidates = [s.directPhone, s.phone, s.Phone, s.PrimaryPhone].filter(Boolean);
-                    return candidates.some(p => String(p).replace(/\D/g, '') === targetDigits);
-                });
-                if (found) {
-                    target = { ...found, directPhone: phoneNumber };
+            // Look up the master list by digits-only phone match
+            let target = null;
+            try {
+                const data = await chrome.storage.local.get([STORAGE_KEYS.MASTER_ENTRIES]);
+                const students = data[STORAGE_KEYS.MASTER_ENTRIES] || [];
+                const targetDigits = String(phoneNumber || '').replace(/\D/g, '');
+                if (targetDigits) {
+                    const found = students.find(s => {
+                        const candidates = [s.directPhone, s.phone, s.Phone, s.PrimaryPhone].filter(Boolean);
+                        return candidates.some(p => String(p).replace(/\D/g, '') === targetDigits);
+                    });
+                    if (found) {
+                        target = { ...found, directPhone: phoneNumber };
+                    }
                 }
+            } catch (err) {
+                console.warn('[CallManager] handleExternalCallStart: master-list lookup failed', err);
             }
-        } catch (err) {
-            console.warn('[CallManager] handleExternalCallStart: master-list lookup failed', err);
-        }
 
-        if (!target) {
-            target = {
-                name: 'Unknown Caller',
-                directPhone: phoneNumber || '',
-                phone: phoneNumber || ''
-            };
-        }
+            if (!target) {
+                target = {
+                    name: 'Unknown Caller',
+                    directPhone: phoneNumber || '',
+                    phone: phoneNumber || ''
+                };
+            }
 
-        // Set call-active state up front so setActiveStudent / updateCallInterfaceState
-        // don't reset the dial button to "Ready to Dial".
-        this.isCallActive = true;
-        this.waitingForDisposition = false;
-        this._currentCallStudent = target;
+            // Set call-active state up front so setActiveStudent / updateCallInterfaceState
+            // don't reset the dial button to "Ready to Dial".
+            this.isCallActive = true;
+            this.waitingForDisposition = false;
+            this._currentCallStudent = target;
 
         // Load the resolved student into the contact card (and queue) via the
         // sidepanel callback so the rest of the UI follows the same path as a
@@ -876,22 +912,25 @@ export default class CallManager {
             this.elements.dialBtn.style.transform = 'rotate(135deg)';
         }
 
-        // Reflect Five9's current state — if it's already TALKING when we
-        // detected it (e.g. panel opened mid-call), setCallPhase will start
-        // the talk-time timer fresh just like a normal connect.
-        if (state === 'ACTIVE' || state === 'TALKING') {
-            this.setCallPhase('connected');
-        } else {
-            this.setCallPhase('ringing');
-        }
+            // Reflect Five9's current state — if it's already TALKING when we
+            // detected it (e.g. panel opened mid-call), setCallPhase will start
+            // the talk-time timer fresh just like a normal connect.
+            if (state === 'ACTIVE' || state === 'TALKING') {
+                this.setCallPhase('connected');
+            } else {
+                this.setCallPhase('ringing');
+            }
 
-        if (this.elements.callDispositionSection) {
-            this.elements.callDispositionSection.style.display = 'flex';
-            this.resetDispositionButtons();
-        }
+            if (this.elements.callDispositionSection) {
+                this.elements.callDispositionSection.style.display = 'flex';
+                this.resetDispositionButtons();
+            }
 
-        this.startCallTimer();
-        this.refreshPreviousCallsUI();
+            this.startCallTimer();
+            this.refreshPreviousCallsUI();
+        } finally {
+            this._adoptingExternalCall = false;
+        }
     }
 
     /**
