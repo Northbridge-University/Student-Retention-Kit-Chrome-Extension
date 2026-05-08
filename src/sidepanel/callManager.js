@@ -401,8 +401,16 @@ export default class CallManager {
             return;
         }
 
-        // Find next non-skipped student
-        const nextIndex = this.findNextNonSkippedIndex(this.currentAutomationIndex + 1);
+        // During an active call, "Up Next" means the call AFTER the current
+        // one, so search starts at currentAutomationIndex + 1.
+        // While paused between calls (after dispose), currentAutomationIndex
+        // has already been incremented and now points at the student we'll
+        // dial on resume — that IS the "Up Next" student, so search starts
+        // at currentAutomationIndex.
+        const startFrom = this.isPaused && !this.isCallActive
+            ? this.currentAutomationIndex
+            : this.currentAutomationIndex + 1;
+        const nextIndex = this.findNextNonSkippedIndex(startFrom);
 
         if (nextIndex !== -1) {
             // Show next non-skipped student
@@ -458,21 +466,26 @@ export default class CallManager {
     updateSkipButtonState() {
         if (!this.elements.skipStudentBtn) return;
 
-        // Check if there's a non-skipped student after the current one
-        const upNextIndex = this.findNextNonSkippedIndex(this.currentAutomationIndex + 1);
-        const hasUpNext = this.automationMode && upNextIndex !== -1;
+        // skipToNext early-returns unless we're in an active automation call,
+        // so disable the button outside that state. Otherwise the user could
+        // see an enabled-looking button (during paused / staged redial) that
+        // does nothing on click.
+        const enabledNow = this.automationMode && this.isCallActive;
 
-        if (hasUpNext) {
-            // Enable skip button
-            this.elements.skipStudentBtn.disabled = false;
-            this.elements.skipStudentBtn.style.opacity = '1';
-            this.elements.skipStudentBtn.style.cursor = 'pointer';
-        } else {
-            // Disable skip button
-            this.elements.skipStudentBtn.disabled = true;
-            this.elements.skipStudentBtn.style.opacity = '0.3';
-            this.elements.skipStudentBtn.style.cursor = 'not-allowed';
+        if (enabledNow) {
+            const upNextIndex = this.findNextNonSkippedIndex(this.currentAutomationIndex + 1);
+            const hasUpNext = upNextIndex !== -1;
+            if (hasUpNext) {
+                this.elements.skipStudentBtn.disabled = false;
+                this.elements.skipStudentBtn.style.opacity = '1';
+                this.elements.skipStudentBtn.style.cursor = 'pointer';
+                return;
+            }
         }
+
+        this.elements.skipStudentBtn.disabled = true;
+        this.elements.skipStudentBtn.style.opacity = '0.3';
+        this.elements.skipStudentBtn.style.cursor = 'not-allowed';
     }
 
     /**
@@ -1563,10 +1576,11 @@ export default class CallManager {
                 this.elements.callStatusText.innerHTML = '<span class="status-indicator ready"></span> Ready to Dial';
             }
 
-            // Hide the Up Next card during the redial; restored via showPausedState/updateUpNextCard later.
-            if (this.elements.upNextCard) {
-                this.elements.upNextCard.style.display = 'none';
-            }
+            // Keep the Up Next card visible — the queue's current student is
+            // still next once the user resumes (or cancels this redial), and
+            // updateUpNextCard's paused-aware logic now points at the right
+            // index during paused state.
+            this.updateUpNextCard();
 
             // Show the Cancel button so the user can revert this staged redial
             // and go back to the queue's current student.
