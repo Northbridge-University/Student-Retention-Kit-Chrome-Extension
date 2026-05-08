@@ -596,11 +596,17 @@ export default class CallManager {
         }
 
         if (this.elements.callStatusText) {
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Paused`;
+        }
+
+        // Replace the contact card's name with the remaining-queue count while
+        // paused. setActiveStudent will overwrite it back to the student's
+        // name on the next state transition (resume / stop / cancel-redial).
+        if (this.elements.contactName) {
             const remaining = this.getRemainingAutomationCount();
-            const tail = remaining > 0
-                ? ` &middot; ${remaining} student${remaining === 1 ? '' : 's'} left`
-                : '';
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Paused${tail}`;
+            if (remaining > 0) {
+                this.elements.contactName.textContent = `${remaining} student${remaining === 1 ? '' : 's'} left`;
+            }
         }
 
         // Hide disposition section
