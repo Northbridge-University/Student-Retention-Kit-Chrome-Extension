@@ -35,11 +35,48 @@ function getDispositionCode(dispositionType) {
 /**
  * Monitors call state changes and notifies the extension
  */
+// Tracks the last station-connection state we reported to the background, so
+// the periodic probe only fires FIVE9_STATION_RESTART_VERIFIED on transitions
+// (false -> true) instead of every poll.
+let stationConnectionLastReported = null;
+
+/**
+ * Actively probes the agent's station endpoint to confirm Five9 is connected.
+ * Lets the extension flip out of "Awaiting Agent Connection" within one poll
+ * cycle instead of waiting for Five9's next heartbeat POST.
+ * @param {string} userId
+ */
+async function probeStationConnection(userId) {
+    let connected = false;
+    try {
+        const stationResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/agents/${userId}/station`);
+        if (stationResp.ok) {
+            const station = await stationResp.json();
+            connected = !!(station && (station.stationType || station.stationId || station.type));
+        }
+    } catch (_) {
+        // Network error / station endpoint unavailable — leave connected = false
+    }
+
+    if (connected && stationConnectionLastReported !== true) {
+        chrome.runtime.sendMessage({ type: 'FIVE9_STATION_RESTART_VERIFIED' });
+        stationConnectionLastReported = true;
+    } else if (!connected && stationConnectionLastReported === true) {
+        stationConnectionLastReported = false;
+    } else if (stationConnectionLastReported === null) {
+        stationConnectionLastReported = connected;
+    }
+}
+
 async function monitorCallState() {
     try {
         const metadataResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/auth/metadata`);
         if (!metadataResp.ok) return;
         const metadata = await metadataResp.json();
+
+        // Ping the station endpoint each cycle to keep the background's
+        // five9ConnectionState in sync without waiting for the heartbeat.
+        await probeStationConnection(metadata.userId);
 
         const interactionsResp = await fetch(`${FIVE9_BASE_URL}/appsvcs/rs/svc/agents/${metadata.userId}/interactions`);
         if (!interactionsResp.ok) return;
