@@ -22,6 +22,18 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'15.2': {
+        title: 'Latest Updates',
+        date: 'May 8, 2026',
+        updates: [
+			'Improved Call Page UI',
+			'Added Previous Calls list',
+			'You can now manually input numbers',
+			'Improved call reliability',
+			'Fixed bugs',
+			'Updated Office Add In File'
+        ]
+    },
 	'15.1': {
         title: 'Latest Updates',
         date: 'May 8, 2026',
