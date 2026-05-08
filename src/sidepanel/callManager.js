@@ -457,6 +457,9 @@ export default class CallManager {
         if (this.elements.stopAutomationBtn) {
             this.elements.stopAutomationBtn.style.display = 'none';
         }
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
+        }
         this.isPaused = false;
 
         // Reset call UI to regular mode
@@ -509,9 +512,13 @@ export default class CallManager {
                 this.elements.pauseAutomationBtn.innerHTML = '<i class="fas fa-pause"></i> Pause After This Call';
                 this.elements.pauseAutomationBtn.classList.remove('paused');
 
-                // Resuming hides the Stop button and abandons any loaded previous-call redial
+                // Resuming hides the Stop + Cancel buttons and abandons any
+                // loaded previous-call redial.
                 if (this.elements.stopAutomationBtn) {
                     this.elements.stopAutomationBtn.style.display = 'none';
+                }
+                if (this.elements.cancelRedialBtn) {
+                    this.elements.cancelRedialBtn.style.display = 'none';
                 }
                 this._pendingRedialStudent = null;
                 this._redialingFromHistory = false;
@@ -586,6 +593,9 @@ export default class CallManager {
         }
         if (this.elements.stopAutomationBtn) {
             this.elements.stopAutomationBtn.style.display = 'none';
+        }
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
 
         // Reset call UI to regular mode
@@ -1343,12 +1353,45 @@ export default class CallManager {
             if (this.elements.upNextCard) {
                 this.elements.upNextCard.style.display = 'none';
             }
+
+            // Show the Cancel button so the user can revert this staged redial
+            // and go back to the queue's current student.
+            if (this.elements.cancelRedialBtn) {
+                this.elements.cancelRedialBtn.style.display = '';
+            }
         } else {
             // Not in automation: replace the queue with this student so the regular
             // dial flow targets them. No auto-dial.
             if (this.uiCallbacks.cancelAutomation) {
                 this.uiCallbacks.cancelAutomation(historicEntry);
             }
+        }
+
+        this.refreshPreviousCallsUI();
+    }
+
+    /**
+     * Reverts a staged redial (or custom-phone selection) made during a paused
+     * automation, restoring the contact card to the queue's current student.
+     * No-op if there's nothing staged or we're not paused.
+     */
+    clearStagedRedial() {
+        if (!this.automationMode || !this.isPaused) return;
+        if (!this._pendingRedialStudent && !this._redialingFromHistory) return;
+
+        this._pendingRedialStudent = null;
+        this._redialingFromHistory = false;
+
+        const queueStudent = this.selectedQueue[this.currentAutomationIndex];
+        if (queueStudent && this.uiCallbacks.updateCurrentStudent) {
+            this.uiCallbacks.updateCurrentStudent(queueStudent);
+        }
+
+        // Re-show the paused UI: dial button greyed/yellow, status "Paused".
+        this.showPausedState();
+
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
 
         this.refreshPreviousCallsUI();
@@ -1396,6 +1439,11 @@ export default class CallManager {
 
         if (this.elements.upNextCard) {
             this.elements.upNextCard.style.display = 'none';
+        }
+
+        // The redial is now in flight — Cancel no longer applies.
+        if (this.elements.cancelRedialBtn) {
+            this.elements.cancelRedialBtn.style.display = 'none';
         }
 
         this.startCallTimer();

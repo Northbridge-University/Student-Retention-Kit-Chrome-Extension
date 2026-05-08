@@ -929,6 +929,31 @@ input:focus, textarea:focus, select:focus {
     border-color: rgba(252, 165, 165, 0.6);
 }
 
+/* Cancel Redial Button — same shape, neutral gray. Reverts a staged redial or
+ * custom phone number back to the queued automation student. */
+.cancel-redial-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(107, 114, 128, 0.3);
+    border-radius: 0.75rem;
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.cancel-redial-btn:hover {
+    background: rgba(107, 114, 128, 0.2);
+    border-color: rgba(107, 114, 128, 0.5);
+}
+
 /* Previous Calls Card — pinned to the bottom of the Call tab */
 .previous-calls-card {
     background: rgba(255, 255, 255, 0.55);

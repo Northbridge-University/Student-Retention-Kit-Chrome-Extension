@@ -45,6 +45,7 @@ export function cacheDomElements() {
     elements.skipStudentBtn = document.getElementById('skipStudentBtn');
     elements.pauseAutomationBtn = document.getElementById('pauseAutomationBtn');
     elements.stopAutomationBtn = document.getElementById('stopAutomationBtn');
+    elements.cancelRedialBtn = document.getElementById('cancelRedialBtn');
     elements.demoModeBanner = document.getElementById('demoModeBanner');
 
     // Call Tab - Previous Calls Card

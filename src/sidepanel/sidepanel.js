@@ -1115,6 +1115,14 @@ function setupEventListeners() {
         });
     }
 
+    if (elements.cancelRedialBtn) {
+        elements.cancelRedialBtn.addEventListener('click', () => {
+            if (callManager) {
+                callManager.clearStagedRedial();
+            }
+        });
+    }
+
     // Previous Calls — click a row to load that student's number into the dialer
     if (elements.previousCallsList) {
         elements.previousCallsList.addEventListener('click', (e) => {
@@ -1839,12 +1847,23 @@ function setupPhoneEditing() {
     elements.contactPhone.addEventListener('click', () => {
         if (elements.contactPhone.contentEditable === 'true') return;
 
-        // Allow editing when zero or one student is loaded (zero = no-student state
-        // where the user is manually entering a number). Block multi-select queues.
         if (!queueManager) return;
-        if (queueManager.getLength() > 1) return;
 
-        if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition() || callManager.getAutomationModeState())) {
+        // Block during an active call or while a disposition is being processed.
+        if (callManager && (callManager.getCallActiveState() || callManager.getWaitingForDisposition())) {
+            return;
+        }
+
+        // In automation mode, only allow editing while paused between calls
+        // (a custom number is staged like a previous-calls redial). Block while
+        // automation is actively dialing.
+        if (callManager && callManager.getAutomationModeState() && !callManager.isPaused) {
+            return;
+        }
+
+        // Outside automation: only when zero or one student is loaded (multi-select
+        // queues haven't started automation yet — don't touch them).
+        if (!callManager?.getAutomationModeState() && queueManager.getLength() > 1) {
             return;
         }
 
@@ -1906,10 +1925,14 @@ function setupPhoneEditing() {
         const raw = elements.contactPhone.textContent.trim();
         elements.contactPhone.contentEditable = 'false';
 
-        // Cleared the field entirely — drop back to the No Student Selected state.
+        // Cleared the field entirely — in paused automation, revert the
+        // staged redial back to the queued student. Otherwise drop to the
+        // No Student Selected state.
         if (raw === '') {
             elements.contactPhone.textContent = '';
-            if (queueManager) {
+            if (callManager && callManager.getAutomationModeState() && callManager.isPaused) {
+                callManager.clearStagedRedial();
+            } else if (queueManager) {
                 queueManager.clearQueue();
             }
             return;
@@ -1928,17 +1951,19 @@ function setupPhoneEditing() {
 
         // Look up the new number in the master list.
         const found = await findStudentByPhone(formatted);
-        if (found) {
-            // Clone so we don't mutate the master list entry; force the formatted phone
-            // so the contact card and dial use the dashed version.
-            queueManager.setQueue([{ ...found, directPhone: formatted }]);
-        } else {
-            queueManager.setQueue([{
-                name: 'Unknown',
-                directPhone: formatted,
-                phone: formatted
-            }]);
+        const target = found
+            ? { ...found, directPhone: formatted }
+            : { name: 'Unknown', directPhone: formatted, phone: formatted };
+
+        // In paused automation, stage the custom number as a redial so the
+        // queue stays intact and the user can revert via the Cancel button.
+        if (callManager && callManager.getAutomationModeState() && callManager.isPaused) {
+            callManager.loadFromHistory(target);
+            return;
         }
+
+        // Otherwise replace the queue (default single-student flow).
+        queueManager.setQueue([target]);
     });
 }
 
