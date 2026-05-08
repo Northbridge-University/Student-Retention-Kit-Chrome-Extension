@@ -570,6 +570,20 @@ export default class CallManager {
     }
 
     /**
+     * Returns how many automation queue entries are still queued to be called
+     * starting from the current index (skipped indices excluded).
+     * @returns {number}
+     */
+    getRemainingAutomationCount() {
+        if (!this.automationMode) return 0;
+        let count = 0;
+        for (let i = this.currentAutomationIndex; i < this.selectedQueue.length; i++) {
+            if (!this.skippedIndices.has(i)) count++;
+        }
+        return count;
+    }
+
+    /**
      * Shows the paused state UI between calls
      */
     showPausedState() {
@@ -582,7 +596,11 @@ export default class CallManager {
         }
 
         if (this.elements.callStatusText) {
-            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Paused`;
+            const remaining = this.getRemainingAutomationCount();
+            const tail = remaining > 0
+                ? ` &middot; ${remaining} student${remaining === 1 ? '' : 's'} left`
+                : '';
+            this.elements.callStatusText.innerHTML = `<span class="status-indicator" style="background:${CONFIG.COLORS.WARNING};"></span> Paused${tail}`;
         }
 
         // Hide disposition section
