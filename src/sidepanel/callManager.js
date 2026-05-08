@@ -609,6 +609,24 @@ export default class CallManager {
             }
         }
 
+        // Hide the days-out / other-contact detail line while paused — the
+        // count is what matters here, not the queued student's stats.
+        // setActiveStudent restores it on the next transition.
+        if (this.elements.contactDetail) {
+            this.elements.contactDetail.style.display = 'none';
+        }
+
+        // Swap the avatar to a gray play/resume glyph so the card looks like
+        // a generic "queue paused" header instead of mixing the queued
+        // student's photo with the count text. setActiveStudent will restore
+        // the photo / fa-user icon on the next transition.
+        if (this.elements.contactAvatar) {
+            this.elements.contactAvatar.style.backgroundImage = 'none';
+            this.elements.contactAvatar.innerHTML = '<i class="fas fa-play"></i>';
+            this.elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+            this.elements.contactAvatar.style.color = '#6b7280';
+        }
+
         // Hide disposition section
         if (this.elements.callDispositionSection) {
             this.elements.callDispositionSection.style.display = 'none';
