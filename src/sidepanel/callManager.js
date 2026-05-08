@@ -588,7 +588,16 @@ export default class CallManager {
      */
     showPausedState() {
         if (this.elements.dialBtn) {
-            this.elements.dialBtn.style.background = `${CONFIG.COLORS.WARNING}`;
+            // Restore the gray automation styling. We re-add the .automation
+            // class (and its fa-robot icon) so the button looks identical to
+            // the pre-redial paused state — loadFromHistory strips both when
+            // staging a previous-call redial, and without restoring them
+            // showPausedState's inline yellow + fa-phone would show through
+            // after Cancel instead of the original gray-robot look.
+            this.elements.dialBtn.classList.add('automation');
+            this.elements.dialBtn.innerHTML = '<i class="fas fa-robot"></i>';
+            // Clear the inline background so .automation's gray !important wins.
+            this.elements.dialBtn.style.background = '';
             this.elements.dialBtn.style.transform = 'rotate(0deg)';
             this.elements.dialBtn.disabled = true;
             this.elements.dialBtn.style.cursor = 'not-allowed';
