@@ -657,6 +657,13 @@ export default class CallManager {
         let seconds = 0;
         this.elements.callTimer.textContent = "00:00";
         clearInterval(this.callTimerInterval);
+        // The call and disposition timers share elements.callTimer as their
+        // display surface. If the disposition timer was running, kill it now
+        // so the two intervals don't fight over textContent every tick.
+        if (this.dispositionTimerInterval) {
+            clearInterval(this.dispositionTimerInterval);
+            this.dispositionTimerInterval = null;
+        }
 
         this.callTimerInterval = setInterval(() => {
             seconds++;
@@ -685,6 +692,14 @@ export default class CallManager {
         let seconds = 0;
         this.elements.callTimer.textContent = "00:00";
         clearInterval(this.dispositionTimerInterval);
+        // Same shared-element guard as startCallTimer: if the call timer is
+        // still ticking, stop it before the disposition timer takes over so
+        // they don't both write to elements.callTimer.
+        if (this.callTimerInterval) {
+            clearInterval(this.callTimerInterval);
+            this.callTimerInterval = null;
+            this._phaseHasBeenConnected = false;
+        }
 
         this.dispositionTimerInterval = setInterval(() => {
             seconds++;
