@@ -1587,12 +1587,16 @@ export default class CallManager {
         this._pendingRedialStudent = null;
         this._redialingFromHistory = false;
 
-        const queueStudent = this.selectedQueue[this.currentAutomationIndex];
-        if (queueStudent && this.uiCallbacks.updateCurrentStudent) {
-            this.uiCallbacks.updateCurrentStudent(queueStudent);
-        }
-
-        // Re-show the paused UI: dial button greyed/yellow, status "Paused".
+        // Re-show the paused UI directly: showPausedState overwrites the
+        // contact card with the queue-summary view (count + play avatar +
+        // hidden detail line) so we don't need to load the queue student
+        // first. Doing so caused setActiveStudent's async tail (it awaits
+        // chrome.storage.local for the reformatNameEnabled setting) to
+        // race against showPausedState's synchronous DOM writes — the
+        // queue student's name/avatar/detail would land AFTER our paused
+        // overrides and visibly clobber them. The next resume runs through
+        // callNextStudentInQueue → updateCurrentStudent, which loads the
+        // queue student into the card right before dialing.
         this.showPausedState();
 
         if (this.elements.cancelRedialBtn) {
