@@ -401,13 +401,16 @@ export default class CallManager {
             return;
         }
 
-        // During an active call, "Up Next" means the call AFTER the current
-        // one, so search starts at currentAutomationIndex + 1.
-        // While paused between calls (after dispose), currentAutomationIndex
-        // has already been incremented and now points at the student we'll
-        // dial on resume — that IS the "Up Next" student, so search starts
-        // at currentAutomationIndex.
-        const startFrom = this.isPaused && !this.isCallActive
+        // The "Up Next" student is whichever queue entry will be dialed when
+        // the current operation finishes:
+        //   • Regular automation call → the entry AFTER currentAutomationIndex.
+        //   • Paused between calls → currentAutomationIndex itself (already
+        //     incremented after the prior dispose).
+        //   • Staged or in-flight redial → currentAutomationIndex itself (the
+        //     redial is out-of-band; the queue resumes from this index).
+        const usePausedIndex = this._redialingFromHistory
+            || (this.isPaused && !this.isCallActive);
+        const startFrom = usePausedIndex
             ? this.currentAutomationIndex
             : this.currentAutomationIndex + 1;
         const nextIndex = this.findNextNonSkippedIndex(startFrom);
@@ -1669,9 +1672,11 @@ export default class CallManager {
             this.resetDispositionButtons();
         }
 
-        if (this.elements.upNextCard) {
-            this.elements.upNextCard.style.display = 'none';
-        }
+        // Keep the Up Next card visible during the redial call so the user
+        // sees who the queue will resume to once this call finishes. The
+        // _redialingFromHistory flag steers updateUpNextCard to point at
+        // currentAutomationIndex (the actual next-after-redial), not +1.
+        this.updateUpNextCard();
 
         // The redial is now in flight — Cancel no longer applies.
         if (this.elements.cancelRedialBtn) {
