@@ -1661,6 +1661,16 @@ function setupEventListeners() {
         elements.masterSearch.addEventListener('input', filterMasterList);
     }
 
+    // Re-sync queue selection highlights whenever additional master list
+    // items are rendered (Show More / search / sort over the paginated list)
+    if (elements.masterList) {
+        elements.masterList.addEventListener('masterListItemsRendered', () => {
+            if (queueManager) {
+                queueManager.updateMasterListSelection();
+            }
+        });
+    }
+
     // Sort filter dropdown menu
     if (elements.sortFilterBtn && elements.sortDropdownMenu) {
         elements.sortFilterBtn.addEventListener('click', (e) => {
