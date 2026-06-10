@@ -169,6 +169,8 @@ export function cacheDomElements() {
 
     // Daily Update Modal
     elements.dailyUpdateModal = document.getElementById('dailyUpdateModal');
+    elements.dailyUpdateGreetingIcon = document.getElementById('dailyUpdateGreetingIcon');
+    elements.dailyUpdateGreetingText = document.getElementById('dailyUpdateGreetingText');
     elements.closeDailyUpdateBtn = document.getElementById('closeDailyUpdateBtn');
     elements.dailyUpdateBtn = document.getElementById('dailyUpdateBtn');
     elements.dailyUpdateLaterBtn = document.getElementById('dailyUpdateLaterBtn');

@@ -97,7 +97,8 @@ import {
 import {
     shouldShowDailyUpdateModal,
     openDailyUpdateModal,
-    closeDailyUpdateModal
+    closeDailyUpdateModal,
+    snoozeDailyUpdateModal
 } from './modals/daily-update-modal.js';
 
 import {
@@ -885,7 +886,7 @@ function setupEventListeners() {
     }
 
     if (elements.dailyUpdateLaterBtn) {
-        elements.dailyUpdateLaterBtn.addEventListener('click', closeDailyUpdateModal);
+        elements.dailyUpdateLaterBtn.addEventListener('click', snoozeDailyUpdateModal);
     }
 
     if (elements.dailyUpdateBtn) {

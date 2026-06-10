@@ -190,6 +190,7 @@ export const STORAGE_KEYS = {
     LAST_UPDATED: 'timestamps.lastUpdated',
     MASTER_LIST_SOURCE_TIMESTAMP: 'timestamps.masterListSourceTimestamp',
     REFERENCE_DATE: 'timestamps.referenceDate',
+    DAILY_UPDATE_SNOOZED_DATE: 'timestamps.dailyUpdateSnoozedDate',
 
     // === FLAT KEYS (frequently written) ===
     FOUND_ENTRIES: 'foundEntries',

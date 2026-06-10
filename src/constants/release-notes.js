@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'16.0': {
+        title: 'Latest Updates',
+        date: 'June 10, 2026',
+        updates: [
+			'Daily update reminder now greets you based on the time of day',
+			'"Maybe Later" now keeps the daily update reminder off for the rest of the day'
+        ]
+    },
 	'15.2': {
         title: 'Latest Updates',
         date: 'May 8, 2026',

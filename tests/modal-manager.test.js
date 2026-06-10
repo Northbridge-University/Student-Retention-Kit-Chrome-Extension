@@ -105,12 +105,17 @@ function meetsFilterCriteria(entry, operator, value, includeFailing) {
 /**
  * Checks if the daily update modal should be shown
  */
-function shouldShowDailyUpdate(lastUpdated, now) {
+function shouldShowDailyUpdate(lastUpdated, now, snoozedDate) {
     if (!lastUpdated) {
         return false;
     }
 
     const todayDateString = now.toLocaleDateString('en-US');
+
+    if (snoozedDate === todayDateString) {
+        return false;
+    }
+
     const lastUpdatedDate = new Date(lastUpdated);
     const lastUpdatedDateString = lastUpdatedDate.toLocaleDateString('en-US');
 
@@ -119,6 +124,15 @@ function shouldShowDailyUpdate(lastUpdated, now) {
     }
 
     return true;
+}
+
+/**
+ * Gets the greeting matching the time of day for the daily update modal
+ */
+function getDailyUpdateGreeting(hour) {
+    if (hour < 12) return { text: 'Good Morning!', icon: 'fa-sun', color: '#f59e0b' };
+    if (hour < 17) return { text: 'Good Afternoon!', icon: 'fa-cloud-sun', color: '#f59e0b' };
+    return { text: 'Good Evening!', icon: 'fa-moon', color: '#6366f1' };
 }
 
 /**
@@ -379,6 +393,45 @@ describe('shouldShowDailyUpdate', () => {
         const lastUpdated = new Date('2025-01-08T10:00:00').getTime();
 
         expect(shouldShowDailyUpdate(lastUpdated, now)).toBe(true);
+    });
+
+    test('returns false if snoozed today via Maybe Later', () => {
+        const now = new Date('2025-01-15T10:00:00');
+        const lastUpdated = new Date('2025-01-14T10:00:00').getTime();
+        const snoozedDate = now.toLocaleDateString('en-US');
+
+        expect(shouldShowDailyUpdate(lastUpdated, now, snoozedDate)).toBe(false);
+    });
+
+    test('returns true if snoozed on a previous day', () => {
+        const now = new Date('2025-01-15T10:00:00');
+        const lastUpdated = new Date('2025-01-14T10:00:00').getTime();
+        const snoozedDate = new Date('2025-01-14T11:00:00').toLocaleDateString('en-US');
+
+        expect(shouldShowDailyUpdate(lastUpdated, now, snoozedDate)).toBe(true);
+    });
+});
+
+describe('getDailyUpdateGreeting', () => {
+    test('greets Good Morning before noon', () => {
+        expect(getDailyUpdateGreeting(0).text).toBe('Good Morning!');
+        expect(getDailyUpdateGreeting(9).text).toBe('Good Morning!');
+        expect(getDailyUpdateGreeting(11).text).toBe('Good Morning!');
+        expect(getDailyUpdateGreeting(8).icon).toBe('fa-sun');
+    });
+
+    test('greets Good Afternoon from noon to 5pm', () => {
+        expect(getDailyUpdateGreeting(12).text).toBe('Good Afternoon!');
+        expect(getDailyUpdateGreeting(14).text).toBe('Good Afternoon!');
+        expect(getDailyUpdateGreeting(16).text).toBe('Good Afternoon!');
+        expect(getDailyUpdateGreeting(13).icon).toBe('fa-cloud-sun');
+    });
+
+    test('greets Good Evening from 5pm onward', () => {
+        expect(getDailyUpdateGreeting(17).text).toBe('Good Evening!');
+        expect(getDailyUpdateGreeting(20).text).toBe('Good Evening!');
+        expect(getDailyUpdateGreeting(23).text).toBe('Good Evening!');
+        expect(getDailyUpdateGreeting(19).icon).toBe('fa-moon');
     });
 });
 
