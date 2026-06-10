@@ -214,6 +214,13 @@ export const RELEASE_NOTES = {
             'Included a Campus filter in case you import multiple Campus populations',
             'Added safety guards for the extension to disable if Chrome crashes'
         ]
+    },
+	'10.0': {
+        title: 'Latest Updates',
+        date: 'January 11, 2026',
+        updates: [
+			'Official release to staff'
+        ]
     }
 
     // Example of how to add future versions:
