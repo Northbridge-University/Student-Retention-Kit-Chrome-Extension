@@ -2279,6 +2279,16 @@ chrome.storage.local.onChanged.addListener((changes) => {
         refreshDownloadButtonState();
     }
 
+    // Keep the "Last Updated" indicator in sync when the master list is
+    // updated from outside the panel (e.g. the Office add-in pushing data).
+    // The timestamp lives in the nested `timestamps` object; the flat
+    // `lastUpdated` key is checked too for older writers.
+    const newLastUpdated = changes[STORAGE_KEYS.TIMESTAMPS]?.newValue?.lastUpdated
+        ?? changes.lastUpdated?.newValue;
+    if (newLastUpdated && elements.lastUpdatedText) {
+        elements.lastUpdatedText.textContent = newLastUpdated;
+    }
+
     // Handle name format toggle changes - re-render all displays
     if (changes.reformatNameEnabled) {
         console.log(`Name format changed to: ${changes.reformatNameEnabled.newValue ? 'First Last' : 'Original'}`);

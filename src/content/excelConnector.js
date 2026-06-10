@@ -657,22 +657,31 @@ if (window.hasSRKConnectorRun) {
               minute: '2-digit'
           });
 
-          // Store the transformed data using chrome storage
-          chrome.storage.local.set({
-              masterEntries: transformedStudents,
-              lastUpdated: lastUpdated,
-              masterListSourceTimestamp: data.timestamp
-          }, () => {
-              console.log(`%c ✓ Master List Updated Successfully!`, "color: green; font-weight: bold");
-              console.log(`   Students: ${transformedStudents.length}`);
-              console.log(`   Updated: ${lastUpdated}`);
+          // Store the transformed data using chrome storage.
+          // The timestamps live in the nested `timestamps` object — that's
+          // what the side panel's "Last Updated" indicator and the daily
+          // update reminder read — so merge into it rather than writing the
+          // legacy flat keys that nothing reads back.
+          chrome.storage.local.get(['timestamps'], (current) => {
+              const timestamps = current.timestamps || {};
+              timestamps.lastUpdated = lastUpdated;
+              timestamps.masterListSourceTimestamp = data.timestamp;
 
-              // Notify the extension that master list has been updated
-              safeSendMessage({
-                  type: "SRK_MASTER_LIST_UPDATED",
-                  timestamp: Date.now(),
-                  studentCount: transformedStudents.length,
-                  sourceTimestamp: data.timestamp
+              chrome.storage.local.set({
+                  masterEntries: transformedStudents,
+                  timestamps: timestamps
+              }, () => {
+                  console.log(`%c ✓ Master List Updated Successfully!`, "color: green; font-weight: bold");
+                  console.log(`   Students: ${transformedStudents.length}`);
+                  console.log(`   Updated: ${lastUpdated}`);
+
+                  // Notify the extension that master list has been updated
+                  safeSendMessage({
+                      type: "SRK_MASTER_LIST_UPDATED",
+                      timestamp: Date.now(),
+                      studentCount: transformedStudents.length,
+                      sourceTimestamp: data.timestamp
+                  });
               });
           });
 
