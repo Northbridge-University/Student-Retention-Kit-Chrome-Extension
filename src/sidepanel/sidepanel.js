@@ -139,7 +139,9 @@ import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAd
 import {
     shouldShowLatestUpdatesModal,
     openLatestUpdatesModal,
-    closeLatestUpdatesModal
+    closeLatestUpdatesModal,
+    showLatestUpdatesMain,
+    showLatestUpdatesHistory
 } from './modals/latest-updates-modal.js';
 
 import { QueueManager } from './queue-manager.js';
@@ -932,6 +934,14 @@ function setupEventListeners() {
 
     if (elements.latestUpdatesGotItBtn) {
         elements.latestUpdatesGotItBtn.addEventListener('click', closeLatestUpdatesModal);
+    }
+
+    if (elements.viewPreviousUpdatesBtn) {
+        elements.viewPreviousUpdatesBtn.addEventListener('click', showLatestUpdatesHistory);
+    }
+
+    if (elements.latestUpdatesHistoryBackBtn) {
+        elements.latestUpdatesHistoryBackBtn.addEventListener('click', showLatestUpdatesMain);
     }
 
     // Excel Instance Modal

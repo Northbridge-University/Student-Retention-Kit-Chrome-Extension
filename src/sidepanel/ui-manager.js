@@ -183,6 +183,11 @@ export function cacheDomElements() {
     elements.latestUpdatesVersion = document.getElementById('latestUpdatesVersion');
     elements.latestUpdatesDate = document.getElementById('latestUpdatesDate');
     elements.latestUpdatesList = document.getElementById('latestUpdatesList');
+    elements.latestUpdatesMain = document.getElementById('latestUpdatesMain');
+    elements.latestUpdatesHistory = document.getElementById('latestUpdatesHistory');
+    elements.latestUpdatesHistoryList = document.getElementById('latestUpdatesHistoryList');
+    elements.latestUpdatesHistoryBackBtn = document.getElementById('latestUpdatesHistoryBackBtn');
+    elements.viewPreviousUpdatesBtn = document.getElementById('viewPreviousUpdatesBtn');
 
     // Excel Instance Modal
     elements.excelInstanceModal = document.getElementById('excelInstanceModal');

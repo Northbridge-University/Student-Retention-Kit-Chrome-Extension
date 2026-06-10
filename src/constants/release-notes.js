@@ -29,7 +29,8 @@ export const RELEASE_NOTES = {
 			'Daily update reminder now greets you based on the time of day',
 			'"Maybe Later" now keeps the daily update reminder off for the rest of the day',
 			'New "Redact Data" option in More Settings blurs student names and phone numbers',
-			'Master List loads faster — shows 50 students at a time with a "Show More" button (search still covers everyone)'
+			'Master List loads faster — shows 50 students at a time with a "Show More" button (search still covers everyone)',
+			'View previous release notes from this popup with the new "View Previous Updates" button'
         ]
     },
 	'15.2': {

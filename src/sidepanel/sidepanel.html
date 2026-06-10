@@ -1061,7 +1061,8 @@
                 <button class="icon-btn" id="closeLatestUpdatesBtn" title="Close"><i class="fas fa-times"></i></button>
             </div>
 
-            <div class="modal-body" style="padding: 20px;">
+            <!-- Main View (current version) -->
+            <div id="latestUpdatesMain" class="modal-body" style="padding: 20px;">
                 <div style="text-align: center; margin-bottom: 20px;">
                     <img src="../../icon.png" alt="Student Retention Kit" style="width: 64px; height: 64px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);">
                     <div id="latestUpdatesVersion" style="font-size: 1.1em; font-weight: 600; color: var(--text-main); margin-bottom: 5px;">
@@ -1072,7 +1073,7 @@
                     </div>
                 </div>
 
-                <div style="background: rgba(59, 130, 246, 0.08); border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0.5rem; margin-bottom: 20px;">
+                <div style="background: rgba(59, 130, 246, 0.08); border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0.5rem; margin-bottom: 15px;">
                     <div style="font-weight: 600; color: var(--text-main); margin-bottom: 10px;">
                         <i class="fas fa-sparkles" style="color: #3b82f6;"></i> Updates in this version:
                     </div>
@@ -1081,9 +1082,28 @@
                     </ul>
                 </div>
 
+                <button type="button" id="viewPreviousUpdatesBtn" style="background:none; border:none; color:var(--primary-color); font-size:0.85em; cursor:pointer; display:block; margin: 0 auto 15px auto; padding: 4px 8px;">
+                    <i class="fas fa-history"></i> View Previous Updates
+                </button>
+
                 <button class="btn-primary" id="latestUpdatesGotItBtn" style="width: 100%; padding: 12px;">
                     <i class="fas fa-check"></i> Got it!
                 </button>
+            </div>
+
+            <!-- Previous Updates View (release notes history) -->
+            <div id="latestUpdatesHistory" class="modal-body" style="display:none; padding: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                    <button id="latestUpdatesHistoryBackBtn" class="icon-btn" style="padding: 6px 10px;" title="Back">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div style="font-weight: 600; font-size: 1em; color: var(--text-main);">
+                        <i class="fas fa-history" style="color: #3b82f6; margin-right: 6px;"></i>Previous Updates
+                    </div>
+                </div>
+                <div id="latestUpdatesHistoryList">
+                    <!-- Previous release notes will be populated dynamically -->
+                </div>
             </div>
         </div>
     </div>

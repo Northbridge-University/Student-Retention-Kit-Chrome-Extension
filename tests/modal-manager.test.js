@@ -143,6 +143,31 @@ function applyRedactData(enabled) {
 }
 
 /**
+ * Sorts version strings newest first (numeric, per dot-separated part)
+ */
+function sortVersionsDescending(versions) {
+    return [...versions].sort((a, b) => {
+        const partsA = a.split('.').map(Number);
+        const partsB = b.split('.').map(Number);
+
+        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const numA = partsA[i] || 0;
+            const numB = partsB[i] || 0;
+            if (numA !== numB) return numB - numA;
+        }
+        return 0;
+    });
+}
+
+/**
+ * Gets the versions to show in the Previous Updates history view:
+ * every version with notes except the one displayed in the main view
+ */
+function getPreviousReleaseVersions(versions, currentVersion) {
+    return sortVersionsDescending(versions).filter(v => v !== currentVersion);
+}
+
+/**
  * Generates initials from a name
  */
 function generateInitials(name) {
@@ -465,6 +490,31 @@ describe('applyRedactData', () => {
     test('treats falsy stored values as off', () => {
         applyRedactData(undefined);
         expect(document.body.classList.contains('redact-mode')).toBe(false);
+    });
+});
+
+describe('getPreviousReleaseVersions', () => {
+    test('sorts versions numerically, newest first', () => {
+        const versions = ['11.0', '15.2', '16.0', '14.5', '15.1'];
+        expect(sortVersionsDescending(versions)).toEqual(['16.0', '15.2', '15.1', '14.5', '11.0']);
+    });
+
+    test('compares version parts as numbers, not strings', () => {
+        // String comparison would put '9.0' after '10.0'
+        expect(sortVersionsDescending(['9.0', '10.0', '11.2'])).toEqual(['11.2', '10.0', '9.0']);
+    });
+
+    test('excludes the currently displayed version', () => {
+        const versions = ['16.0', '15.2', '15.1'];
+        expect(getPreviousReleaseVersions(versions, '16.0')).toEqual(['15.2', '15.1']);
+    });
+
+    test('returns empty when the only version is the current one', () => {
+        expect(getPreviousReleaseVersions(['16.0'], '16.0')).toEqual([]);
+    });
+
+    test('handles versions with different part counts', () => {
+        expect(sortVersionsDescending(['16', '16.0.1', '15.2'])).toEqual(['16.0.1', '16', '15.2']);
     });
 });
 
