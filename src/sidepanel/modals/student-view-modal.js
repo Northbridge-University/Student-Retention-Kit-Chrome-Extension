@@ -2,6 +2,7 @@
 import { GENERIC_AVATAR_URL } from '../../constants/index.js';
 import { elements } from '../ui-manager.js';
 import { resolveStudentData } from '../student-renderer.js';
+import { applyAvatarPhoto } from '../../utils/avatar-cache.js';
 
 // Store the current student for the student view modal
 let currentStudentViewStudent = null;
@@ -41,32 +42,37 @@ export function openStudentViewModal(student, hasMultipleCampuses = false, campu
         if (!initials) initials = '?';
     }
 
-    // Avatar
+    // Avatar — the photo is only applied once fully loaded (with the
+    // initials as a placeholder) so it doesn't pop in mid-render
     if (elements.studentViewAvatar) {
-        if (data.Photo && data.Photo !== GENERIC_AVATAR_URL) {
-            elements.studentViewAvatar.textContent = '';
-            elements.studentViewAvatar.style.backgroundImage = `url('${data.Photo}')`;
-            elements.studentViewAvatar.style.backgroundSize = 'cover';
-            elements.studentViewAvatar.style.backgroundPosition = 'center';
-            elements.studentViewAvatar.style.backgroundColor = 'transparent';
-            elements.studentViewAvatar.style.color = 'transparent';
-        } else {
-            elements.studentViewAvatar.style.backgroundImage = 'none';
-            elements.studentViewAvatar.textContent = initials;
+        const photoUrl = (data.Photo && data.Photo !== GENERIC_AVATAR_URL) ? data.Photo : null;
+        applyAvatarPhoto(elements.studentViewAvatar, photoUrl, {
+            applyPhoto: () => {
+                elements.studentViewAvatar.textContent = '';
+                elements.studentViewAvatar.style.backgroundImage = `url('${photoUrl}')`;
+                elements.studentViewAvatar.style.backgroundSize = 'cover';
+                elements.studentViewAvatar.style.backgroundPosition = 'center';
+                elements.studentViewAvatar.style.backgroundColor = 'transparent';
+                elements.studentViewAvatar.style.color = 'transparent';
+            },
+            applyFallback: () => {
+                elements.studentViewAvatar.style.backgroundImage = 'none';
+                elements.studentViewAvatar.textContent = initials;
 
-            // Gender-based avatar colors
-            const gender = (student.Gender || student.gender || '').toLowerCase();
-            if (gender === 'male' || gender === 'm' || gender === 'boy') {
-                elements.studentViewAvatar.style.backgroundColor = 'rgb(18, 120, 255)'; // Blue
-                elements.studentViewAvatar.style.color = 'rgb(255, 255, 255)'; // White
-            } else if (gender === 'female' || gender === 'f' || gender === 'girl') {
-                elements.studentViewAvatar.style.backgroundColor = 'rgb(255, 145, 175)'; // Pastel pink
-                elements.studentViewAvatar.style.color = 'rgb(255, 255, 255)'; // White
-            } else {
-                elements.studentViewAvatar.style.backgroundColor = '#e5e7eb'; // Gray
-                elements.studentViewAvatar.style.color = '#6b7280';
+                // Gender-based avatar colors
+                const gender = (student.Gender || student.gender || '').toLowerCase();
+                if (gender === 'male' || gender === 'm' || gender === 'boy') {
+                    elements.studentViewAvatar.style.backgroundColor = 'rgb(18, 120, 255)'; // Blue
+                    elements.studentViewAvatar.style.color = 'rgb(255, 255, 255)'; // White
+                } else if (gender === 'female' || gender === 'f' || gender === 'girl') {
+                    elements.studentViewAvatar.style.backgroundColor = 'rgb(255, 145, 175)'; // Pastel pink
+                    elements.studentViewAvatar.style.color = 'rgb(255, 255, 255)'; // White
+                } else {
+                    elements.studentViewAvatar.style.backgroundColor = '#e5e7eb'; // Gray
+                    elements.studentViewAvatar.style.color = '#6b7280';
+                }
             }
-        }
+        });
     }
 
     // Name

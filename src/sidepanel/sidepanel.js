@@ -4,6 +4,7 @@ import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, se
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
 import { loadAndRenderMarkdown } from '../utils/markdownRenderer.js';
+import { applyAvatarPhoto } from '../utils/avatar-cache.js';
 import CallManager from './callManager.js';
 import { tutorialManager } from './tutorial-manager.js';
 
@@ -2085,10 +2086,10 @@ function renderPreviousCalls(entries) {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
         const hasPhoto = entry.Photo && entry.Photo !== GENERIC_AVATAR_URL;
-        const safePhoto = hasPhoto ? entry.Photo.replace(/'/g, '%27') : '';
-        const avatarInner = hasPhoto
-            ? `<div class="previous-call-avatar previous-call-avatar--photo" style="background-image:url('${safePhoto}');"></div>`
-            : `<div class="previous-call-avatar"><i class="fas fa-user"></i></div>`;
+        const safePhoto = hasPhoto ? entry.Photo.replace(/'/g, '%27').replace(/"/g, '&quot;') : '';
+        // Always start with the generic icon; the photo is swapped in only
+        // once it has fully loaded so avatars don't pop in
+        const avatarInner = `<div class="previous-call-avatar"${hasPhoto ? ` data-photo="${safePhoto}"` : ''}><i class="fas fa-user"></i></div>`;
         return `
             <div class="previous-call-item${disabled ? ' disabled' : ''}" data-index="${index}" title="${title}">
                 ${avatarInner}
@@ -2102,6 +2103,19 @@ function renderPreviousCalls(entries) {
 
     elements.previousCallsList.innerHTML = html;
     elements.previousCallsCard.style.display = 'flex';
+
+    // Apply photos only after they've loaded (generic icon shows meanwhile)
+    elements.previousCallsList.querySelectorAll('.previous-call-avatar[data-photo]').forEach(avatar => {
+        const url = avatar.dataset.photo;
+        applyAvatarPhoto(avatar, url, {
+            applyPhoto: () => {
+                avatar.classList.add('previous-call-avatar--photo');
+                avatar.innerHTML = '';
+                avatar.style.backgroundImage = `url('${url}')`;
+            }
+            // No applyFallback — the generic icon is already in place
+        });
+    });
 }
 
 /**

@@ -1779,3 +1779,15 @@ body.redact-mode #studentViewAvatar,
 body.redact-mode .previous-call-avatar--photo {
     filter: blur(6px);
 }
+
+/* ==== Avatar fade-in ==== */
+/* Photos are applied only after they finish loading (avatar-cache.js);
+   this softens the placeholder-to-photo swap so nothing pops in. */
+@keyframes avatarFadeIn {
+    from { opacity: 0.4; }
+    to { opacity: 1; }
+}
+
+.avatar-fade-in {
+    animation: avatarFadeIn 0.25s ease-out;
+}

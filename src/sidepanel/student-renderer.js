@@ -3,6 +3,7 @@ import { elements } from './ui-manager.js';
 import { GENERIC_AVATAR_URL, STORAGE_KEYS, HIGHLIGHT_STATUS, MESSAGE_TYPES } from '../constants/index.js';
 import { updateCallTabDisplay } from './call-tab-placeholder.js';
 import { getCachedDebugMode } from './five9-integration.js';
+import { applyAvatarPhoto, cancelPendingAvatar, preloadStudentPhotos } from '../utils/avatar-cache.js';
 
 /**
  * Converts student name from "Last, First" format to "First Last" format if a comma is present.
@@ -160,22 +161,27 @@ export async function setActiveStudent(rawEntry, callManager) {
 
     const displayPhone = data.phone ? data.phone : "No Phone Listed";
 
-    // AVATAR LOGIC
+    // AVATAR LOGIC — the photo is only applied once fully loaded (with the
+    // generic icon as a placeholder) so it doesn't pop in mid-render
     if (elements.contactAvatar) {
-        elements.contactAvatar.style.color = '';
-        if (data.Photo && data.Photo !== GENERIC_AVATAR_URL) {
-            elements.contactAvatar.textContent = '';
-            elements.contactAvatar.innerHTML = '';
-            elements.contactAvatar.style.backgroundImage = `url('${data.Photo}')`;
-            elements.contactAvatar.style.backgroundSize = 'cover';
-            elements.contactAvatar.style.backgroundPosition = 'center';
-            elements.contactAvatar.style.backgroundColor = 'transparent';
-        } else {
-            elements.contactAvatar.style.backgroundImage = 'none';
-            elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
-            elements.contactAvatar.style.backgroundColor = '#e5e7eb';
-            elements.contactAvatar.style.color = '#6b7280';
-        }
+        const photoUrl = (data.Photo && data.Photo !== GENERIC_AVATAR_URL) ? data.Photo : null;
+        applyAvatarPhoto(elements.contactAvatar, photoUrl, {
+            applyPhoto: () => {
+                elements.contactAvatar.style.color = '';
+                elements.contactAvatar.textContent = '';
+                elements.contactAvatar.innerHTML = '';
+                elements.contactAvatar.style.backgroundImage = `url('${photoUrl}')`;
+                elements.contactAvatar.style.backgroundSize = 'cover';
+                elements.contactAvatar.style.backgroundPosition = 'center';
+                elements.contactAvatar.style.backgroundColor = 'transparent';
+            },
+            applyFallback: () => {
+                elements.contactAvatar.style.backgroundImage = 'none';
+                elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
+                elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+                elements.contactAvatar.style.color = '#6b7280';
+            }
+        });
     }
 
     if (elements.contactName) elements.contactName.textContent = data.name;
@@ -241,6 +247,7 @@ function renderNoStudentState() {
         elements.contactPhone.textContent = '';
     }
     if (elements.contactAvatar) {
+        cancelPendingAvatar(elements.contactAvatar);
         elements.contactAvatar.style.color = '#6b7280';
         elements.contactAvatar.style.backgroundImage = 'none';
         elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
@@ -292,6 +299,7 @@ export function setAutomationModeUI(queueLength, queue) {
 
     // Create visual badge for count
     if (elements.contactAvatar) {
+        cancelPendingAvatar(elements.contactAvatar);
         elements.contactAvatar.textContent = queueLength;
         elements.contactAvatar.style.backgroundImage = 'none';
         elements.contactAvatar.style.backgroundColor = '#6b7280';
@@ -555,13 +563,19 @@ function createMasterListItem(rawEntry) {
  * Show More row). Fires 'masterListItemsRendered' so listeners (e.g. queue
  * selection highlighting) can sync the newly added items.
  * @param {number} count - How many additional items to build
+ * @param {boolean} [preloadPhotos=false] - Also preload these students'
+ *   photos (used for the visible page, skipped for bulk search renders)
  */
-function buildMasterListItems(count) {
+function buildMasterListItems(count, preloadPhotos = false) {
     if (!elements.masterList) return;
     const pagination = masterListPagination;
     const start = pagination.builtCount;
     const end = Math.min(start + count, pagination.entries.length);
     if (end <= start) return;
+
+    if (preloadPhotos) {
+        preloadStudentPhotos(pagination.entries.slice(start, end));
+    }
 
     const fragment = document.createDocumentFragment();
     for (let i = start; i < end; i++) {
@@ -614,7 +628,7 @@ function showMoreMasterListItems() {
     const pagination = masterListPagination;
     pagination.visibleLimit = Math.min(pagination.visibleLimit + MASTER_LIST_CHUNK_SIZE, pagination.entries.length);
     if (pagination.builtCount < pagination.visibleLimit) {
-        buildMasterListItems(pagination.visibleLimit - pagination.builtCount);
+        buildMasterListItems(pagination.visibleLimit - pagination.builtCount, true);
     }
     applyMasterListPaginationVisibility();
     updateShowMoreRow();
@@ -690,7 +704,7 @@ export async function renderMasterList(rawEntries, onStudentClick) {
     if (renderToken !== masterListRenderToken) return; // a newer render started meanwhile
     masterListPagination.reformatEnabled = settings.reformatNameEnabled !== undefined ? settings.reformatNameEnabled : true;
 
-    buildMasterListItems(MASTER_LIST_CHUNK_SIZE);
+    buildMasterListItems(MASTER_LIST_CHUNK_SIZE, true);
     updateShowMoreRow();
 
     // An active search/campus filter always works against the full list,

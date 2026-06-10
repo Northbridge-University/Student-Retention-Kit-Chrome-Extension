@@ -30,7 +30,8 @@ export const RELEASE_NOTES = {
 			'"Maybe Later" now keeps the daily update reminder off for the rest of the day',
 			'New "Redact Data" option in More Settings blurs student names and phone numbers',
 			'Master List loads faster — shows 50 students at a time with a "Show More" button (search still covers everyone)',
-			'View previous release notes from this popup with the new "View Previous Updates" button'
+			'View previous release notes from this popup with the new "View Previous Updates" button',
+			'Student profile pictures now load behind the scenes so they no longer pop in'
         ]
     },
 	'15.2': {
