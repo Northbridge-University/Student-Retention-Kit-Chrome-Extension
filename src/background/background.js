@@ -2,7 +2,9 @@
 // Version: 14.5 - Organized Storage Structure
 import { startLoop, stopLoop, addToFoundUrlCache } from './looper.js';
 import { STORAGE_KEYS, CHECKER_MODES, MESSAGE_TYPES, EXTENSION_STATES, CONNECTION_TYPES, FIVE9_CONNECTION_STATES, CANVAS_DOMAIN, HIGHLIGHT_STATUS } from '../constants/index.js';
+import { CONFIG } from '../constants/config.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
+import { resolveTargetSheetName, groupEntriesBySheet, selectEntriesForHighlightRetry } from '../utils/highlight-batching.js';
 import { decrypt } from '../utils/encryption.js';
 // Optional per-process Five9 volume handler. Public build is a no-op stub;
 // the native-host repo's apply-overlay.ps1 replaces this file with a real
@@ -86,10 +88,56 @@ console.info = function(...args) {
 // Submission highlight debounce: batches rapid-fire submissions into a single
 // bulk payload for the Office Add-in, which is dramatically more efficient
 // than one Excel.run per student.
-const SUBMISSION_HIGHLIGHT_DEBOUNCE_MS = 1000;
-const SUBMISSION_HIGHLIGHT_MAX_BATCH = 10;
+const SUBMISSION_HIGHLIGHT_DEBOUNCE_MS = CONFIG.HIGHLIGHT.DEBOUNCE_MS;
+const SUBMISSION_HIGHLIGHT_MAX_BATCH = CONFIG.HIGHLIGHT.MAX_BATCH;
 let pendingSubmissionHighlights = [];
 let submissionHighlightFlushTimer = null;
+
+// Serializes every FOUND_ENTRIES read-modify-write. Submissions and highlight
+// confirmations arrive in rapid bursts; unserialized RMW cycles lose updates
+// (students vanish from the found list, statuses stick at 'pending' even
+// though the row was highlighted).
+let foundEntriesLock = Promise.resolve();
+
+/**
+ * Runs a mutator against the stored FOUND_ENTRIES under a lock and persists
+ * the result. The mutator receives the entries array and mutates it in
+ * place; return false to skip the write.
+ */
+function withFoundEntries(mutator) {
+    const run = foundEntriesLock.then(async () => {
+        const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
+        const entries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
+        const result = await mutator(entries);
+        if (result !== false) {
+            await chrome.storage.local.set({ [STORAGE_KEYS.FOUND_ENTRIES]: entries });
+        }
+        return result;
+    });
+    // Keep the chain alive even if this mutation failed
+    foundEntriesLock = run.then(() => {}, () => {});
+    return run;
+}
+
+/**
+ * Records a send attempt for the given entries so the reconciler knows when
+ * (and whether) to retry them.
+ */
+function markHighlightAttempt(entriesSent) {
+    const ids = new Set(
+        entriesSent.filter(e => e && e.syStudentId).map(e => String(e.syStudentId))
+    );
+    if (ids.size === 0) return Promise.resolve();
+    const now = Date.now();
+    return withFoundEntries((entries) => {
+        for (const entry of entries) {
+            if (entry.syStudentId && ids.has(String(entry.syStudentId))) {
+                entry.highlightAttempts = (entry.highlightAttempts || 0) + 1;
+                entry.lastHighlightSentAt = now;
+            }
+        }
+    });
+}
 
 function scheduleSubmissionHighlightFlush() {
     if (submissionHighlightFlushTimer) return;
@@ -108,10 +156,57 @@ async function flushPendingSubmissionHighlights() {
     const batch = pendingSubmissionHighlights;
     pendingSubmissionHighlights = [];
 
-    if (batch.length === 1) {
-        await sendHighlightStudentRowPayload(batch[0]);
-    } else {
-        await sendBulkHighlightStudentRowPayload(batch);
+    try {
+        if (batch.length === 1) {
+            await sendHighlightStudentRowPayload(batch[0]);
+        } else {
+            await sendBulkHighlightStudentRowPayload(batch);
+        }
+    } catch (err) {
+        // The reconciler below re-sends anything that never got confirmed.
+        console.error('[SRK] Failed to send highlight batch:', err?.message || err);
+    } finally {
+        await markHighlightAttempt(batch);
+        scheduleHighlightReconcile();
+    }
+}
+
+// --- HIGHLIGHT RECONCILER ---
+// postMessage delivery to the add-in is fire-and-forget; if the add-in frame
+// was reloading (or Excel timed out) the highlight silently never happens
+// and the entry stays 'pending'. The reconciler re-sends unconfirmed
+// highlights a bounded number of times. Re-sends are idempotent: the add-in
+// just re-applies the same fill color and text.
+let highlightReconcileTimer = null;
+
+function scheduleHighlightReconcile() {
+    if (highlightReconcileTimer) return;
+    highlightReconcileTimer = setTimeout(() => {
+        highlightReconcileTimer = null;
+        reconcilePendingHighlights();
+    }, CONFIG.HIGHLIGHT.RECONCILE_DELAY_MS);
+}
+
+async function reconcilePendingHighlights() {
+    const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
+    const entries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
+    const toRetry = selectEntriesForHighlightRetry(entries, {
+        now: Date.now(),
+        maxAttempts: CONFIG.HIGHLIGHT.MAX_SEND_ATTEMPTS,
+        // Small slack so entries sent exactly one reconcile-delay ago qualify
+        minAgeMs: CONFIG.HIGHLIGHT.RECONCILE_DELAY_MS - 5000
+    });
+    if (toRetry.length === 0) return;
+
+    console.log(`%c [SRK] Re-sending ${toRetry.length} unconfirmed highlight(s)`, 'color: #FF9800; font-weight: bold;');
+    try {
+        await sendBulkHighlightStudentRowPayload(toRetry);
+    } catch (err) {
+        console.error('[SRK] Highlight reconcile send failed:', err?.message || err);
+    } finally {
+        await markHighlightAttempt(toRetry);
+        // Keep watching until everything is confirmed or out of attempts
+        scheduleHighlightReconcile();
     }
 }
 
@@ -120,10 +215,10 @@ async function onSubmissionFound(entry) {
     console.log('%c [SRK] onSubmissionFound triggered', 'background: #2196F3; color: white; font-weight: bold; padding: 2px 4px;', entry);
 
     await addStudentToFoundList(entry);
-    await sendConnectionPings(entry);
 
-    // Buffer highlight and debounce — if more submissions arrive within 1s they
-    // will be sent as a single bulk payload to the Office Add-in.
+    // Buffer the Excel highlight FIRST — it must not wait behind the
+    // Power Automate webhooks below. If more submissions arrive within the
+    // debounce window they are sent as a single bulk payload to the add-in.
     pendingSubmissionHighlights.push(entry);
     if (pendingSubmissionHighlights.length >= SUBMISSION_HIGHLIGHT_MAX_BATCH) {
         await flushPendingSubmissionHighlights();
@@ -131,6 +226,7 @@ async function onSubmissionFound(entry) {
         scheduleSubmissionHighlightFlush();
     }
 
+    await sendConnectionPings(entry);
     await sendPowerAutomateRequest(entry);
 
     const logPayload = { type: 'SUBMISSION', ...entry };
@@ -480,13 +576,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === MESSAGE_TYPES.RESEND_HIGHLIGHT_PING) {
     if (msg.entry) {
       await sendHighlightStudentRowPayload(msg.entry, msg.targetTabId || null);
+      await markHighlightAttempt([msg.entry]);
       console.log('Resent highlight ping for:', msg.entry.name);
     }
   } else if (msg.type === MESSAGE_TYPES.RESEND_ALL_HIGHLIGHT_PINGS) {
     const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
     const foundEntries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
-    for (const entry of foundEntries) {
-      await sendHighlightStudentRowPayload(entry, msg.targetTabId || null);
+    if (foundEntries.length > 0) {
+      // One bulk payload per sheet instead of one message per student —
+      // per-student sends flood the add-in with concurrent Excel runs.
+      await sendBulkHighlightStudentRowPayload(foundEntries, msg.targetTabId || null);
+      await markHighlightAttempt(foundEntries);
     }
     console.log('Resent all highlight pings for', foundEntries.length, 'students');
   } else if (msg.type === 'FIVE9_STATION_RESTART_VERIFIED') {
@@ -594,18 +694,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const confirmStatus = status === 'success' ? HIGHLIGHT_STATUS.CONFIRMED : HIGHLIGHT_STATUS.ERROR;
       console.log(`%c [Background] Highlight Confirmation: ${status}`, `color: ${confirmStatus === HIGHLIGHT_STATUS.CONFIRMED ? 'green' : 'orange'}; font-weight: bold`, message);
 
-      // Update the matching found entry's highlightStatus
-      const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
-      const foundEntries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
-      let updated = false;
-      for (const entry of foundEntries) {
-          if (entry.syStudentId === syStudentId) {
-              entry.highlightStatus = confirmStatus;
-              updated = true;
+      // Update the matching found entry's highlightStatus. Bulk highlights
+      // produce one confirmation per student in quick succession, so this
+      // must go through the FOUND_ENTRIES lock or updates get lost.
+      const updated = await withFoundEntries((entries) => {
+          let touched = false;
+          for (const entry of entries) {
+              if (entry.syStudentId === syStudentId) {
+                  entry.highlightStatus = confirmStatus;
+                  touched = true;
+              }
           }
-      }
-      if (updated) {
-          await chrome.storage.local.set({ [STORAGE_KEYS.FOUND_ENTRIES]: foundEntries });
+          return touched ? undefined : false; // skip the write when nothing matched
+      });
+      if (updated !== false) {
           console.log(`[SRK] Updated highlightStatus to '${confirmStatus}' for SyStudentId: ${syStudentId}`);
       } else {
           console.warn(`[SRK] No found entry matched SyStudentId: ${syStudentId}`);
@@ -985,20 +1087,9 @@ async function sendHighlightStudentRowPayload(entry, overrideTabId = null) {
         editText = editText.replace(/{assignment}/g, entry.assignment);
     }
 
-    // Resolve targetSheet based on the selected mode
-    let targetSheet = settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
-    // Replace MM-DD-YYYY placeholders with current date (used for default and as campus fallback)
-    const now = new Date();
-    const month = String(now.getMonth() + 1);
-    const day = String(now.getDate());
-    const year = now.getFullYear();
-
-    if (targetSheet === 'Campus') {
-        // Use the student's trimmed campus name, fall back to date-based sheet name
-        targetSheet = entry.campus || `LDA ${month}-${day}-${year}`;
-    } else {
-        targetSheet = targetSheet.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
-    }
+    // Resolve targetSheet based on the selected mode ('Campus' uses the
+    // student's campus; otherwise MM-DD-YYYY placeholders become today)
+    const targetSheet = resolveTargetSheetName(settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET], entry);
 
     // Build the payload
     const payload = {
@@ -1071,7 +1162,7 @@ async function sendHighlightStudentRowPayload(entry, overrideTabId = null) {
 // students. Shared formatting settings are resolved once; each student carries
 // its own targetSheet and editText. The Office Add-in applies all highlights
 // in a single Excel.run, avoiding per-student round-trips.
-async function sendBulkHighlightStudentRowPayload(entries) {
+async function sendBulkHighlightStudentRowPayload(entries, overrideTabId = null) {
     if (!Array.isArray(entries) || entries.length === 0) return;
 
     console.log('%c [SRK] Bulk submission highlight - sending batch to Office Add-in',
@@ -1094,19 +1185,7 @@ async function sendBulkHighlightStudentRowPayload(entries) {
         STORAGE_KEYS.HIGHLIGHT_ROW_COLOR
     ]);
 
-    const targetSheetSetting = settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET] || 'LDA MM-DD-YYYY';
     const editTextTemplate = settings[STORAGE_KEYS.HIGHLIGHT_EDIT_TEXT] || 'Submitted {assignment}';
-    const now = new Date();
-    const month = String(now.getMonth() + 1);
-    const day = String(now.getDate());
-    const year = now.getFullYear();
-
-    const resolveTargetSheet = (entry) => {
-        if (targetSheetSetting === 'Campus') {
-            return entry.campus || `LDA ${month}-${day}-${year}`;
-        }
-        return targetSheetSetting.replace(/MM/g, month).replace(/DD/g, day).replace(/YYYY/g, year);
-    };
 
     // Filter out entries without syStudentId (can't highlight without it)
     const validEntries = entries.filter(entry => {
@@ -1121,14 +1200,9 @@ async function sendBulkHighlightStudentRowPayload(entries) {
 
     // Group entries by resolved targetSheet — the add-in's bulk handler
     // operates on a single sheet per payload.
-    const groups = new Map();
-    for (const entry of validEntries) {
-        const sheet = resolveTargetSheet(entry);
-        if (!groups.has(sheet)) groups.set(sheet, []);
-        groups.get(sheet).push(entry);
-    }
+    const groups = groupEntriesBySheet(validEntries, settings[STORAGE_KEYS.HIGHLIGHT_TARGET_SHEET]);
 
-    const targetTabId = await storageGetValue(STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID, null);
+    const targetTabId = overrideTabId || await storageGetValue(STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID, null);
 
     for (const [targetSheet, groupEntries] of groups.entries()) {
         const students = groupEntries.map(entry => ({
@@ -1266,14 +1340,14 @@ async function handleStateChange(newState, oldState) {
 }
 
 async function addStudentToFoundList(entry) {
-    const data = await chrome.storage.local.get(STORAGE_KEYS.FOUND_ENTRIES);
-    const foundEntries = data[STORAGE_KEYS.FOUND_ENTRIES] || [];
-    const map = new Map(foundEntries.map(e => [e.url, e]));
-    // Set initial highlightStatus to pending (waiting for Excel confirmation)
-    const entryWithStatus = { ...entry, highlightStatus: HIGHLIGHT_STATUS.PENDING };
-    map.set(entry.url, entryWithStatus);
     addToFoundUrlCache(entry.url);
-    await chrome.storage.local.set({ [STORAGE_KEYS.FOUND_ENTRIES]: Array.from(map.values()) });
+    await withFoundEntries((entries) => {
+        const map = new Map(entries.map(e => [e.url, e]));
+        // Set initial highlightStatus to pending (waiting for Excel confirmation)
+        map.set(entry.url, { ...entry, highlightStatus: HIGHLIGHT_STATUS.PENDING, highlightAttempts: 0 });
+        entries.length = 0;
+        entries.push(...map.values());
+    });
 }
 
 // --- INJECTION LOGIC FOR EXCEL CONNECTOR ---
