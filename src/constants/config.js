@@ -11,6 +11,14 @@ export const CONFIG = {
         AUTH_ERROR_THRESHOLD: 20 // Consecutive 401 errors before showing auth modal
     },
 
+    // Submission highlight pipeline (Excel add-in row highlighting)
+    HIGHLIGHT: {
+        DEBOUNCE_MS: 1000,          // Batch window for rapid-fire submission highlights
+        MAX_BATCH: 25,              // Force a flush once this many highlights are buffered
+        RECONCILE_DELAY_MS: 30000,  // Recheck unconfirmed highlights after this long
+        MAX_SEND_ATTEMPTS: 3        // Total sends per student (initial + automatic retries)
+    },
+
     // Five9 Integration Settings
     FIVE9: {
         POLL_INTERVAL_MS: 2000,
