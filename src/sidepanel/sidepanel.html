@@ -66,9 +66,9 @@
         
         <div class="setting-card" style="margin-bottom: 15px; border-left: 4px solid #9ca3af;">
             <div style="display:flex; align-items:center; gap:12px;">
-                 <div style="width:40px; height:40px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size: 1.1em;"><i class="fas fa-user"></i></div>
+                 <div id="contactAvatar" style="width:40px; height:40px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size: 1.1em;"><i class="fas fa-user"></i></div>
                  <div>
-                     <div style="font-weight:bold; color: #1a202c;">No Student Selected</div>
+                     <div id="contactName" style="font-weight:bold; color: #1a202c;">No Student Selected</div>
                      <div style="font-size:0.8em; color:var(--text-secondary); display:none;"></div>
                  </div>
             </div>
@@ -582,6 +582,19 @@
                     </div>
                     <div style="font-size:0.75em; color:var(--text-secondary);">
                         Reveal the Power Automate connection on the Settings tab. Off by default.
+                    </div>
+                </div>
+
+                <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin: 20px 0 10px 0; padding-top:16px; border-top: 1px solid rgba(0,0,0,0.08);">
+                    <i class="fas fa-user-shield" style="color:var(--primary-color); margin-right:6px;"></i>Privacy
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size:0.9em; font-weight:500; color:var(--text-main);">Redact Data</label>
+                        <i id="redactDataToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                    </div>
+                    <div style="font-size:0.75em; color:var(--text-secondary);">
+                        Blur student names and phone numbers in the UI. Off by default.
                     </div>
                 </div>
 

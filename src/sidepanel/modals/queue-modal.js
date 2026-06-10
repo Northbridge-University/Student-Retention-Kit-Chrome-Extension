@@ -83,7 +83,7 @@ export async function renderQueueModal(selectedQueue, onReorder, onRemove, autom
                     <i class="fas fa-grip-vertical queue-drag-handle"></i>
                     <div style="margin-right: 10px; font-weight: 600; color: var(--text-secondary); min-width: 20px;">#${displayIndex + 1}</div>
                     <div>
-                        <div style="font-weight: 500; color: var(--text-main);">${data.name}${isCurrent ? ' <span style="font-size:0.75em; color:var(--primary-color); font-weight:600;">(current)</span>' : ''}</div>
+                        <div><span class="queue-student-name" style="font-weight: 500; color: var(--text-main);">${data.name}</span>${isCurrent ? ' <span style="font-size:0.75em; color:var(--primary-color); font-weight:600;">(current)</span>' : ''}</div>
                         ${data.daysOut != null ? `<div style="font-size: 0.8em; color: var(--text-secondary);">${data.daysOut} Days Out</div>` : ''}
                     </div>
                 </div>

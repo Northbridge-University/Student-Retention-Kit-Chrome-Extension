@@ -299,6 +299,7 @@ export function cacheDomElements() {
     elements.exportColorScaleMidInput = document.getElementById('exportColorScaleMidInput');
     elements.exportColorScaleHighInput = document.getElementById('exportColorScaleHighInput');
     elements.showPowerAutomateToggle = document.getElementById('showPowerAutomateToggle');
+    elements.redactDataToggle = document.getElementById('redactDataToggle');
     elements.powerAutomateSettingCard = document.getElementById('powerAutomateSettingCard');
     elements.powerAutomateUrlInput = document.getElementById('powerAutomateUrlInput');
     elements.toggleUrlVisibility = document.getElementById('toggleUrlVisibility');

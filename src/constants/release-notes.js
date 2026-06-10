@@ -27,7 +27,8 @@ export const RELEASE_NOTES = {
         date: 'June 10, 2026',
         updates: [
 			'Daily update reminder now greets you based on the time of day',
-			'"Maybe Later" now keeps the daily update reminder off for the rest of the day'
+			'"Maybe Later" now keeps the daily update reminder off for the rest of the day',
+			'New "Redact Data" option in More Settings blurs student names and phone numbers'
         ]
     },
 	'15.2': {

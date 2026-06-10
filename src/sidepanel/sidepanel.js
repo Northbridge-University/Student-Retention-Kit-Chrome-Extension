@@ -132,7 +132,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
-import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility } from './modals/more-settings-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility, toggleRedactData, applyRedactData } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
@@ -260,8 +260,14 @@ async function initializeApp() {
     populateGuides();
 
     // Apply the saved Power Automate visibility preference to the Settings tab
-    const { [STORAGE_KEYS.SHOW_POWER_AUTOMATE]: showPA } = await storageGet([STORAGE_KEYS.SHOW_POWER_AUTOMATE]);
+    const {
+        [STORAGE_KEYS.SHOW_POWER_AUTOMATE]: showPA,
+        [STORAGE_KEYS.REDACT_DATA]: redactData
+    } = await storageGet([STORAGE_KEYS.SHOW_POWER_AUTOMATE, STORAGE_KEYS.REDACT_DATA]);
     applyPowerAutomateVisibility(!!showPA);
+
+    // Apply the saved Redact Data preference (blurs student names/phones)
+    applyRedactData(!!redactData);
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
@@ -666,6 +672,10 @@ function setupEventListeners() {
 
     if (elements.showPowerAutomateToggle) {
         elements.showPowerAutomateToggle.addEventListener('click', toggleShowPowerAutomate);
+    }
+
+    if (elements.redactDataToggle) {
+        elements.redactDataToggle.addEventListener('click', toggleRedactData);
     }
 
     // Canvas Modal Settings

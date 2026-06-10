@@ -136,6 +136,13 @@ function getDailyUpdateGreeting(hour) {
 }
 
 /**
+ * Applies the Redact Data preference by toggling the redact-mode class on body
+ */
+function applyRedactData(enabled) {
+    document.body.classList.toggle('redact-mode', !!enabled);
+}
+
+/**
  * Generates initials from a name
  */
 function generateInitials(name) {
@@ -432,6 +439,32 @@ describe('getDailyUpdateGreeting', () => {
         expect(getDailyUpdateGreeting(20).text).toBe('Good Evening!');
         expect(getDailyUpdateGreeting(23).text).toBe('Good Evening!');
         expect(getDailyUpdateGreeting(19).icon).toBe('fa-moon');
+    });
+});
+
+describe('applyRedactData', () => {
+    afterEach(() => {
+        document.body.classList.remove('redact-mode');
+    });
+
+    test('is off by default (no redact-mode class)', () => {
+        expect(document.body.classList.contains('redact-mode')).toBe(false);
+    });
+
+    test('adds redact-mode class to body when enabled', () => {
+        applyRedactData(true);
+        expect(document.body.classList.contains('redact-mode')).toBe(true);
+    });
+
+    test('removes redact-mode class from body when disabled', () => {
+        applyRedactData(true);
+        applyRedactData(false);
+        expect(document.body.classList.contains('redact-mode')).toBe(false);
+    });
+
+    test('treats falsy stored values as off', () => {
+        applyRedactData(undefined);
+        expect(document.body.classList.contains('redact-mode')).toBe(false);
     });
 });
 

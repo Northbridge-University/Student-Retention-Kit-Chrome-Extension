@@ -19,6 +19,20 @@ export function toggleShowPowerAutomate() {
 }
 
 /**
+ * Applies the Redact Data preference by toggling the redact-mode class on the
+ * body. CSS rules blur student names, phone numbers, and avatars while active.
+ * Called on startup and whenever the user saves the preference.
+ */
+export function applyRedactData(enabled) {
+    document.body.classList.toggle('redact-mode', !!enabled);
+}
+
+export function toggleRedactData() {
+    if (!elements.redactDataToggle) return;
+    updateToggleUI(elements.redactDataToggle, !isToggleEnabled(elements.redactDataToggle));
+}
+
+/**
  * Opens the More Settings modal and loads current values
  */
 export async function openMoreSettingsModal() {
@@ -31,10 +45,12 @@ export async function openMoreSettingsModal() {
         STORAGE_KEYS.EXPORT_COLOR_SCALE_LOW,
         STORAGE_KEYS.EXPORT_COLOR_SCALE_MID,
         STORAGE_KEYS.EXPORT_COLOR_SCALE_HIGH,
-        STORAGE_KEYS.SHOW_POWER_AUTOMATE
+        STORAGE_KEYS.SHOW_POWER_AUTOMATE,
+        STORAGE_KEYS.REDACT_DATA
     ]);
 
     updateToggleUI(elements.showPowerAutomateToggle, !!result[STORAGE_KEYS.SHOW_POWER_AUTOMATE]);
+    updateToggleUI(elements.redactDataToggle, !!result[STORAGE_KEYS.REDACT_DATA]);
 
     // Load export tab color
     if (elements.exportTabColorInput && elements.exportTabColorTextInput) {
@@ -86,7 +102,11 @@ export async function saveMoreSettings() {
     const showPowerAutomate = isToggleEnabled(elements.showPowerAutomateToggle);
     settingsToSave[STORAGE_KEYS.SHOW_POWER_AUTOMATE] = showPowerAutomate;
 
+    const redactData = isToggleEnabled(elements.redactDataToggle);
+    settingsToSave[STORAGE_KEYS.REDACT_DATA] = redactData;
+
     await storageSet(settingsToSave);
     applyPowerAutomateVisibility(showPowerAutomate);
+    applyRedactData(redactData);
     closeMoreSettingsModal();
 }
