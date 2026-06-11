@@ -105,12 +105,17 @@ function meetsFilterCriteria(entry, operator, value, includeFailing) {
 /**
  * Checks if the daily update modal should be shown
  */
-function shouldShowDailyUpdate(lastUpdated, now) {
+function shouldShowDailyUpdate(lastUpdated, now, snoozedDate) {
     if (!lastUpdated) {
         return false;
     }
 
     const todayDateString = now.toLocaleDateString('en-US');
+
+    if (snoozedDate === todayDateString) {
+        return false;
+    }
+
     const lastUpdatedDate = new Date(lastUpdated);
     const lastUpdatedDateString = lastUpdatedDate.toLocaleDateString('en-US');
 
@@ -119,6 +124,47 @@ function shouldShowDailyUpdate(lastUpdated, now) {
     }
 
     return true;
+}
+
+/**
+ * Gets the greeting matching the time of day for the daily update modal
+ */
+function getDailyUpdateGreeting(hour) {
+    if (hour < 12) return { text: 'Good Morning!', icon: 'fa-sun', color: '#f59e0b' };
+    if (hour < 17) return { text: 'Good Afternoon!', icon: 'fa-cloud-sun', color: '#f59e0b' };
+    return { text: 'Good Evening!', icon: 'fa-moon', color: '#6366f1' };
+}
+
+/**
+ * Applies the Redact Data preference by toggling the redact-mode class on body
+ */
+function applyRedactData(enabled) {
+    document.body.classList.toggle('redact-mode', !!enabled);
+}
+
+/**
+ * Sorts version strings newest first (numeric, per dot-separated part)
+ */
+function sortVersionsDescending(versions) {
+    return [...versions].sort((a, b) => {
+        const partsA = a.split('.').map(Number);
+        const partsB = b.split('.').map(Number);
+
+        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const numA = partsA[i] || 0;
+            const numB = partsB[i] || 0;
+            if (numA !== numB) return numB - numA;
+        }
+        return 0;
+    });
+}
+
+/**
+ * Gets the versions to show in the Previous Updates history view:
+ * every version with notes except the one displayed in the main view
+ */
+function getPreviousReleaseVersions(versions, currentVersion) {
+    return sortVersionsDescending(versions).filter(v => v !== currentVersion);
 }
 
 /**
@@ -379,6 +425,96 @@ describe('shouldShowDailyUpdate', () => {
         const lastUpdated = new Date('2025-01-08T10:00:00').getTime();
 
         expect(shouldShowDailyUpdate(lastUpdated, now)).toBe(true);
+    });
+
+    test('returns false if snoozed today via Maybe Later', () => {
+        const now = new Date('2025-01-15T10:00:00');
+        const lastUpdated = new Date('2025-01-14T10:00:00').getTime();
+        const snoozedDate = now.toLocaleDateString('en-US');
+
+        expect(shouldShowDailyUpdate(lastUpdated, now, snoozedDate)).toBe(false);
+    });
+
+    test('returns true if snoozed on a previous day', () => {
+        const now = new Date('2025-01-15T10:00:00');
+        const lastUpdated = new Date('2025-01-14T10:00:00').getTime();
+        const snoozedDate = new Date('2025-01-14T11:00:00').toLocaleDateString('en-US');
+
+        expect(shouldShowDailyUpdate(lastUpdated, now, snoozedDate)).toBe(true);
+    });
+});
+
+describe('getDailyUpdateGreeting', () => {
+    test('greets Good Morning before noon', () => {
+        expect(getDailyUpdateGreeting(0).text).toBe('Good Morning!');
+        expect(getDailyUpdateGreeting(9).text).toBe('Good Morning!');
+        expect(getDailyUpdateGreeting(11).text).toBe('Good Morning!');
+        expect(getDailyUpdateGreeting(8).icon).toBe('fa-sun');
+    });
+
+    test('greets Good Afternoon from noon to 5pm', () => {
+        expect(getDailyUpdateGreeting(12).text).toBe('Good Afternoon!');
+        expect(getDailyUpdateGreeting(14).text).toBe('Good Afternoon!');
+        expect(getDailyUpdateGreeting(16).text).toBe('Good Afternoon!');
+        expect(getDailyUpdateGreeting(13).icon).toBe('fa-cloud-sun');
+    });
+
+    test('greets Good Evening from 5pm onward', () => {
+        expect(getDailyUpdateGreeting(17).text).toBe('Good Evening!');
+        expect(getDailyUpdateGreeting(20).text).toBe('Good Evening!');
+        expect(getDailyUpdateGreeting(23).text).toBe('Good Evening!');
+        expect(getDailyUpdateGreeting(19).icon).toBe('fa-moon');
+    });
+});
+
+describe('applyRedactData', () => {
+    afterEach(() => {
+        document.body.classList.remove('redact-mode');
+    });
+
+    test('is off by default (no redact-mode class)', () => {
+        expect(document.body.classList.contains('redact-mode')).toBe(false);
+    });
+
+    test('adds redact-mode class to body when enabled', () => {
+        applyRedactData(true);
+        expect(document.body.classList.contains('redact-mode')).toBe(true);
+    });
+
+    test('removes redact-mode class from body when disabled', () => {
+        applyRedactData(true);
+        applyRedactData(false);
+        expect(document.body.classList.contains('redact-mode')).toBe(false);
+    });
+
+    test('treats falsy stored values as off', () => {
+        applyRedactData(undefined);
+        expect(document.body.classList.contains('redact-mode')).toBe(false);
+    });
+});
+
+describe('getPreviousReleaseVersions', () => {
+    test('sorts versions numerically, newest first', () => {
+        const versions = ['11.0', '15.2', '16.0', '14.5', '15.1'];
+        expect(sortVersionsDescending(versions)).toEqual(['16.0', '15.2', '15.1', '14.5', '11.0']);
+    });
+
+    test('compares version parts as numbers, not strings', () => {
+        // String comparison would put '9.0' after '10.0'
+        expect(sortVersionsDescending(['9.0', '10.0', '11.2'])).toEqual(['11.2', '10.0', '9.0']);
+    });
+
+    test('excludes the currently displayed version', () => {
+        const versions = ['16.0', '15.2', '15.1'];
+        expect(getPreviousReleaseVersions(versions, '16.0')).toEqual(['15.2', '15.1']);
+    });
+
+    test('returns empty when the only version is the current one', () => {
+        expect(getPreviousReleaseVersions(['16.0'], '16.0')).toEqual([]);
+    });
+
+    test('handles versions with different part counts', () => {
+        expect(sortVersionsDescending(['16', '16.0.1', '15.2'])).toEqual(['16.0.1', '16', '15.2']);
     });
 });
 

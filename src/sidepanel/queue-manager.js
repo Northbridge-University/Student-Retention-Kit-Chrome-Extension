@@ -5,6 +5,7 @@ import { updateFive9ConnectionIndicator } from './five9-integration.js';
 import { STORAGE_KEYS } from '../constants/index.js';
 import { storageGetValue } from '../utils/storage.js';
 import { openStudentViewModal } from './modals/student-view-modal.js';
+import { preloadStudentPhotos, cancelPendingAvatar } from '../utils/avatar-cache.js';
 
 /**
  * Queue Manager Class - Manages student queue operations
@@ -45,6 +46,9 @@ export class QueueManager {
             // Select
             this.selectedQueue.push(entry);
             liElement.classList.add('multi-selected');
+            // Warm the photo cache so the avatar doesn't pop in when this
+            // student comes up in the call rotation
+            preloadStudentPhotos([entry]);
         }
 
         // Update call manager's queue reference
@@ -182,6 +186,7 @@ export class QueueManager {
             elements.contactDetail.textContent = `${count} Students Selected`;
         }
         if (elements.contactAvatar) {
+            cancelPendingAvatar(elements.contactAvatar);
             elements.contactAvatar.textContent = count;
         }
 
@@ -231,6 +236,10 @@ export class QueueManager {
      */
     setQueue(newQueue) {
         this.selectedQueue = newQueue;
+
+        // Warm the photo cache for the queued students so avatars don't pop
+        // in as the call rotation advances
+        preloadStudentPhotos(this.selectedQueue);
 
         if (this.callManager) {
             this.callManager.updateQueue(this.selectedQueue);

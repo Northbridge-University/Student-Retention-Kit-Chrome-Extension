@@ -222,3 +222,89 @@ describe('Chrome Storage Integration', () => {
         expect(result.toKeep).toBe('value2');
     });
 });
+
+// ============================================
+// Last Updated indicator sync
+// ============================================
+
+/**
+ * Resolves the new "Last Updated" value from a storage onChanged event.
+ * The timestamp lives in the nested `timestamps` object (written by the
+ * side panel and the Office add-in connector); the flat `lastUpdated` key
+ * is checked as a fallback for older writers.
+ * Mirrors the listener logic in sidepanel.js.
+ */
+function resolveLastUpdatedFromStorageChanges(changes) {
+    return changes.timestamps?.newValue?.lastUpdated
+        ?? changes.lastUpdated?.newValue
+        ?? null;
+}
+
+/**
+ * Merges a master list update's timestamps into the nested timestamps
+ * object without dropping unrelated fields.
+ * Mirrors the Office add-in write in excelConnector.js.
+ */
+function mergeMasterListTimestamps(existingTimestamps, lastUpdated, sourceTimestamp) {
+    const timestamps = existingTimestamps || {};
+    timestamps.lastUpdated = lastUpdated;
+    timestamps.masterListSourceTimestamp = sourceTimestamp;
+    return timestamps;
+}
+
+describe('resolveLastUpdatedFromStorageChanges', () => {
+    test('reads the timestamp from a nested timestamps change (Office add-in push)', () => {
+        const changes = {
+            masterEntries: { newValue: [{ name: 'Student A' }] },
+            timestamps: { newValue: { lastUpdated: '6/10/2026, 09:30 AM' } }
+        };
+        expect(resolveLastUpdatedFromStorageChanges(changes)).toBe('6/10/2026, 09:30 AM');
+    });
+
+    test('falls back to the legacy flat lastUpdated key', () => {
+        const changes = { lastUpdated: { newValue: '6/10/2026, 10:00 AM' } };
+        expect(resolveLastUpdatedFromStorageChanges(changes)).toBe('6/10/2026, 10:00 AM');
+    });
+
+    test('prefers the nested timestamp over the flat key', () => {
+        const changes = {
+            timestamps: { newValue: { lastUpdated: 'nested-value' } },
+            lastUpdated: { newValue: 'flat-value' }
+        };
+        expect(resolveLastUpdatedFromStorageChanges(changes)).toBe('nested-value');
+    });
+
+    test('returns null when the change is unrelated to the timestamp', () => {
+        expect(resolveLastUpdatedFromStorageChanges({ foundEntries: { newValue: [] } })).toBeNull();
+        expect(resolveLastUpdatedFromStorageChanges({})).toBeNull();
+    });
+
+    test('falls back to the flat key when a timestamps change lacks lastUpdated', () => {
+        const changes = {
+            timestamps: { newValue: { lastCallTimestamp: 123 } },
+            lastUpdated: { newValue: 'flat-value' }
+        };
+        expect(resolveLastUpdatedFromStorageChanges(changes)).toBe('flat-value');
+    });
+});
+
+describe('mergeMasterListTimestamps', () => {
+    test('sets lastUpdated and masterListSourceTimestamp', () => {
+        const merged = mergeMasterListTimestamps({}, '6/10/2026, 09:30 AM', 1718000000000);
+        expect(merged.lastUpdated).toBe('6/10/2026, 09:30 AM');
+        expect(merged.masterListSourceTimestamp).toBe(1718000000000);
+    });
+
+    test('preserves unrelated timestamp fields (snooze, last call)', () => {
+        const existing = { dailyUpdateSnoozedDate: '6/9/2026', lastCallTimestamp: 42 };
+        const merged = mergeMasterListTimestamps(existing, 'new-time', 1);
+        expect(merged.dailyUpdateSnoozedDate).toBe('6/9/2026');
+        expect(merged.lastCallTimestamp).toBe(42);
+        expect(merged.lastUpdated).toBe('new-time');
+    });
+
+    test('handles a missing timestamps object', () => {
+        const merged = mergeMasterListTimestamps(undefined, 'first-time', 2);
+        expect(merged).toEqual({ lastUpdated: 'first-time', masterListSourceTimestamp: 2 });
+    });
+});

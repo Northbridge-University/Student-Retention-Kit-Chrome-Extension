@@ -22,6 +22,19 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'16.0': {
+        title: 'Latest Updates',
+        date: 'June 10, 2026',
+        updates: [
+			'Daily update reminder now greets you based on the time of day',
+			'"Maybe Later" now keeps the daily update reminder off for the rest of the day',
+			'New "Redact Data" option in More Settings blurs student names and phone numbers',
+			'Master List loads faster — shows 50 students at a time with a "Show More" button (search still covers everyone)',
+			'View previous release notes from this popup with the new "View Previous Updates" button',
+			'Student profile pictures now load behind the scenes so they no longer pop in',
+			'"Last Updated" on the Data tab now refreshes when the master list receives data from the Office add-in'
+        ]
+    },
 	'15.2': {
         title: 'Latest Updates',
         date: 'May 8, 2026',
@@ -202,6 +215,13 @@ export const RELEASE_NOTES = {
             'Improved data management handling with 6k students',
             'Included a Campus filter in case you import multiple Campus populations',
             'Added safety guards for the extension to disable if Chrome crashes'
+        ]
+    },
+	'10.0': {
+        title: 'Latest Updates',
+        date: 'January 11, 2026',
+        updates: [
+			'Official release to staff'
         ]
     }
 

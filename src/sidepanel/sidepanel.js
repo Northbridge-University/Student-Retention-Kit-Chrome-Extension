@@ -4,6 +4,7 @@ import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, se
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
 import { loadAndRenderMarkdown } from '../utils/markdownRenderer.js';
+import { applyAvatarPhoto } from '../utils/avatar-cache.js';
 import CallManager from './callManager.js';
 import { tutorialManager } from './tutorial-manager.js';
 
@@ -97,7 +98,8 @@ import {
 import {
     shouldShowDailyUpdateModal,
     openDailyUpdateModal,
-    closeDailyUpdateModal
+    closeDailyUpdateModal,
+    snoozeDailyUpdateModal
 } from './modals/daily-update-modal.js';
 
 import {
@@ -131,14 +133,16 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
-import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility } from './modals/more-settings-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility, toggleRedactData, applyRedactData } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
 import {
     shouldShowLatestUpdatesModal,
     openLatestUpdatesModal,
-    closeLatestUpdatesModal
+    closeLatestUpdatesModal,
+    showLatestUpdatesMain,
+    showLatestUpdatesHistory
 } from './modals/latest-updates-modal.js';
 
 import { QueueManager } from './queue-manager.js';
@@ -259,8 +263,14 @@ async function initializeApp() {
     populateGuides();
 
     // Apply the saved Power Automate visibility preference to the Settings tab
-    const { [STORAGE_KEYS.SHOW_POWER_AUTOMATE]: showPA } = await storageGet([STORAGE_KEYS.SHOW_POWER_AUTOMATE]);
+    const {
+        [STORAGE_KEYS.SHOW_POWER_AUTOMATE]: showPA,
+        [STORAGE_KEYS.REDACT_DATA]: redactData
+    } = await storageGet([STORAGE_KEYS.SHOW_POWER_AUTOMATE, STORAGE_KEYS.REDACT_DATA]);
     applyPowerAutomateVisibility(!!showPA);
+
+    // Apply the saved Redact Data preference (blurs student names/phones)
+    applyRedactData(!!redactData);
 
     // Load and display last call timestamp
     await callManager.loadLastCallTimestamp();
@@ -667,6 +677,10 @@ function setupEventListeners() {
         elements.showPowerAutomateToggle.addEventListener('click', toggleShowPowerAutomate);
     }
 
+    if (elements.redactDataToggle) {
+        elements.redactDataToggle.addEventListener('click', toggleRedactData);
+    }
+
     // Canvas Modal Settings
     if (elements.embedHelperToggleModal) {
         elements.embedHelperToggleModal.addEventListener('click', toggleEmbedHelperModal);
@@ -885,7 +899,7 @@ function setupEventListeners() {
     }
 
     if (elements.dailyUpdateLaterBtn) {
-        elements.dailyUpdateLaterBtn.addEventListener('click', closeDailyUpdateModal);
+        elements.dailyUpdateLaterBtn.addEventListener('click', snoozeDailyUpdateModal);
     }
 
     if (elements.dailyUpdateBtn) {
@@ -921,6 +935,14 @@ function setupEventListeners() {
 
     if (elements.latestUpdatesGotItBtn) {
         elements.latestUpdatesGotItBtn.addEventListener('click', closeLatestUpdatesModal);
+    }
+
+    if (elements.viewPreviousUpdatesBtn) {
+        elements.viewPreviousUpdatesBtn.addEventListener('click', showLatestUpdatesHistory);
+    }
+
+    if (elements.latestUpdatesHistoryBackBtn) {
+        elements.latestUpdatesHistoryBackBtn.addEventListener('click', showLatestUpdatesMain);
     }
 
     // Excel Instance Modal
@@ -1650,6 +1672,16 @@ function setupEventListeners() {
         elements.masterSearch.addEventListener('input', filterMasterList);
     }
 
+    // Re-sync queue selection highlights whenever additional master list
+    // items are rendered (Show More / search / sort over the paginated list)
+    if (elements.masterList) {
+        elements.masterList.addEventListener('masterListItemsRendered', () => {
+            if (queueManager) {
+                queueManager.updateMasterListSelection();
+            }
+        });
+    }
+
     // Sort filter dropdown menu
     if (elements.sortFilterBtn && elements.sortDropdownMenu) {
         elements.sortFilterBtn.addEventListener('click', (e) => {
@@ -2054,10 +2086,10 @@ function renderPreviousCalls(entries) {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
         const hasPhoto = entry.Photo && entry.Photo !== GENERIC_AVATAR_URL;
-        const safePhoto = hasPhoto ? entry.Photo.replace(/'/g, '%27') : '';
-        const avatarInner = hasPhoto
-            ? `<div class="previous-call-avatar previous-call-avatar--photo" style="background-image:url('${safePhoto}');"></div>`
-            : `<div class="previous-call-avatar"><i class="fas fa-user"></i></div>`;
+        const safePhoto = hasPhoto ? entry.Photo.replace(/'/g, '%27').replace(/"/g, '&quot;') : '';
+        // Always start with the generic icon; the photo is swapped in only
+        // once it has fully loaded so avatars don't pop in
+        const avatarInner = `<div class="previous-call-avatar"${hasPhoto ? ` data-photo="${safePhoto}"` : ''}><i class="fas fa-user"></i></div>`;
         return `
             <div class="previous-call-item${disabled ? ' disabled' : ''}" data-index="${index}" title="${title}">
                 ${avatarInner}
@@ -2071,6 +2103,19 @@ function renderPreviousCalls(entries) {
 
     elements.previousCallsList.innerHTML = html;
     elements.previousCallsCard.style.display = 'flex';
+
+    // Apply photos only after they've loaded (generic icon shows meanwhile)
+    elements.previousCallsList.querySelectorAll('.previous-call-avatar[data-photo]').forEach(avatar => {
+        const url = avatar.dataset.photo;
+        applyAvatarPhoto(avatar, url, {
+            applyPhoto: () => {
+                avatar.classList.add('previous-call-avatar--photo');
+                avatar.innerHTML = '';
+                avatar.style.backgroundImage = `url('${url}')`;
+            }
+            // No applyFallback — the generic icon is already in place
+        });
+    });
 }
 
 /**
@@ -2232,6 +2277,16 @@ chrome.storage.local.onChanged.addListener((changes) => {
         // Disable Download when there's nothing to export
         masterListIsEmpty = newMasterEntries.length === 0;
         refreshDownloadButtonState();
+    }
+
+    // Keep the "Last Updated" indicator in sync when the master list is
+    // updated from outside the panel (e.g. the Office add-in pushing data).
+    // The timestamp lives in the nested `timestamps` object; the flat
+    // `lastUpdated` key is checked too for older writers.
+    const newLastUpdated = changes[STORAGE_KEYS.TIMESTAMPS]?.newValue?.lastUpdated
+        ?? changes.lastUpdated?.newValue;
+    if (newLastUpdated && elements.lastUpdatedText) {
+        elements.lastUpdatedText.textContent = newLastUpdated;
     }
 
     // Handle name format toggle changes - re-render all displays

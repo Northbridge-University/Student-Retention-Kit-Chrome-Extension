@@ -66,9 +66,9 @@
         
         <div class="setting-card" style="margin-bottom: 15px; border-left: 4px solid #9ca3af;">
             <div style="display:flex; align-items:center; gap:12px;">
-                 <div style="width:40px; height:40px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size: 1.1em;"><i class="fas fa-user"></i></div>
+                 <div id="contactAvatar" style="width:40px; height:40px; background:#e5e7eb; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size: 1.1em;"><i class="fas fa-user"></i></div>
                  <div>
-                     <div style="font-weight:bold; color: #1a202c;">No Student Selected</div>
+                     <div id="contactName" style="font-weight:bold; color: #1a202c;">No Student Selected</div>
                      <div style="font-size:0.8em; color:var(--text-secondary); display:none;"></div>
                  </div>
             </div>
@@ -585,6 +585,19 @@
                     </div>
                 </div>
 
+                <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin: 20px 0 10px 0; padding-top:16px; border-top: 1px solid rgba(0,0,0,0.08);">
+                    <i class="fas fa-user-shield" style="color:var(--primary-color); margin-right:6px;"></i>Privacy
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size:0.9em; font-weight:500; color:var(--text-main);">Redact Data</label>
+                        <i id="redactDataToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor: pointer;"></i>
+                    </div>
+                    <div style="font-size:0.75em; color:var(--text-secondary);">
+                        Blur student names and phone numbers in the UI. Off by default.
+                    </div>
+                </div>
+
                 <button class="btn-primary" id="saveMoreSettingsBtn">Save Settings</button>
             </div>
         </div>
@@ -1048,7 +1061,8 @@
                 <button class="icon-btn" id="closeLatestUpdatesBtn" title="Close"><i class="fas fa-times"></i></button>
             </div>
 
-            <div class="modal-body" style="padding: 20px;">
+            <!-- Main View (current version) -->
+            <div id="latestUpdatesMain" class="modal-body" style="padding: 20px;">
                 <div style="text-align: center; margin-bottom: 20px;">
                     <img src="../../icon.png" alt="Student Retention Kit" style="width: 64px; height: 64px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);">
                     <div id="latestUpdatesVersion" style="font-size: 1.1em; font-weight: 600; color: var(--text-main); margin-bottom: 5px;">
@@ -1059,7 +1073,7 @@
                     </div>
                 </div>
 
-                <div style="background: rgba(59, 130, 246, 0.08); border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0.5rem; margin-bottom: 20px;">
+                <div style="background: rgba(59, 130, 246, 0.08); border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0.5rem; margin-bottom: 15px;">
                     <div style="font-weight: 600; color: var(--text-main); margin-bottom: 10px;">
                         <i class="fas fa-sparkles" style="color: #3b82f6;"></i> Updates in this version:
                     </div>
@@ -1068,9 +1082,28 @@
                     </ul>
                 </div>
 
+                <button type="button" id="viewPreviousUpdatesBtn" style="background:none; border:none; color:var(--primary-color); font-size:0.85em; cursor:pointer; display:block; margin: 0 auto 15px auto; padding: 4px 8px;">
+                    <i class="fas fa-history"></i> View Previous Updates
+                </button>
+
                 <button class="btn-primary" id="latestUpdatesGotItBtn" style="width: 100%; padding: 12px;">
                     <i class="fas fa-check"></i> Got it!
                 </button>
+            </div>
+
+            <!-- Previous Updates View (release notes history) -->
+            <div id="latestUpdatesHistory" class="modal-body" style="display:none; padding: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                    <button id="latestUpdatesHistoryBackBtn" class="icon-btn" style="padding: 6px 10px;" title="Back">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div style="font-weight: 600; font-size: 1em; color: var(--text-main);">
+                        <i class="fas fa-history" style="color: #3b82f6; margin-right: 6px;"></i>Previous Updates
+                    </div>
+                </div>
+                <div id="latestUpdatesHistoryList">
+                    <!-- Previous release notes will be populated dynamically -->
+                </div>
             </div>
         </div>
     </div>
@@ -1079,7 +1112,7 @@
     <div id="dailyUpdateModal" class="modal-overlay" style="display:none; align-items: flex-start; padding-top: 80px;">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
-                <h3><i class="fas fa-sun" style="color: #f59e0b;"></i> Good Morning!</h3>
+                <h3><i id="dailyUpdateGreetingIcon" class="fas fa-sun" style="color: #f59e0b;"></i> <span id="dailyUpdateGreetingText">Good Morning!</span></h3>
                 <button class="icon-btn" id="closeDailyUpdateBtn" title="Close"><i class="fas fa-times"></i></button>
             </div>
 

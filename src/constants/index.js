@@ -132,6 +132,7 @@ export const STORAGE_KEYS = {
     AUTO_UPDATE_MASTER_LIST: 'settings.autoUpdateMasterList',
     TUTORIAL_COMPLETED: 'settings.tutorialCompleted',
     LAST_SEEN_VERSION: 'settings.lastSeenVersion',
+    REDACT_DATA: 'settings.redactData',
 
     // Excel Add-in settings (settings.excelAddIn.*)
     SEND_MASTER_LIST_TO_EXCEL: 'settings.excelAddIn.sendMasterListToExcel',
@@ -190,6 +191,7 @@ export const STORAGE_KEYS = {
     LAST_UPDATED: 'timestamps.lastUpdated',
     MASTER_LIST_SOURCE_TIMESTAMP: 'timestamps.masterListSourceTimestamp',
     REFERENCE_DATE: 'timestamps.referenceDate',
+    DAILY_UPDATE_SNOOZED_DATE: 'timestamps.dailyUpdateSnoozedDate',
 
     // === FLAT KEYS (frequently written) ===
     FOUND_ENTRIES: 'foundEntries',
@@ -227,6 +229,7 @@ export const DEFAULT_SETTINGS = {
     [STORAGE_KEYS.AUTO_UPDATE_MASTER_LIST]: 'always', // Options: 'always', 'once-daily', 'never'
     [STORAGE_KEYS.TUTORIAL_COMPLETED]: false,
     [STORAGE_KEYS.LAST_SEEN_VERSION]: null, // Tracks last version user has seen updates for
+    [STORAGE_KEYS.REDACT_DATA]: false, // Blurs student names and phone numbers in the UI
 
     // Excel Add-in settings
     [STORAGE_KEYS.SEND_MASTER_LIST_TO_EXCEL]: true,

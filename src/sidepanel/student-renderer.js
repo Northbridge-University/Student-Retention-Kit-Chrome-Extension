@@ -3,6 +3,7 @@ import { elements } from './ui-manager.js';
 import { GENERIC_AVATAR_URL, STORAGE_KEYS, HIGHLIGHT_STATUS, MESSAGE_TYPES } from '../constants/index.js';
 import { updateCallTabDisplay } from './call-tab-placeholder.js';
 import { getCachedDebugMode } from './five9-integration.js';
+import { applyAvatarPhoto, cancelPendingAvatar, preloadStudentPhotos } from '../utils/avatar-cache.js';
 
 /**
  * Converts student name from "Last, First" format to "First Last" format if a comma is present.
@@ -160,22 +161,27 @@ export async function setActiveStudent(rawEntry, callManager) {
 
     const displayPhone = data.phone ? data.phone : "No Phone Listed";
 
-    // AVATAR LOGIC
+    // AVATAR LOGIC — the photo is only applied once fully loaded (with the
+    // generic icon as a placeholder) so it doesn't pop in mid-render
     if (elements.contactAvatar) {
-        elements.contactAvatar.style.color = '';
-        if (data.Photo && data.Photo !== GENERIC_AVATAR_URL) {
-            elements.contactAvatar.textContent = '';
-            elements.contactAvatar.innerHTML = '';
-            elements.contactAvatar.style.backgroundImage = `url('${data.Photo}')`;
-            elements.contactAvatar.style.backgroundSize = 'cover';
-            elements.contactAvatar.style.backgroundPosition = 'center';
-            elements.contactAvatar.style.backgroundColor = 'transparent';
-        } else {
-            elements.contactAvatar.style.backgroundImage = 'none';
-            elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
-            elements.contactAvatar.style.backgroundColor = '#e5e7eb';
-            elements.contactAvatar.style.color = '#6b7280';
-        }
+        const photoUrl = (data.Photo && data.Photo !== GENERIC_AVATAR_URL) ? data.Photo : null;
+        applyAvatarPhoto(elements.contactAvatar, photoUrl, {
+            applyPhoto: () => {
+                elements.contactAvatar.style.color = '';
+                elements.contactAvatar.textContent = '';
+                elements.contactAvatar.innerHTML = '';
+                elements.contactAvatar.style.backgroundImage = `url('${photoUrl}')`;
+                elements.contactAvatar.style.backgroundSize = 'cover';
+                elements.contactAvatar.style.backgroundPosition = 'center';
+                elements.contactAvatar.style.backgroundColor = 'transparent';
+            },
+            applyFallback: () => {
+                elements.contactAvatar.style.backgroundImage = 'none';
+                elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
+                elements.contactAvatar.style.backgroundColor = '#e5e7eb';
+                elements.contactAvatar.style.color = '#6b7280';
+            }
+        });
     }
 
     if (elements.contactName) elements.contactName.textContent = data.name;
@@ -241,6 +247,7 @@ function renderNoStudentState() {
         elements.contactPhone.textContent = '';
     }
     if (elements.contactAvatar) {
+        cancelPendingAvatar(elements.contactAvatar);
         elements.contactAvatar.style.color = '#6b7280';
         elements.contactAvatar.style.backgroundImage = 'none';
         elements.contactAvatar.innerHTML = '<i class="fas fa-user"></i>';
@@ -292,6 +299,7 @@ export function setAutomationModeUI(queueLength, queue) {
 
     // Create visual badge for count
     if (elements.contactAvatar) {
+        cancelPendingAvatar(elements.contactAvatar);
         elements.contactAvatar.textContent = queueLength;
         elements.contactAvatar.style.backgroundImage = 'none';
         elements.contactAvatar.style.backgroundColor = '#6b7280';
@@ -444,13 +452,232 @@ export function filterFoundList(e) {
     });
 }
 
+/** Number of master list students rendered per page (initial load and each "Show More") */
+const MASTER_LIST_CHUNK_SIZE = 50;
+
 /**
- * Renders the master student list
+ * Pagination state for the master list. Only a page of students is rendered
+ * up front for performance; the rest are built on demand ("Show More") or
+ * when an operation needs the full list (search, sort, stats).
+ */
+let masterListPagination = {
+    entries: [],
+    onStudentClick: null,
+    reformatEnabled: true,
+    builtCount: 0,
+    visibleLimit: MASTER_LIST_CHUNK_SIZE
+};
+
+/** Guards against overlapping async renders clobbering each other */
+let masterListRenderToken = 0;
+
+/**
+ * Checks whether a search term or campus filter is currently applied
+ */
+function isMasterListFilterActive() {
+    const searchTerm = (elements.masterSearch?.value || '').trim();
+    const selectedCampus = elements.campusFilter?.value || '';
+    return !!(searchTerm || selectedCampus);
+}
+
+/**
+ * Creates a single master list <li> for a student entry
+ * @param {Object} rawEntry - Raw student data
+ * @returns {HTMLLIElement}
+ */
+function createMasterListItem(rawEntry) {
+    const { onStudentClick, reformatEnabled } = masterListPagination;
+    const data = resolveStudentData(rawEntry, reformatEnabled);
+
+    const li = document.createElement('li');
+    li.className = 'expandable';
+    li.style.cursor = 'pointer';
+
+    li.setAttribute('data-name', data.name);
+    li.setAttribute('data-missing', data.missing);
+    li.setAttribute('data-days', data.daysOut != null ? data.daysOut : '');
+    li.setAttribute('data-grade', data.grade || '');
+    li.setAttribute('data-gpa', data.enrollGpa || '');
+    li.setAttribute('data-attendance', data.attendancePercent || '');
+    li.setAttribute('data-created', data.created_at || '');
+    li.setAttribute('data-campus', rawEntry.campus || '');
+
+    let heatmapClass = data.daysOut == null ? 'heatmap-green' : (data.daysOut > 10 ? 'heatmap-red' : (data.daysOut > 5 ? 'heatmap-orange' : (data.daysOut > 2 ? 'heatmap-yellow' : 'heatmap-green')));
+
+    let missingPillHtml = '';
+    if (data.missing > 0) {
+        missingPillHtml = `<span class="missing-pill">${data.missing} Missing</span>`;
+    }
+
+    let newTagHtml = '';
+    if (data.isNew) {
+        newTagHtml = `<span style="background:#e0f2fe; color:#0369a1; font-size:0.7em; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:bold; border:1px solid #bae6fd;">New</span>`;
+    }
+
+    li.innerHTML = `
+        <div style="display: flex; align-items: center; width:100%;">
+            <div class="heatmap-indicator ${heatmapClass}"></div>
+            <div style="flex-grow:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <div style="display:flex; align-items:center;">
+                        <span class="student-name" style="font-weight: 500; color:${data.url ? 'var(--text-main)' : 'var(--text-secondary)'}; position:relative; z-index:2;${data.url ? '' : ' cursor: default;'}" ${data.url ? '' : 'title="No gradebook URL available"'}>${data.name}</span>
+                        ${newTagHtml}
+                    </div>
+                    ${missingPillHtml}
+                </div>
+                ${data.daysOut != null ? `<span style="font-size:0.8em; color:gray;">${data.daysOut} Days Out</span>` : ''}
+            </div>
+        </div>
+    `;
+
+    // Click listener for student selection
+    li.addEventListener('click', (e) => {
+        if (onStudentClick) {
+            onStudentClick(rawEntry, li, e);
+        }
+    });
+
+    // Student name click - open gradebook (only if URL exists)
+    const nameLink = li.querySelector('.student-name');
+    if (nameLink && data.url) {
+        nameLink.style.cursor = 'pointer';
+        nameLink.addEventListener('click', (e) => {
+            e.stopPropagation();
+            chrome.tabs.create({ url: data.url });
+        });
+        nameLink.addEventListener('mouseenter', () => {
+            nameLink.style.textDecoration = 'underline';
+            nameLink.style.color = 'var(--primary-color)';
+        });
+        nameLink.addEventListener('mouseleave', () => {
+            nameLink.style.textDecoration = 'none';
+            nameLink.style.color = 'var(--text-main)';
+        });
+    }
+
+    return li;
+}
+
+/**
+ * Builds the next `count` master list items into the DOM (before the
+ * Show More row). Fires 'masterListItemsRendered' so listeners (e.g. queue
+ * selection highlighting) can sync the newly added items.
+ * @param {number} count - How many additional items to build
+ * @param {boolean} [preloadPhotos=false] - Also preload these students'
+ *   photos (used for the visible page, skipped for bulk search renders)
+ */
+function buildMasterListItems(count, preloadPhotos = false) {
+    if (!elements.masterList) return;
+    const pagination = masterListPagination;
+    const start = pagination.builtCount;
+    const end = Math.min(start + count, pagination.entries.length);
+    if (end <= start) return;
+
+    if (preloadPhotos) {
+        preloadStudentPhotos(pagination.entries.slice(start, end));
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (let i = start; i < end; i++) {
+        fragment.appendChild(createMasterListItem(pagination.entries[i]));
+    }
+    pagination.builtCount = end;
+
+    const showMoreRow = document.getElementById('masterListShowMoreRow');
+    if (showMoreRow && showMoreRow.parentElement === elements.masterList) {
+        elements.masterList.insertBefore(fragment, showMoreRow);
+    } else {
+        elements.masterList.appendChild(fragment);
+    }
+
+    // Newly built items default to visible; re-apply pagination so items
+    // beyond the current limit stay hidden (filtering sets its own visibility)
+    if (!isMasterListFilterActive()) {
+        applyMasterListPaginationVisibility();
+    }
+
+    elements.masterList.dispatchEvent(new CustomEvent('masterListItemsRendered'));
+}
+
+/**
+ * Renders any not-yet-built master list items. Called before operations that
+ * must consider every student: searching, sorting, and stats charts.
+ */
+function ensureAllMasterListItemsRendered() {
+    const remaining = masterListPagination.entries.length - masterListPagination.builtCount;
+    if (remaining > 0) {
+        buildMasterListItems(remaining);
+    }
+}
+
+/**
+ * Shows only the first `visibleLimit` students (used when no filter is active)
+ */
+function applyMasterListPaginationVisibility() {
+    if (!elements.masterList) return;
+    const items = elements.masterList.querySelectorAll('li.expandable');
+    items.forEach((li, index) => {
+        li.style.display = index < masterListPagination.visibleLimit ? 'flex' : 'none';
+    });
+}
+
+/**
+ * Reveals the next page of students when "Show More" is clicked
+ */
+function showMoreMasterListItems() {
+    const pagination = masterListPagination;
+    pagination.visibleLimit = Math.min(pagination.visibleLimit + MASTER_LIST_CHUNK_SIZE, pagination.entries.length);
+    if (pagination.builtCount < pagination.visibleLimit) {
+        buildMasterListItems(pagination.visibleLimit - pagination.builtCount, true);
+    }
+    applyMasterListPaginationVisibility();
+    updateShowMoreRow();
+}
+
+/**
+ * Creates/updates the "Show More" row at the bottom of the master list.
+ * Hidden while a search or campus filter is active (filters show all matches).
+ */
+function updateShowMoreRow() {
+    if (!elements.masterList) return;
+    const { entries, visibleLimit } = masterListPagination;
+    const remaining = entries.length - visibleLimit;
+    let row = document.getElementById('masterListShowMoreRow');
+
+    if (remaining <= 0 || isMasterListFilterActive()) {
+        if (row) row.style.display = 'none';
+        return;
+    }
+
+    if (!row || row.parentElement !== elements.masterList) {
+        row = document.createElement('li');
+        row.id = 'masterListShowMoreRow';
+        row.style.justifyContent = 'center';
+        row.style.background = 'transparent';
+        row.style.border = 'none';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'masterListShowMoreBtn';
+        btn.className = 'btn-secondary';
+        btn.addEventListener('click', showMoreMasterListItems);
+        row.appendChild(btn);
+    }
+
+    row.querySelector('button').textContent = `Show More (${remaining} remaining)`;
+    row.style.display = 'flex';
+    // Re-append so the row stays at the bottom after sorts/new pages
+    elements.masterList.appendChild(row);
+}
+
+/**
+ * Renders the master student list. Only the first page is built up front;
+ * the rest renders on demand via "Show More" or full-list operations.
  * @param {Array} rawEntries - Array of student data
  * @param {Function} onStudentClick - Callback when student is clicked
  */
 export async function renderMasterList(rawEntries, onStudentClick) {
     if (!elements.masterList) return;
+    const renderToken = ++masterListRenderToken;
     elements.masterList.innerHTML = '';
 
     // Update total count indicator
@@ -459,6 +686,14 @@ export async function renderMasterList(rawEntries, onStudentClick) {
         elements.totalCountText.textContent = `Total Students: ${count}`;
     }
 
+    masterListPagination = {
+        entries: rawEntries || [],
+        onStudentClick: onStudentClick || null,
+        reformatEnabled: true,
+        builtCount: 0,
+        visibleLimit: MASTER_LIST_CHUNK_SIZE
+    };
+
     if (!rawEntries || rawEntries.length === 0) {
         elements.masterList.innerHTML = '<li style="justify-content:center;">Master list is empty.</li>';
         return;
@@ -466,88 +701,43 @@ export async function renderMasterList(rawEntries, onStudentClick) {
 
     // Get reformat name setting
     const settings = await chrome.storage.local.get(['reformatNameEnabled']);
-    const reformatEnabled = settings.reformatNameEnabled !== undefined ? settings.reformatNameEnabled : true;
+    if (renderToken !== masterListRenderToken) return; // a newer render started meanwhile
+    masterListPagination.reformatEnabled = settings.reformatNameEnabled !== undefined ? settings.reformatNameEnabled : true;
 
-    rawEntries.forEach(rawEntry => {
-        const data = resolveStudentData(rawEntry, reformatEnabled);
+    buildMasterListItems(MASTER_LIST_CHUNK_SIZE, true);
+    updateShowMoreRow();
 
-        const li = document.createElement('li');
-        li.className = 'expandable';
-        li.style.cursor = 'pointer';
-
-        li.setAttribute('data-name', data.name);
-        li.setAttribute('data-missing', data.missing);
-        li.setAttribute('data-days', data.daysOut != null ? data.daysOut : '');
-        li.setAttribute('data-grade', data.grade || '');
-        li.setAttribute('data-gpa', data.enrollGpa || '');
-        li.setAttribute('data-attendance', data.attendancePercent || '');
-        li.setAttribute('data-created', data.created_at || '');
-        li.setAttribute('data-campus', rawEntry.campus || '');
-
-        let heatmapClass = data.daysOut == null ? 'heatmap-green' : (data.daysOut > 10 ? 'heatmap-red' : (data.daysOut > 5 ? 'heatmap-orange' : (data.daysOut > 2 ? 'heatmap-yellow' : 'heatmap-green')));
-
-        let missingPillHtml = '';
-        if (data.missing > 0) {
-            missingPillHtml = `<span class="missing-pill">${data.missing} Missing</span>`;
-        }
-
-        let newTagHtml = '';
-        if (data.isNew) {
-            newTagHtml = `<span style="background:#e0f2fe; color:#0369a1; font-size:0.7em; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:bold; border:1px solid #bae6fd;">New</span>`;
-        }
-
-        li.innerHTML = `
-            <div style="display: flex; align-items: center; width:100%;">
-                <div class="heatmap-indicator ${heatmapClass}"></div>
-                <div style="flex-grow:1;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                        <div style="display:flex; align-items:center;">
-                            <span class="student-name" style="font-weight: 500; color:${data.url ? 'var(--text-main)' : 'var(--text-secondary)'}; position:relative; z-index:2;${data.url ? '' : ' cursor: default;'}" ${data.url ? '' : 'title="No gradebook URL available"'}>${data.name}</span>
-                            ${newTagHtml}
-                        </div>
-                        ${missingPillHtml}
-                    </div>
-                    ${data.daysOut != null ? `<span style="font-size:0.8em; color:gray;">${data.daysOut} Days Out</span>` : ''}
-                </div>
-            </div>
-        `;
-
-        // Click listener for student selection
-        li.addEventListener('click', (e) => {
-            if (onStudentClick) {
-                onStudentClick(rawEntry, li, e);
-            }
-        });
-
-        // Student name click - open gradebook (only if URL exists)
-        const nameLink = li.querySelector('.student-name');
-        if (nameLink && data.url) {
-            nameLink.style.cursor = 'pointer';
-            nameLink.addEventListener('click', (e) => {
-                e.stopPropagation();
-                chrome.tabs.create({ url: data.url });
-            });
-            nameLink.addEventListener('mouseenter', () => {
-                nameLink.style.textDecoration = 'underline';
-                nameLink.style.color = 'var(--primary-color)';
-            });
-            nameLink.addEventListener('mouseleave', () => {
-                nameLink.style.textDecoration = 'none';
-                nameLink.style.color = 'var(--text-main)';
-            });
-        }
-
-        elements.masterList.appendChild(li);
-    });
+    // An active search/campus filter always works against the full list,
+    // even right after a re-render
+    if (isMasterListFilterActive()) {
+        applyMasterListFilters();
+    }
 }
 
 /**
  * Applies all filters (search term and campus) to the master list
- * This unified function ensures both filters work together
+ * This unified function ensures both filters work together.
+ * Filtering always considers the FULL master list — pagination only applies
+ * while no filter is active.
  */
 export function applyMasterListFilters() {
+    if (!elements.masterList) return;
     const searchTerm = (elements.masterSearch?.value || '').toLowerCase();
     const selectedCampus = elements.campusFilter?.value || '';
+
+    if (!searchTerm.trim() && !selectedCampus) {
+        // No filter active — restore the paginated view
+        applyMasterListPaginationVisibility();
+        updateShowMoreRow();
+        if (elements.totalCountText) {
+            elements.totalCountText.textContent = `Total Students: ${masterListPagination.entries.length}`;
+        }
+        return;
+    }
+
+    // Build any not-yet-rendered students so the search covers everyone
+    ensureAllMasterListItemsRendered();
+
     const listItems = elements.masterList.querySelectorAll('li.expandable');
 
     let visibleCount = 0;
@@ -573,14 +763,12 @@ export function applyMasterListFilters() {
         if (isVisible) visibleCount++;
     });
 
+    // Pagination is suspended while filtering — all matches are shown
+    updateShowMoreRow();
+
     // Update the displayed count to show filtered count
     if (elements.totalCountText) {
-        const totalCount = listItems.length;
-        if (searchTerm || selectedCampus) {
-            elements.totalCountText.textContent = `Showing ${visibleCount} of ${totalCount} Students`;
-        } else {
-            elements.totalCountText.textContent = `Total Students: ${totalCount}`;
-        }
+        elements.totalCountText.textContent = `Showing ${visibleCount} of ${listItems.length} Students`;
     }
 }
 
@@ -623,6 +811,10 @@ export function setSortCriteria(criteria) {
  */
 export function sortMasterList() {
     const criteria = elements.sortSelect?.value || currentSortCriteria;
+
+    // Sorting must order the FULL list, not just the rendered page
+    ensureAllMasterListItemsRendered();
+
     const listItems = Array.from(elements.masterList.querySelectorAll('li.expandable'));
 
     listItems.sort((a, b) => {
@@ -639,6 +831,10 @@ export function sortMasterList() {
         }
     });
     listItems.forEach(item => elements.masterList.appendChild(item));
+
+    // Restore pagination (or the active filter) for the new order and keep
+    // the Show More row at the bottom
+    applyMasterListFilters();
 }
 
 /**
@@ -714,6 +910,8 @@ let _pieCanvas = null;
 function extractChartData(distributionType) {
     const type = distributionType || elements.distributionSelect?.value || 'daysOut';
     const config = DISTRIBUTION_TYPES[type] || DISTRIBUTION_TYPES.daysOut;
+    // Charts summarize the FULL list, not just the rendered page
+    ensureAllMasterListItemsRendered();
     const listItems = Array.from(elements.masterList?.querySelectorAll('li.expandable') || []);
     const data = listItems
         .map(li => li.getAttribute(config.attr) || '')
