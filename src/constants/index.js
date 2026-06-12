@@ -346,17 +346,17 @@ export function normalizeCanvasUrl(url) {
  */
 export const GUIDES = [
     {
-        name: 'LDA Guide',
+        name: 'LDA',
         path: '../../assets/guides/LDA-Guide.pdf',
         icon: 'fa-book'
     },
 	{
-        name: 'Submission Checker Guide',
+        name: 'Submission Checker',
         path: '../../assets/guides/Submission-Checker-Guide.pdf',
         icon: 'fa-book'
     },
 	{
-        name: 'Call Guide',
+        name: 'Call',
         path: '../../assets/guides/Call-Guide.pdf',
         icon: 'fa-book'
     }
