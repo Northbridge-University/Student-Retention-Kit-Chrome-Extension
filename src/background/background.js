@@ -776,7 +776,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // --- PING EXCEL ADD-IN ---
   else if (msg.type === MESSAGE_TYPES.SRK_PING) {
-      console.log('%c [Background] Forwarding SRK_PING to Excel', 'background: #FF9800; color: white; font-weight: bold; padding: 2px 4px;');
+      // Heartbeat pings repeat every few seconds while the side panel is
+      // open (excel-integration.js), so only log the one-off pings.
+      if (!msg.heartbeat) {
+          console.log('%c [Background] Forwarding SRK_PING to Excel', 'background: #FF9800; color: white; font-weight: bold; padding: 2px 4px;');
+      }
 
       // Forward the payload to all Excel tabs
       (async () => {
@@ -788,9 +792,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                           action: 'postToPage',
                           message: msg.payload
                       });
-                      console.log(`[SRK] Sent SRK_PING to tab ${tab.id}`);
+                      if (!msg.heartbeat) {
+                          console.log(`[SRK] Sent SRK_PING to tab ${tab.id}`);
+                      }
                   } catch (err) {
-                      console.warn(`[SRK] Failed to send SRK_PING to tab ${tab.id}:`, err.message);
+                      // Heartbeats hit this every few seconds when a tab has
+                      // no content script (opened pre-install / orphaned by an
+                      // extension reload) — the "Searching..." status already
+                      // surfaces that, so don't spam the console for them.
+                      if (!msg.heartbeat) {
+                          console.warn(`[SRK] Failed to send SRK_PING to tab ${tab.id}:`, err.message);
+                      }
                   }
               }
           } catch (err) {

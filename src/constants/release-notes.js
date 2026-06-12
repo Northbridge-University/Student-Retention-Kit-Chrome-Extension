@@ -33,7 +33,8 @@ export const RELEASE_NOTES = {
 			'View previous release notes from this popup with the new "View Previous Updates" button',
 			'Student profile pictures now load behind the scenes so they no longer pop in',
 			'"Last Updated" on the Data tab now refreshes when the master list receives data from the Office add-in',
-			'Excel ribbon Call button now uses the side panel you already have open (e.g. on a second monitor) instead of opening a duplicate panel over Excel'
+			'Excel ribbon Call button now uses the side panel you already have open (e.g. on a second monitor) instead of opening a duplicate panel over Excel',
+			'Excel Add-in connection status no longer falls back to "Searching..." seconds after connecting — it now stays live via a background heartbeat'
         ]
     },
 	'15.2': {

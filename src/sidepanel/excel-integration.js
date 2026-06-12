@@ -2,11 +2,15 @@
 import { STORAGE_KEYS, MESSAGE_TYPES } from '../constants/index.js';
 
 let excelConnectionCheckInterval = null;
+let excelHeartbeatInterval = null;
 let lastExcelConnectionState = 'disconnected'; // 'disconnected', 'searching', 'connected'
 let lastOfficeAddinPing = 0; // Timestamp of last Office Add-in communication
 let lastConnectorHeartbeat = 0; // Timestamp of last connector heartbeat
-const CONNECTION_TIMEOUT = 10000; // 10 seconds without heartbeat = disconnected
-const ADDIN_TIMEOUT = 15000; // 15 seconds without Office Add-in ping = searching
+// The status only reads "connected" while heartbeat pongs keep arriving, so
+// the panel pings the add-in every HEARTBEAT_INTERVAL. The timeout is more
+// than twice the interval so a single lost pong doesn't flicker the status.
+const CONNECTION_TIMEOUT = 12000; // ms without add-in traffic = searching
+const HEARTBEAT_INTERVAL = 5000; // ms between SRK_PING heartbeats
 
 /**
  * Excel/SharePoint URL patterns to check for
@@ -101,10 +105,14 @@ function handleConnectorMessage(message) {
         case MESSAGE_TYPES.SRK_PONG:
             lastOfficeAddinPing = now;
             lastConnectorHeartbeat = now;
-            console.log('🏓 Received SRK_PONG from Office Add-in:', message);
-            if (message.timestamp && message.source) {
-                console.log(`   Timestamp: ${message.timestamp}`);
-                console.log(`   Source: ${message.source}`);
+            // Pongs arrive every HEARTBEAT_INTERVAL while connected; only log
+            // the ones that change the status (first contact / recovery).
+            if (lastExcelConnectionState !== 'connected') {
+                console.log('🏓 Received SRK_PONG from Office Add-in:', message);
+                if (message.timestamp && message.source) {
+                    console.log(`   Timestamp: ${message.timestamp}`);
+                    console.log(`   Source: ${message.source}`);
+                }
             }
             break;
     }
@@ -160,13 +168,40 @@ export async function updateExcelConnectionIndicator() {
 }
 
 /**
+ * Periodic heartbeat ping to the Office Add-in. Same SRK_PING round-trip as
+ * sendConnectionPing (relayed by the background to the Excel tab, answered
+ * by the add-in's commands runtime with SRK_PONG), but flagged as a
+ * heartbeat so the relay points skip their per-message logging — this fires
+ * every few seconds for the whole lifetime of the panel.
+ */
+async function sendHeartbeatPing() {
+    try {
+        if (!(await checkExcelTabOpen())) return;
+
+        chrome.runtime.sendMessage({
+            type: MESSAGE_TYPES.SRK_PING,
+            heartbeat: true,
+            payload: { type: MESSAGE_TYPES.SRK_PING, heartbeat: true }
+        }).catch(() => {
+            // Background not ready; the next heartbeat retries.
+        });
+    } catch (error) {
+        // tabs.query failed; the next heartbeat retries.
+    }
+}
+
+/**
  * Starts monitoring Excel connection status
- * Checks every 3 seconds and listens for connector messages
+ * Checks every 3 seconds, pings the add-in every 5 seconds, and listens for
+ * connector messages
  */
 export function startExcelConnectionMonitor() {
-    // Clear any existing interval
+    // Clear any existing intervals
     if (excelConnectionCheckInterval) {
         clearInterval(excelConnectionCheckInterval);
+    }
+    if (excelHeartbeatInterval) {
+        clearInterval(excelHeartbeatInterval);
     }
 
     // Set up message listener for connector messages
@@ -182,6 +217,11 @@ export function startExcelConnectionMonitor() {
         updateExcelConnectionIndicator();
     }, 3000);
 
+    // Keep the add-in heartbeat fresh; without this the status decays to
+    // "Searching..." CONNECTION_TIMEOUT after the initial panel-open ping
+    // even though Excel and the add-in are still alive.
+    excelHeartbeatInterval = setInterval(sendHeartbeatPing, HEARTBEAT_INTERVAL);
+
     console.log('🔄 Excel connection monitor started');
 }
 
@@ -192,8 +232,12 @@ export function stopExcelConnectionMonitor() {
     if (excelConnectionCheckInterval) {
         clearInterval(excelConnectionCheckInterval);
         excelConnectionCheckInterval = null;
-        console.log('⏹️ Excel connection monitor stopped');
     }
+    if (excelHeartbeatInterval) {
+        clearInterval(excelHeartbeatInterval);
+        excelHeartbeatInterval = null;
+    }
+    console.log('⏹️ Excel connection monitor stopped');
 }
 
 /**
