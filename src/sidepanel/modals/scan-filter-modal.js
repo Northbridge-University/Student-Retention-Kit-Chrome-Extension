@@ -4,10 +4,10 @@ import { storageGet, storageSet } from '../../utils/storage.js';
 import { elements } from '../ui-manager.js';
 
 /**
- * Greys out / re-enables the filter controls based on the Manual
- * Adjustments toggle. In auto mode (manual off) the settings are managed
- * by the Excel add-in's LDA sync on Start, so the controls are visible but
- * not clickable.
+ * Shows or hides the filter controls based on the Manual Adjustments
+ * toggle. In auto mode (manual off) the settings are managed by the Excel
+ * add-in's LDA sync on Start, so the controls are hidden entirely and the
+ * sync hint shown in their place.
  * @param {boolean} manual
  */
 function applyScanFilterMode(manual) {
@@ -16,11 +16,8 @@ function applyScanFilterMode(manual) {
         elements.manualScanFilterToggle.style.color = manual ? 'var(--primary-color)' : 'gray';
     }
     if (elements.scanFilterControls) {
-        elements.scanFilterControls.style.opacity = manual ? '1' : '0.5';
-        elements.scanFilterControls.style.pointerEvents = manual ? 'auto' : 'none';
+        elements.scanFilterControls.style.display = manual ? 'block' : 'none';
     }
-    if (elements.daysOutOperator) elements.daysOutOperator.disabled = !manual;
-    if (elements.daysOutValue) elements.daysOutValue.disabled = !manual;
     if (elements.scanFilterAutoHint) {
         elements.scanFilterAutoHint.style.display = manual ? 'none' : 'block';
     }
@@ -155,7 +152,7 @@ export function toggleFailingFilter() {
 /**
  * Saves the scan filter settings. In auto mode (Manual Adjustments off)
  * only the mode flag is saved — the filter values belong to the LDA sync
- * and the disabled controls may hold stale values.
+ * and the hidden controls may hold stale values.
  */
 export async function saveScanFilterSettings() {
     if (!elements.daysOutOperator || !elements.daysOutValue || !elements.failingToggle) return;
