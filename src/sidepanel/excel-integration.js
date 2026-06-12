@@ -126,18 +126,21 @@ export async function updateExcelConnectionIndicator() {
 
     // Update UI based on status
     switch (status) {
+        // Colors match the other connection statuses in the settings page
+        // (Canvas/Five9/Power Automate in connections-modal.js): green text +
+        // #10b981 dot when connected, #f59e0b for in-between states.
         case 'connected':
-            statusDot.style.backgroundColor = '#22c55e'; // Green
+            statusDot.style.backgroundColor = '#10b981';
             statusDot.title = 'Connected';
             statusText.textContent = 'Connected';
-            statusText.style.color = '#22c55e';
+            statusText.style.color = 'green';
             break;
 
         case 'searching':
-            statusDot.style.backgroundColor = '#eab308'; // Yellow
+            statusDot.style.backgroundColor = '#f59e0b';
             statusDot.title = 'Searching...';
             statusText.textContent = 'Searching...';
-            statusText.style.color = '#eab308';
+            statusText.style.color = '#f59e0b';
             break;
 
         case 'disconnected':
