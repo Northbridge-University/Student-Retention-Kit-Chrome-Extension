@@ -2602,7 +2602,11 @@ async function syncScanFilterFromExcel() {
     });
 
     if (!response) {
-        console.log('🔄 Scan filter sync — no answer from the Office Add-in, keeping current settings');
+        console.log(
+            '🔄 Scan filter sync — no answer from the Office Add-in, keeping current settings. ' +
+            'If this persists, refresh the Excel tab (required after an extension update) ' +
+            'and make sure the workbook is running an add-in build with the LDA scan-filter sync.'
+        );
         return;
     }
 
