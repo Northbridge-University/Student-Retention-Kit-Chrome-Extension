@@ -151,6 +151,9 @@ export function cacheDomElements() {
     elements.daysOutOperator = document.getElementById('daysOutOperator');
     elements.daysOutValue = document.getElementById('daysOutValue');
     elements.failingToggle = document.getElementById('failingToggle');
+    elements.manualScanFilterToggle = document.getElementById('manualScanFilterToggle');
+    elements.scanFilterControls = document.getElementById('scanFilterControls');
+    elements.scanFilterAutoHint = document.getElementById('scanFilterAutoHint');
     elements.saveScanFilterBtn = document.getElementById('saveScanFilterBtn');
     elements.studentCountValue = document.getElementById('studentCountValue');
 

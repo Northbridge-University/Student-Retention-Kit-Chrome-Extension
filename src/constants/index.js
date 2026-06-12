@@ -55,6 +55,8 @@ export const MESSAGE_TYPES = {
     SRK_CREATE_SHEET: 'SRK_CREATE_SHEET',
     SRK_REQUEST_SHEET_LIST: 'SRK_REQUEST_SHEET_LIST',
     SRK_SHEET_LIST_RESPONSE: 'SRK_SHEET_LIST_RESPONSE',
+    SRK_REQUEST_SCAN_FILTER_SETTINGS: 'SRK_REQUEST_SCAN_FILTER_SETTINGS',
+    SRK_SCAN_FILTER_SETTINGS: 'SRK_SCAN_FILTER_SETTINGS',
     SRK_LINKS: 'SRK_LINKS',
     SRK_HIGHLIGHT_CONFIRMATION: 'SRK_HIGHLIGHT_CONFIRMATION',
     SRK_IMPORT_STATUS: 'SRK_IMPORT_STATUS',
@@ -179,6 +181,9 @@ export const STORAGE_KEYS = {
     // Submission Checker settings (settings.submissionChecker.*)
     LOOPER_DAYS_OUT_FILTER: 'settings.submissionChecker.looperDaysOutFilter',
     SCAN_FILTER_INCLUDE_FAILING: 'settings.submissionChecker.scanFilterIncludeFailing',
+    // When true, scan filter is hand-managed and Start does NOT sync it
+    // from the Excel add-in's LDA sheet
+    MANUAL_SCAN_FILTER: 'settings.submissionChecker.manualScanFilter',
 
     // === STATE (nested) ===
     STATE: 'state',
@@ -273,6 +278,7 @@ export const DEFAULT_SETTINGS = {
     // Submission Checker settings
     [STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER]: '>=5',
     [STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING]: false,
+    [STORAGE_KEYS.MANUAL_SCAN_FILTER]: false,
 
     // Other flat settings
     [STORAGE_KEYS.CHECKER_MODE]: CHECKER_MODES.SUBMISSION,

@@ -811,6 +811,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })();
   }
 
+  // --- SCAN FILTER SETTINGS REQUEST (Start pressed, auto-sync from LDA) ---
+  else if (msg.type === MESSAGE_TYPES.SRK_REQUEST_SCAN_FILTER_SETTINGS) {
+      console.log('%c [Background] Forwarding scan filter settings request to Excel', 'background: #FF9800; color: white; font-weight: bold; padding: 2px 4px;');
+
+      (async () => {
+          try {
+              // Prefer the tab picked for highlights so multi-workbook
+              // setups query the workbook the checker is working against.
+              let tabs = [];
+              if (msg.targetTabId) {
+                  try {
+                      const tab = await chrome.tabs.get(msg.targetTabId);
+                      if (tab) tabs = [tab];
+                  } catch (e) {
+                      console.warn('[SRK] Scan filter target tab missing, falling back to all Excel tabs');
+                  }
+              }
+              if (tabs.length === 0) {
+                  tabs = await chrome.tabs.query({ url: TARGET_URL_PATTERNS });
+              }
+
+              for (const tab of tabs) {
+                  try {
+                      await chrome.tabs.sendMessage(tab.id, {
+                          action: 'postToPage',
+                          message: { type: MESSAGE_TYPES.SRK_REQUEST_SCAN_FILTER_SETTINGS }
+                      });
+                      console.log(`[SRK] Sent scan filter settings request to tab ${tab.id}`);
+                  } catch (err) {
+                      console.warn(`[SRK] Failed to send scan filter request to tab ${tab.id}:`, err.message);
+                  }
+              }
+          } catch (err) {
+              console.error('[SRK] Failed to query Excel tabs for scan filter request:', err);
+          }
+      })();
+  }
+
   // --- NAVIGATE TO STUDENT IN EXCEL ---
   else if (msg.type === MESSAGE_TYPES.SRK_NAVIGATE_TO_STUDENT) {
       console.log('%c [SRK] Navigate to Student in Excel', 'background: #2196F3; color: white; font-weight: bold; padding: 2px 4px;', msg.syStudentId);

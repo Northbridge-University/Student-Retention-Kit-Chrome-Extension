@@ -339,6 +339,15 @@ if (window.hasSRKConnectorRun) {
           }, { quiet: true });
       }
 
+      // Handle scan filter settings reply from Office Add-in - forward to extension
+      else if (event.data.type === "SRK_SCAN_FILTER_SETTINGS") {
+          console.log("%c SRK Connector: Scan filter settings received from Office Add-in", "color: green; font-weight: bold", event.data.data);
+          safeSendMessage({
+              type: "SRK_SCAN_FILTER_SETTINGS",
+              data: event.data.data
+          });
+      }
+
       // Handle Master List Request
       else if (event.data.type === "SRK_REQUEST_MASTER_LIST") {
           console.log("%c SRK Connector: Master List Request Received", "color: blue; font-weight: bold");

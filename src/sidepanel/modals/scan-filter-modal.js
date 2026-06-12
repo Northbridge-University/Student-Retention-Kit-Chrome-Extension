@@ -4,6 +4,39 @@ import { storageGet, storageSet } from '../../utils/storage.js';
 import { elements } from '../ui-manager.js';
 
 /**
+ * Greys out / re-enables the filter controls based on the Manual
+ * Adjustments toggle. In auto mode (manual off) the settings are managed
+ * by the Excel add-in's LDA sync on Start, so the controls are visible but
+ * not clickable.
+ * @param {boolean} manual
+ */
+function applyScanFilterMode(manual) {
+    if (elements.manualScanFilterToggle) {
+        elements.manualScanFilterToggle.className = manual ? 'fas fa-toggle-on' : 'fas fa-toggle-off';
+        elements.manualScanFilterToggle.style.color = manual ? 'var(--primary-color)' : 'gray';
+    }
+    if (elements.scanFilterControls) {
+        elements.scanFilterControls.style.opacity = manual ? '1' : '0.5';
+        elements.scanFilterControls.style.pointerEvents = manual ? 'auto' : 'none';
+    }
+    if (elements.daysOutOperator) elements.daysOutOperator.disabled = !manual;
+    if (elements.daysOutValue) elements.daysOutValue.disabled = !manual;
+    if (elements.scanFilterAutoHint) {
+        elements.scanFilterAutoHint.style.display = manual ? 'none' : 'block';
+    }
+}
+
+/**
+ * Toggles the Manual Adjustments state (persisted on Save, like the other
+ * controls in this modal).
+ */
+export function toggleManualScanFilter() {
+    if (!elements.manualScanFilterToggle) return;
+    const manual = !elements.manualScanFilterToggle.classList.contains('fa-toggle-on');
+    applyScanFilterMode(manual);
+}
+
+/**
  * Opens the scan filter modal
  */
 export async function openScanFilterModal() {
@@ -12,11 +45,14 @@ export async function openScanFilterModal() {
     // Load current settings
     const settings = await storageGet([
         STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER,
-        STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING
+        STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING,
+        STORAGE_KEYS.MANUAL_SCAN_FILTER
     ]);
 
     const daysOutFilter = settings[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] || '>=5';
     const includeFailing = settings[STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING] || false;
+
+    applyScanFilterMode(!!settings[STORAGE_KEYS.MANUAL_SCAN_FILTER]);
 
     // Parse days out filter (e.g., ">=5" -> operator: ">=", value: "5")
     const match = daysOutFilter.match(/^\s*([><]=?|=)\s*(\d+)\s*$/);
@@ -117,21 +153,32 @@ export function toggleFailingFilter() {
 }
 
 /**
- * Saves the scan filter settings
+ * Saves the scan filter settings. In auto mode (Manual Adjustments off)
+ * only the mode flag is saved — the filter values belong to the LDA sync
+ * and the disabled controls may hold stale values.
  */
 export async function saveScanFilterSettings() {
     if (!elements.daysOutOperator || !elements.daysOutValue || !elements.failingToggle) return;
 
-    const operator = elements.daysOutOperator.value;
-    const value = elements.daysOutValue.value;
-    const daysOutFilter = `${operator}${value}`;
-    const includeFailing = elements.failingToggle.classList.contains('fa-toggle-on');
+    const manual = !!elements.manualScanFilterToggle
+        && elements.manualScanFilterToggle.classList.contains('fa-toggle-on');
 
-    await storageSet({
-        [STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER]: daysOutFilter,
-        [STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING]: includeFailing
-    });
+    const settingsToSave = { [STORAGE_KEYS.MANUAL_SCAN_FILTER]: manual };
+
+    // In auto mode still persist a baseline on first save (no stored filter
+    // yet) so the looper has a fallback when the LDA sync can't run.
+    const stored = await storageGet([STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER]);
+    const hasStoredFilter = stored[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] !== undefined;
+
+    if (manual || !hasStoredFilter) {
+        const operator = elements.daysOutOperator.value;
+        const value = elements.daysOutValue.value;
+        settingsToSave[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] = `${operator}${value}`;
+        settingsToSave[STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING] = elements.failingToggle.classList.contains('fa-toggle-on');
+    }
+
+    await storageSet(settingsToSave);
 
     closeScanFilterModal();
-    console.log('Scan filter settings saved:', { daysOutFilter, includeFailing });
+    console.log('Scan filter settings saved:', settingsToSave);
 }

@@ -476,6 +476,23 @@
 
             <div class="modal-body">
                 <div style="margin-bottom: 20px;">
+                    <div class="setting-card" style="margin-bottom:0;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <i class="fas fa-hand-paper" style="color:var(--primary-color); font-size:1.2em;"></i>
+                            <div>
+                                <div style="font-weight:500; color:var(--text-main);">Manual Adjustments</div>
+                                <div style="font-size:0.8em; color:var(--text-secondary);">Manage the filter yourself instead of syncing it from Excel</div>
+                            </div>
+                        </div>
+                        <i id="manualScanFilterToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor:pointer;"></i>
+                    </div>
+                    <div id="scanFilterAutoHint" style="font-size:0.8em; color:var(--text-secondary); margin-top:6px;">
+                        <i class="fas fa-sync-alt" style="margin-right:4px;"></i>Synced from today's LDA sheet in Excel each time you press Start. If there is no LDA sheet for today, the current settings are kept.
+                    </div>
+                </div>
+
+                <div id="scanFilterControls">
+                <div style="margin-bottom: 20px;">
                     <label style="font-size:0.95em; font-weight:500; color:var(--text-main); display:block; margin-bottom:8px;">
                         <i class="fas fa-calendar-day"></i> Days Out Threshold
                     </label>
@@ -505,6 +522,7 @@
                         </div>
                         <i id="failingToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor:pointer;"></i>
                     </div>
+                </div>
                 </div>
 
                 <div id="scanFilterCount" style="background: rgba(0, 90, 156, 0.1); border-left: 4px solid var(--primary-color); padding: 12px; border-radius: 0.75rem; margin-bottom: 15px;">

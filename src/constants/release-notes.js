@@ -34,7 +34,8 @@ export const RELEASE_NOTES = {
 			'Student profile pictures now load behind the scenes so they no longer pop in',
 			'"Last Updated" on the Data tab now refreshes when the master list receives data from the Office add-in',
 			'Excel ribbon Call button now uses the side panel you already have open (e.g. on a second monitor) instead of opening a duplicate panel over Excel',
-			'Excel Add-in connection status no longer falls back to "Searching..." seconds after connecting — it now stays live via a background heartbeat'
+			'Excel Add-in connection status no longer falls back to "Searching..." seconds after connecting — it now stays live via a background heartbeat',
+			'Pressing Start now syncs the scan filter from today\'s LDA sheet in Excel (minimum days out and failing list) so it always matches your workbook — enable "Manual Adjustments" in the scan filter to manage it yourself'
         ]
     },
 	'15.2': {

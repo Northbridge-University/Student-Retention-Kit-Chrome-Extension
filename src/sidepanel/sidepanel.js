@@ -58,6 +58,7 @@ import {
     closeScanFilterModal,
     updateScanFilterCount,
     toggleFailingFilter,
+    toggleManualScanFilter,
     saveScanFilterSettings
 } from './modals/scan-filter-modal.js';
 
@@ -163,7 +164,8 @@ import {
     stopExcelConnectionMonitor,
     pingExcelAddIn,
     sendConnectionPing,
-    checkExcelConnectionStatus
+    checkExcelConnectionStatus,
+    checkExcelTabOpen
 } from './excel-integration.js';
 
 // --- STATE MANAGEMENT ---
@@ -858,6 +860,10 @@ function setupEventListeners() {
             toggleFailingFilter();
             updateScanFilterCount();
         });
+    }
+
+    if (elements.manualScanFilterToggle) {
+        elements.manualScanFilterToggle.addEventListener('click', toggleManualScanFilter);
     }
 
     if (elements.daysOutOperator) {
@@ -2547,6 +2553,75 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
 /**
  * Toggles scanning state
  */
+/**
+ * Asks the Office Add-in for scan filter settings derived from today's LDA
+ * sheet (minimum Days Out on the table + whether a failing list exists)
+ * and applies them. Runs on Start unless Manual Adjustments is enabled.
+ *
+ * No change is made when: manual mode is on, no Excel tab is open, the
+ * add-in doesn't answer within the timeout, or the workbook has no LDA
+ * sheet for today.
+ */
+async function syncScanFilterFromExcel() {
+    const manual = await storageGetValue(STORAGE_KEYS.MANUAL_SCAN_FILTER, false);
+    if (manual) {
+        console.log('🔄 Scan filter sync skipped — Manual Adjustments is on');
+        return;
+    }
+
+    if (!(await checkExcelTabOpen())) {
+        console.log('🔄 Scan filter sync skipped — no Excel tab open');
+        return;
+    }
+
+    // Target the workbook chosen for highlights when several are open.
+    const targetData = await storageGet([STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID]);
+    const targetTabId = targetData[STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID] || null;
+
+    const response = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            chrome.runtime.onMessage.removeListener(onMessage);
+            clearTimeout(timer);
+            resolve(value);
+        };
+        const onMessage = (msg) => {
+            if (msg && msg.type === MESSAGE_TYPES.SRK_SCAN_FILTER_SETTINGS) {
+                finish(msg.data || null);
+            }
+        };
+        const timer = setTimeout(() => finish(null), 5000);
+
+        chrome.runtime.onMessage.addListener(onMessage);
+        chrome.runtime.sendMessage({
+            type: MESSAGE_TYPES.SRK_REQUEST_SCAN_FILTER_SETTINGS,
+            targetTabId
+        }).catch(() => finish(null));
+    });
+
+    if (!response) {
+        console.log('🔄 Scan filter sync — no answer from the Office Add-in, keeping current settings');
+        return;
+    }
+
+    if (!response.ldaFound) {
+        console.log('🔄 Scan filter sync — no LDA sheet for today, keeping current settings');
+        return;
+    }
+
+    const settingsToSave = {
+        [STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING]: !!response.includeFailing
+    };
+    if (response.daysOutFilter) {
+        settingsToSave[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] = response.daysOutFilter;
+    }
+    await storageSet(settingsToSave);
+
+    console.log(`%c🔄 Scan filter synced from "${response.sheetName}": days out ${response.daysOutFilter || '(unchanged)'}, failing list ${response.includeFailing ? 'on' : 'off'}`, 'color: green; font-weight: bold');
+}
+
 async function toggleScanState() {
     // Don't toggle if button is disabled (no Canvas connection)
     if (elements.startBtn && elements.startBtn.disabled) {
@@ -2603,6 +2678,12 @@ async function toggleScanState() {
             // Highlight disabled - clear the target tab ID
             await storageSet({ [STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID]: null });
         }
+
+        // Pull scan filter settings from today's LDA sheet in Excel
+        // (no-op in Manual Adjustments mode or when nothing answers).
+        // Runs after tab selection so multi-workbook setups query the
+        // workbook that was just picked for highlights.
+        await syncScanFilterFromExcel();
     } else {
         // Turning OFF - clear the target tab ID
         await storageSet({ [STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID]: null });
