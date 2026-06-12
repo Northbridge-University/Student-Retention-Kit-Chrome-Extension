@@ -134,7 +134,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
-import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility, toggleRedactData, applyRedactData } from './modals/more-settings-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility, toggleRedactData, applyRedactData, initExportColorsToggle } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
@@ -727,6 +727,7 @@ function setupEventListeners() {
     initCanvasApiTypeToggle();
     initCanvasAdvancedToggle();
     initHighlightStudentRowToggle();
+    initExportColorsToggle();
 
     if (elements.reportIssueBtn) {
         // Report an Issue: fresh 6-digit ticket per click so each report
