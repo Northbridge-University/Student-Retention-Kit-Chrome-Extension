@@ -5,6 +5,7 @@ import { STORAGE_KEYS, CHECKER_MODES, MESSAGE_TYPES, EXTENSION_STATES, CONNECTIO
 import { CONFIG } from '../constants/config.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { resolveTargetSheetName, groupEntriesBySheet, selectEntriesForHighlightRetry } from '../utils/highlight-batching.js';
+import { createSidePanelPresenceTracker } from '../utils/sidepanel-presence.js';
 import { decrypt } from '../utils/encryption.js';
 // Optional per-process Five9 volume handler. Public build is a no-op stub;
 // the native-host repo's apply-overlay.ps1 replaces this file with a real
@@ -454,6 +455,15 @@ chrome.action.onClicked.addListener((tab) => chrome.sidePanel.open({ tabId: tab.
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === '_execute_action') chrome.sidePanel.open({ tabId: tab.id });
 });
+
+// Every open side panel holds a presence port (see sidepanel-presence.js)
+// so the autoCall handler can synchronously tell whether a panel is already
+// open in some window before opening another one.
+const sidePanelPresence = createSidePanelPresenceTracker();
+chrome.runtime.onConnect.addListener((port) => {
+  sidePanelPresence.handleConnect(port);
+});
+
 chrome.runtime.onStartup.addListener(async () => {
   updateBadge();
   // Extension state is now in session storage - starts fresh on browser restart
@@ -659,15 +669,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // If this is an autoCall (ribbon call button), ensure the side panel is open
       // so the sidepanel listener can process the call request.
       if (msg.autoCall && sender?.tab?.id) {
-          console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
-          // Store the pending message WITHOUT awaiting — any await before
-          // sidePanel.open() breaks Chrome's user-gesture chain and causes
-          // "may only be called in response to a user gesture" error.
-          sessionSet({ pendingAutoCall: { ...msg, _timestamp: Date.now() } }); // fire-and-forget
-          try {
-              await chrome.sidePanel.open({ tabId: sender.tab.id });
-          } catch (e) {
-              console.warn('[Background] Could not open side panel:', e?.message || e);
+          // If a panel is already open in ANY window (e.g. on a second
+          // monitor), it has already received this message straight from
+          // the content script. Opening another panel on the Excel tab's
+          // window would create a second instance that re-processes the
+          // call (dial + instant hangup), so skip opening entirely.
+          // This presence check is synchronous on purpose — an await here
+          // would break the user-gesture chain sidePanel.open() needs.
+          if (sidePanelPresence.isSidePanelOpen()) {
+              console.log(`%c [Background] autoCall — side panel already open (${sidePanelPresence.openPanelCount()}); not opening another`, 'color: green; font-weight: bold');
+          } else {
+              console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
+              // Store the pending message WITHOUT awaiting — any await before
+              // sidePanel.open() breaks Chrome's user-gesture chain and causes
+              // "may only be called in response to a user gesture" error.
+              sessionSet({ pendingAutoCall: { ...msg, _timestamp: Date.now() } }); // fire-and-forget
+              try {
+                  await chrome.sidePanel.open({ tabId: sender.tab.id });
+              } catch (e) {
+                  console.warn('[Background] Could not open side panel:', e?.message || e);
+              }
           }
       }
 

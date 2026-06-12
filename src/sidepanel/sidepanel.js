@@ -1,6 +1,7 @@
 // Sidepanel Main - Orchestrates all modules and manages app lifecycle
 import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES, GENERIC_AVATAR_URL } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
+import { SIDEPANEL_PRESENCE_PORT } from '../utils/sidepanel-presence.js';
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
 import { loadAndRenderMarkdown } from '../utils/markdownRenderer.js';
@@ -322,8 +323,33 @@ async function initializeApp() {
         await updateCanvasStatus();
     }, 5000);
 
+    // Advertise this panel to the background so ribbon autoCalls don't open
+    // a duplicate panel in another window. Connected late in init on
+    // purpose: the background only skips opening a panel once this one can
+    // actually process the call (callManager/queueManager are ready).
+    connectPresencePort();
+
     // Check for a pending autoCall message (ribbon call button opened the panel)
     await processPendingAutoCall();
+}
+
+/**
+ * Holds a long-lived port to the background so it knows a side panel is
+ * open somewhere (it then skips auto-opening another panel on ribbon calls,
+ * e.g. when this panel lives on a second monitor). The port disconnects
+ * whenever the service worker restarts, so reconnect to keep the
+ * background's presence tracking accurate for the panel's whole lifetime.
+ */
+function connectPresencePort() {
+    try {
+        const port = chrome.runtime.connect({ name: SIDEPANEL_PRESENCE_PORT });
+        port.onDisconnect.addListener(() => {
+            setTimeout(connectPresencePort, 1000);
+        });
+    } catch (e) {
+        // Extension is reloading/updating — this document is about to go away.
+        console.warn('[Sidepanel] Presence port connect failed:', e?.message || e);
+    }
 }
 
 /**
