@@ -358,7 +358,7 @@ export const GUIDES = [
 	{
         name: 'Call Guide',
         path: '../../assets/guides/Call-Guide.pdf',
-        icon: 'fa-phone'
+        icon: 'fa-book'
     }
 ];
 
