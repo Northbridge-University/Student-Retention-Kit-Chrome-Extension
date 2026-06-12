@@ -354,6 +354,11 @@ export const GUIDES = [
         name: 'Submission Checker Guide',
         path: '../../assets/guides/Submission-Checker-Guide.pdf',
         icon: 'fa-book'
+    },
+	{
+        name: 'Call Guide',
+        path: '../../assets/guides/Call-Guide.pdf',
+        icon: 'fa-phone'
     }
 ];
 
