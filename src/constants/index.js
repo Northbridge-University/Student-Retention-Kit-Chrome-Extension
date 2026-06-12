@@ -351,8 +351,8 @@ export const GUIDES = [
         icon: 'fa-book'
     },
 	{
-        name: 'Student Population Report Guide',
-        path: '../../assets/guides/Download-Student-Population-Report.pdf',
+        name: 'Submission Checker Guide',
+        path: '../../assets/guides/Submission-Checker-Guide.pdf',
         icon: 'fa-book'
     }
 ];
