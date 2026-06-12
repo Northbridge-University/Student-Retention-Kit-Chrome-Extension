@@ -533,7 +533,7 @@ chrome.webRequest.onCompleted.addListener(
 // (especially those in cross-origin iframes) can read it without messaging.
 async function cacheManifestXml() {
     try {
-        const response = await fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'));
+        const response = await fetch(chrome.runtime.getURL('assets/excel-manifest/Excel Add-In Manifest.xml'));
         const xml = await response.text();
         await chrome.storage.local.set({ _manifestXmlCache: xml });
         console.log('[SRK] Manifest XML cached in storage');
@@ -549,7 +549,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === MESSAGE_TYPES.SRK_GET_MANIFEST_XML) {
         // Content scripts in cross-origin iframes can't use chrome.runtime.getURL(),
         // so the background script fetches the manifest XML on their behalf.
-        fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'))
+        fetch(chrome.runtime.getURL('assets/excel-manifest/Excel Add-In Manifest.xml'))
             .then(response => response.text())
             .then(xml => {
                 // Also update the cache for future use

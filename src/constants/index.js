@@ -347,12 +347,12 @@ export function normalizeCanvasUrl(url) {
 export const GUIDES = [
     {
         name: 'LDA Guide',
-        path: '../../assets/LDA-Guide.pdf',
+        path: '../../assets/guides/LDA-Guide.pdf',
         icon: 'fa-book'
     },
 	{
         name: 'Student Population Report Guide',
-        path: '../../assets/Download-Student-Population-Report.pdf',
+        path: '../../assets/guides/Download-Student-Population-Report.pdf',
         icon: 'fa-book'
     }
 ];
