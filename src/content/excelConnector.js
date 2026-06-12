@@ -26,20 +26,31 @@ if (window.hasSRKConnectorRun) {
    * Safely sends a message to the extension.
    * Silently fails if the extension context is invalidated.
    * @param {Object} message - The message to send
+   * @param {Object} [options]
+   * @param {boolean} [options.quiet] - Skip per-send logging (for messages
+   *     that repeat every few seconds, like heartbeat pong forwards)
    * @returns {Promise} - Resolves with response or undefined if context invalid
    */
-  function safeSendMessage(message) {
+  function safeSendMessage(message, { quiet = false } = {}) {
       if (!isExtensionContextValid()) {
           console.warn('%c [safeSendMessage] Extension context invalid — message dropped', 'color: red; font-weight: bold', message.type);
           return Promise.resolve(undefined);
       }
-      console.log('%c [safeSendMessage] Sending to background:', 'color: lime; font-weight: bold', message.type, 'autoCall:', message.autoCall);
+      if (!quiet) {
+          console.log('%c [safeSendMessage] Sending to background:', 'color: lime; font-weight: bold', message.type, 'autoCall:', message.autoCall);
+      }
       return chrome.runtime.sendMessage(message).then((response) => {
-          console.log('%c [safeSendMessage] Background responded:', 'color: lime', response);
+          if (!quiet) {
+              console.log('%c [safeSendMessage] Background responded:', 'color: lime', response);
+          }
       }).catch((err) => {
           console.error('%c [safeSendMessage] Failed to send:', 'color: red; font-weight: bold', err?.message || err);
       });
   }
+
+  // Last time an SRK_PONG was logged — pongs repeat every few seconds while
+  // the side panel heartbeat runs, so their logging is throttled.
+  let lastPongLogTime = 0;
 
   /**
    * Helper to get value from nested storage structure.
@@ -309,15 +320,31 @@ if (window.hasSRKConnectorRun) {
 
       // Handle SRK_PONG from Office Add-in - forward to extension
       else if (event.data.type === "SRK_PONG") {
-          console.log("%c SRK Connector: SRK_PONG received from Office Add-in", "color: green; font-weight: bold");
-          console.log("   Timestamp:", event.data.timestamp);
-          console.log("   Source:", event.data.source);
+          // Pongs answer the side panel's heartbeat every few seconds, so
+          // throttle the log to one per minute (the pong itself can't be
+          // flagged — older add-in builds construct their own reply).
+          const now = Date.now();
+          if (now - lastPongLogTime > 60000) {
+              lastPongLogTime = now;
+              console.log("%c SRK Connector: SRK_PONG received from Office Add-in", "color: green; font-weight: bold");
+              console.log("   Timestamp:", event.data.timestamp);
+              console.log("   Source:", event.data.source);
+          }
 
           // Forward SRK_PONG to extension with all payload data
           safeSendMessage({
               type: "SRK_PONG",
               timestamp: event.data.timestamp,
               source: event.data.source
+          }, { quiet: true });
+      }
+
+      // Handle scan filter settings reply from Office Add-in - forward to extension
+      else if (event.data.type === "SRK_SCAN_FILTER_SETTINGS") {
+          console.log("%c SRK Connector: Scan filter settings received from Office Add-in", "color: green; font-weight: bold", event.data.data);
+          safeSendMessage({
+              type: "SRK_SCAN_FILTER_SETTINGS",
+              data: event.data.data
           });
       }
 
@@ -857,7 +884,10 @@ if (window.hasSRKConnectorRun) {
               }
 
               if (request.action === "postToPage" && request.message) {
-                  console.log("%c SRK Connector: Forwarding message to page", "color: blue; font-weight: bold", request.message);
+                  // Heartbeat pings repeat every few seconds; don't log them.
+                  if (!request.message.heartbeat) {
+                      console.log("%c SRK Connector: Forwarding message to page", "color: blue; font-weight: bold", request.message);
+                  }
                   window.postMessage(request.message, "*");
                   sendResponse({ success: true });
               }

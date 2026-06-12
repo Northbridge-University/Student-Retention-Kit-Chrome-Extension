@@ -14,7 +14,7 @@ The Chrome extension now automatically sideloads the Student Retention Excel Add
 ## Technical Details
 
 The auto-sideload works by:
-- Reading the manifest from: `assets/Excell Add-In Manifest.xml`
+- Reading the manifest from: `assets/excel-manifest/Excel Add-In Manifest.xml`
 - Injecting it into Excel's localStorage using the same keys Office uses:
   - `__OSF_UPLOADFILE.Manifest.16.{add-in-id}`
   - `__OSF_UPLOADFILE.MyAddins.16.{session-id}`
@@ -45,14 +45,14 @@ If the add-in doesn't appear:
 ## Limitations
 
 - This only works for **Excel Online** (not desktop Excel)
-- The add-in manifest must be in the `assets/` folder
+- The add-in manifest must stay at `assets/excel-manifest/` (the background
+  script and `manifest.json` reference it by path)
 - Changes to the manifest require reloading the extension
 
 ## Files Involved
 
-- `assets/Excell Add-In Manifest.xml` - The manifest file
+- `assets/excel-manifest/Excel Add-In Manifest.xml` - The manifest file
 - `src/content/excelManifestInjector.js` - Content script that injects manifest
-- `src/utils/manifestSideloader.js` - Utility functions (currently unused but available for future enhancements)
 - `src/constants/index.js` - Configuration constants
 
 ## Future Enhancements

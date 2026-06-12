@@ -82,12 +82,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "docs/README.md",
         "src/sidepanel/sidepanel.css",
-        "assets/powericon.png",
-        "assets/power-automate-icon.png",
-        "assets/background.png",
-        "assets/Excel Add-In Manifest.xml",
+        "assets/logos/power-automate-icon.png",
+        "assets/excel-manifest/Excel Add-In Manifest.xml",
         "icon.png",
         "src/lib/xlsx.full.min.js",
         "src/console/console.html",

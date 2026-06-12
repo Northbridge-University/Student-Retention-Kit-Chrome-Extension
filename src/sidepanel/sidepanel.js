@@ -1,6 +1,7 @@
 // Sidepanel Main - Orchestrates all modules and manages app lifecycle
 import { STORAGE_KEYS, EXTENSION_STATES, MESSAGE_TYPES, GUIDES, UI_FEATURES, FIVE9_CONNECTION_STATES, GENERIC_AVATAR_URL } from '../constants/index.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
+import { SIDEPANEL_PRESENCE_PORT } from '../utils/sidepanel-presence.js';
 import { hasDispositionCode } from '../constants/dispositions.js';
 import { getCacheStats, clearAllCache } from '../utils/canvasCache.js';
 import { loadAndRenderMarkdown } from '../utils/markdownRenderer.js';
@@ -57,6 +58,7 @@ import {
     closeScanFilterModal,
     updateScanFilterCount,
     toggleFailingFilter,
+    toggleManualScanFilter,
     saveScanFilterSettings
 } from './modals/scan-filter-modal.js';
 
@@ -133,7 +135,7 @@ import {
 
 import { closeCanvasLoginModal } from './modals/canvas-login-modal.js';
 import { openAttendanceReportModal, closeAttendanceReportModal } from './modals/attendance-report-modal.js';
-import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility, toggleRedactData, applyRedactData } from './modals/more-settings-modal.js';
+import { openMoreSettingsModal, closeMoreSettingsModal, saveMoreSettings, toggleShowPowerAutomate, applyPowerAutomateVisibility, toggleRedactData, applyRedactData, initExportColorsToggle } from './modals/more-settings-modal.js';
 import { openBackupModal, closeBackupModal, initBackupModal, createMasterListBackup } from './modals/backup-modal.js';
 import { initImportStatusModal, updateImportStatus, closeImportStatusModal, onAddinReconnected } from './modals/import-status-modal.js';
 
@@ -162,7 +164,8 @@ import {
     stopExcelConnectionMonitor,
     pingExcelAddIn,
     sendConnectionPing,
-    checkExcelConnectionStatus
+    checkExcelConnectionStatus,
+    checkExcelTabOpen
 } from './excel-integration.js';
 
 // --- STATE MANAGEMENT ---
@@ -322,8 +325,33 @@ async function initializeApp() {
         await updateCanvasStatus();
     }, 5000);
 
+    // Advertise this panel to the background so ribbon autoCalls don't open
+    // a duplicate panel in another window. Connected late in init on
+    // purpose: the background only skips opening a panel once this one can
+    // actually process the call (callManager/queueManager are ready).
+    connectPresencePort();
+
     // Check for a pending autoCall message (ribbon call button opened the panel)
     await processPendingAutoCall();
+}
+
+/**
+ * Holds a long-lived port to the background so it knows a side panel is
+ * open somewhere (it then skips auto-opening another panel on ribbon calls,
+ * e.g. when this panel lives on a second monitor). The port disconnects
+ * whenever the service worker restarts, so reconnect to keep the
+ * background's presence tracking accurate for the panel's whole lifetime.
+ */
+function connectPresencePort() {
+    try {
+        const port = chrome.runtime.connect({ name: SIDEPANEL_PRESENCE_PORT });
+        port.onDisconnect.addListener(() => {
+            setTimeout(connectPresencePort, 1000);
+        });
+    } catch (e) {
+        // Extension is reloading/updating — this document is about to go away.
+        console.warn('[Sidepanel] Presence port connect failed:', e?.message || e);
+    }
 }
 
 /**
@@ -701,6 +729,7 @@ function setupEventListeners() {
     initCanvasApiTypeToggle();
     initCanvasAdvancedToggle();
     initHighlightStudentRowToggle();
+    initExportColorsToggle();
 
     if (elements.reportIssueBtn) {
         // Report an Issue: fresh 6-digit ticket per click so each report
@@ -831,6 +860,10 @@ function setupEventListeners() {
             toggleFailingFilter();
             updateScanFilterCount();
         });
+    }
+
+    if (elements.manualScanFilterToggle) {
+        elements.manualScanFilterToggle.addEventListener('click', toggleManualScanFilter);
     }
 
     if (elements.daysOutOperator) {
@@ -2520,6 +2553,79 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
 /**
  * Toggles scanning state
  */
+/**
+ * Asks the Office Add-in for scan filter settings derived from today's LDA
+ * sheet (minimum Days Out on the table + whether a failing list exists)
+ * and applies them. Runs on Start unless Manual Adjustments is enabled.
+ *
+ * No change is made when: manual mode is on, no Excel tab is open, the
+ * add-in doesn't answer within the timeout, or the workbook has no LDA
+ * sheet for today.
+ */
+async function syncScanFilterFromExcel() {
+    const manual = await storageGetValue(STORAGE_KEYS.MANUAL_SCAN_FILTER, false);
+    if (manual) {
+        console.log('🔄 Scan filter sync skipped — Manual Adjustments is on');
+        return;
+    }
+
+    if (!(await checkExcelTabOpen())) {
+        console.log('🔄 Scan filter sync skipped — no Excel tab open');
+        return;
+    }
+
+    // Target the workbook chosen for highlights when several are open.
+    const targetData = await storageGet([STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID]);
+    const targetTabId = targetData[STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID] || null;
+
+    const response = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            chrome.runtime.onMessage.removeListener(onMessage);
+            clearTimeout(timer);
+            resolve(value);
+        };
+        const onMessage = (msg) => {
+            if (msg && msg.type === MESSAGE_TYPES.SRK_SCAN_FILTER_SETTINGS) {
+                finish(msg.data || null);
+            }
+        };
+        const timer = setTimeout(() => finish(null), 5000);
+
+        chrome.runtime.onMessage.addListener(onMessage);
+        chrome.runtime.sendMessage({
+            type: MESSAGE_TYPES.SRK_REQUEST_SCAN_FILTER_SETTINGS,
+            targetTabId
+        }).catch(() => finish(null));
+    });
+
+    if (!response) {
+        console.log(
+            '🔄 Scan filter sync — no answer from the Office Add-in, keeping current settings. ' +
+            'If this persists, refresh the Excel tab (required after an extension update) ' +
+            'and make sure the workbook is running an add-in build with the LDA scan-filter sync.'
+        );
+        return;
+    }
+
+    if (!response.ldaFound) {
+        console.log('🔄 Scan filter sync — no LDA sheet for today, keeping current settings');
+        return;
+    }
+
+    const settingsToSave = {
+        [STORAGE_KEYS.SCAN_FILTER_INCLUDE_FAILING]: !!response.includeFailing
+    };
+    if (response.daysOutFilter) {
+        settingsToSave[STORAGE_KEYS.LOOPER_DAYS_OUT_FILTER] = response.daysOutFilter;
+    }
+    await storageSet(settingsToSave);
+
+    console.log(`%c🔄 Scan filter synced from "${response.sheetName}": days out ${response.daysOutFilter || '(unchanged)'}, failing list ${response.includeFailing ? 'on' : 'off'}`, 'color: green; font-weight: bold');
+}
+
 async function toggleScanState() {
     // Don't toggle if button is disabled (no Canvas connection)
     if (elements.startBtn && elements.startBtn.disabled) {
@@ -2576,6 +2682,12 @@ async function toggleScanState() {
             // Highlight disabled - clear the target tab ID
             await storageSet({ [STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID]: null });
         }
+
+        // Pull scan filter settings from today's LDA sheet in Excel
+        // (no-op in Manual Adjustments mode or when nothing answers).
+        // Runs after tab selection so multi-workbook setups query the
+        // workbook that was just picked for highlights.
+        await syncScanFilterFromExcel();
     } else {
         // Turning OFF - clear the target tab ID
         await storageSet({ [STORAGE_KEYS.HIGHLIGHT_TARGET_TAB_ID]: null });

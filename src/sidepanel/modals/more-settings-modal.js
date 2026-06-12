@@ -32,6 +32,35 @@ export function toggleRedactData() {
     updateToggleUI(elements.redactDataToggle, !isToggleEnabled(elements.redactDataToggle));
 }
 
+function setExportColorsExpanded(expanded) {
+    if (!elements.exportColorsHeader || !elements.exportColorsCollapsible) return;
+    elements.exportColorsCollapsible.style.display = expanded ? 'block' : 'none';
+    elements.exportColorsHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (elements.exportColorsChevron) {
+        elements.exportColorsChevron.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+}
+
+/**
+ * Wires the collapsible Export Colors section (collapsed by default, same
+ * pattern as the Student Submission Highlight section in the connections
+ * modal). Called once during setupEventListeners.
+ */
+export function initExportColorsToggle() {
+    if (!elements.exportColorsHeader) return;
+    const toggle = () => {
+        const current = elements.exportColorsHeader.getAttribute('aria-expanded') === 'true';
+        setExportColorsExpanded(!current);
+    };
+    elements.exportColorsHeader.addEventListener('click', toggle);
+    elements.exportColorsHeader.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+        }
+    });
+}
+
 /**
  * Opens the More Settings modal and loads current values
  */

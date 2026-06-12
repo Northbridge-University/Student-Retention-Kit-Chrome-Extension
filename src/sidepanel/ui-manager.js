@@ -151,6 +151,9 @@ export function cacheDomElements() {
     elements.daysOutOperator = document.getElementById('daysOutOperator');
     elements.daysOutValue = document.getElementById('daysOutValue');
     elements.failingToggle = document.getElementById('failingToggle');
+    elements.manualScanFilterToggle = document.getElementById('manualScanFilterToggle');
+    elements.scanFilterControls = document.getElementById('scanFilterControls');
+    elements.scanFilterAutoHint = document.getElementById('scanFilterAutoHint');
     elements.saveScanFilterBtn = document.getElementById('saveScanFilterBtn');
     elements.studentCountValue = document.getElementById('studentCountValue');
 
@@ -298,6 +301,9 @@ export function cacheDomElements() {
     elements.highlightTargetSheetHint = document.getElementById('highlightTargetSheetHint');
     elements.highlightRowColorInput = document.getElementById('highlightRowColorInput');
     elements.highlightRowColorTextInput = document.getElementById('highlightRowColorTextInput');
+    elements.exportColorsHeader = document.getElementById('exportColorsHeader');
+    elements.exportColorsCollapsible = document.getElementById('exportColorsCollapsible');
+    elements.exportColorsChevron = document.getElementById('exportColorsChevron');
     elements.exportTabColorInput = document.getElementById('exportTabColorInput');
     elements.exportTabColorTextInput = document.getElementById('exportTabColorTextInput');
     elements.exportColorScaleLowInput = document.getElementById('exportColorScaleLowInput');

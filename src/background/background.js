@@ -5,6 +5,7 @@ import { STORAGE_KEYS, CHECKER_MODES, MESSAGE_TYPES, EXTENSION_STATES, CONNECTIO
 import { CONFIG } from '../constants/config.js';
 import { storageGet, storageSet, storageGetValue, migrateStorage, sessionGet, sessionSet, sessionGetValue } from '../utils/storage.js';
 import { resolveTargetSheetName, groupEntriesBySheet, selectEntriesForHighlightRetry } from '../utils/highlight-batching.js';
+import { createSidePanelPresenceTracker } from '../utils/sidepanel-presence.js';
 import { decrypt } from '../utils/encryption.js';
 // Optional per-process Five9 volume handler. Public build is a no-op stub;
 // the native-host repo's apply-overlay.ps1 replaces this file with a real
@@ -454,6 +455,15 @@ chrome.action.onClicked.addListener((tab) => chrome.sidePanel.open({ tabId: tab.
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === '_execute_action') chrome.sidePanel.open({ tabId: tab.id });
 });
+
+// Every open side panel holds a presence port (see sidepanel-presence.js)
+// so the autoCall handler can synchronously tell whether a panel is already
+// open in some window before opening another one.
+const sidePanelPresence = createSidePanelPresenceTracker();
+chrome.runtime.onConnect.addListener((port) => {
+  sidePanelPresence.handleConnect(port);
+});
+
 chrome.runtime.onStartup.addListener(async () => {
   updateBadge();
   // Extension state is now in session storage - starts fresh on browser restart
@@ -523,7 +533,7 @@ chrome.webRequest.onCompleted.addListener(
 // (especially those in cross-origin iframes) can read it without messaging.
 async function cacheManifestXml() {
     try {
-        const response = await fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'));
+        const response = await fetch(chrome.runtime.getURL('assets/excel-manifest/Excel Add-In Manifest.xml'));
         const xml = await response.text();
         await chrome.storage.local.set({ _manifestXmlCache: xml });
         console.log('[SRK] Manifest XML cached in storage');
@@ -539,7 +549,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === MESSAGE_TYPES.SRK_GET_MANIFEST_XML) {
         // Content scripts in cross-origin iframes can't use chrome.runtime.getURL(),
         // so the background script fetches the manifest XML on their behalf.
-        fetch(chrome.runtime.getURL('assets/Excel Add-In Manifest.xml'))
+        fetch(chrome.runtime.getURL('assets/excel-manifest/Excel Add-In Manifest.xml'))
             .then(response => response.text())
             .then(xml => {
                 // Also update the cache for future use
@@ -659,15 +669,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // If this is an autoCall (ribbon call button), ensure the side panel is open
       // so the sidepanel listener can process the call request.
       if (msg.autoCall && sender?.tab?.id) {
-          console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
-          // Store the pending message WITHOUT awaiting — any await before
-          // sidePanel.open() breaks Chrome's user-gesture chain and causes
-          // "may only be called in response to a user gesture" error.
-          sessionSet({ pendingAutoCall: { ...msg, _timestamp: Date.now() } }); // fire-and-forget
-          try {
-              await chrome.sidePanel.open({ tabId: sender.tab.id });
-          } catch (e) {
-              console.warn('[Background] Could not open side panel:', e?.message || e);
+          // If a panel is already open in ANY window (e.g. on a second
+          // monitor), it has already received this message straight from
+          // the content script. Opening another panel on the Excel tab's
+          // window would create a second instance that re-processes the
+          // call (dial + instant hangup), so skip opening entirely.
+          // This presence check is synchronous on purpose — an await here
+          // would break the user-gesture chain sidePanel.open() needs.
+          if (sidePanelPresence.isSidePanelOpen()) {
+              console.log(`%c [Background] autoCall — side panel already open (${sidePanelPresence.openPanelCount()}); not opening another`, 'color: green; font-weight: bold');
+          } else {
+              console.log('%c [Background] autoCall detected — ensuring side panel is open', 'color: green; font-weight: bold');
+              // Store the pending message WITHOUT awaiting — any await before
+              // sidePanel.open() breaks Chrome's user-gesture chain and causes
+              // "may only be called in response to a user gesture" error.
+              sessionSet({ pendingAutoCall: { ...msg, _timestamp: Date.now() } }); // fire-and-forget
+              try {
+                  await chrome.sidePanel.open({ tabId: sender.tab.id });
+              } catch (e) {
+                  console.warn('[Background] Could not open side panel:', e?.message || e);
+              }
           }
       }
 
@@ -755,7 +776,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // --- PING EXCEL ADD-IN ---
   else if (msg.type === MESSAGE_TYPES.SRK_PING) {
-      console.log('%c [Background] Forwarding SRK_PING to Excel', 'background: #FF9800; color: white; font-weight: bold; padding: 2px 4px;');
+      // Heartbeat pings repeat every few seconds while the side panel is
+      // open (excel-integration.js), so only log the one-off pings.
+      if (!msg.heartbeat) {
+          console.log('%c [Background] Forwarding SRK_PING to Excel', 'background: #FF9800; color: white; font-weight: bold; padding: 2px 4px;');
+      }
 
       // Forward the payload to all Excel tabs
       (async () => {
@@ -767,13 +792,59 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                           action: 'postToPage',
                           message: msg.payload
                       });
-                      console.log(`[SRK] Sent SRK_PING to tab ${tab.id}`);
+                      if (!msg.heartbeat) {
+                          console.log(`[SRK] Sent SRK_PING to tab ${tab.id}`);
+                      }
                   } catch (err) {
-                      console.warn(`[SRK] Failed to send SRK_PING to tab ${tab.id}:`, err.message);
+                      // Heartbeats hit this every few seconds when a tab has
+                      // no content script (opened pre-install / orphaned by an
+                      // extension reload) — the "Searching..." status already
+                      // surfaces that, so don't spam the console for them.
+                      if (!msg.heartbeat) {
+                          console.warn(`[SRK] Failed to send SRK_PING to tab ${tab.id}:`, err.message);
+                      }
                   }
               }
           } catch (err) {
               console.error('[SRK] Failed to query Excel tabs:', err);
+          }
+      })();
+  }
+
+  // --- SCAN FILTER SETTINGS REQUEST (Start pressed, auto-sync from LDA) ---
+  else if (msg.type === MESSAGE_TYPES.SRK_REQUEST_SCAN_FILTER_SETTINGS) {
+      console.log('%c [Background] Forwarding scan filter settings request to Excel', 'background: #FF9800; color: white; font-weight: bold; padding: 2px 4px;');
+
+      (async () => {
+          try {
+              // Prefer the tab picked for highlights so multi-workbook
+              // setups query the workbook the checker is working against.
+              let tabs = [];
+              if (msg.targetTabId) {
+                  try {
+                      const tab = await chrome.tabs.get(msg.targetTabId);
+                      if (tab) tabs = [tab];
+                  } catch (e) {
+                      console.warn('[SRK] Scan filter target tab missing, falling back to all Excel tabs');
+                  }
+              }
+              if (tabs.length === 0) {
+                  tabs = await chrome.tabs.query({ url: TARGET_URL_PATTERNS });
+              }
+
+              for (const tab of tabs) {
+                  try {
+                      await chrome.tabs.sendMessage(tab.id, {
+                          action: 'postToPage',
+                          message: { type: MESSAGE_TYPES.SRK_REQUEST_SCAN_FILTER_SETTINGS }
+                      });
+                      console.log(`[SRK] Sent scan filter settings request to tab ${tab.id}`);
+                  } catch (err) {
+                      console.warn(`[SRK] Failed to send scan filter request to tab ${tab.id}:`, err.message);
+                  }
+              }
+          } catch (err) {
+              console.error('[SRK] Failed to query Excel tabs for scan filter request:', err);
           }
       })();
   }

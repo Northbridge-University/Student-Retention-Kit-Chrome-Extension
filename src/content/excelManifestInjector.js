@@ -3,7 +3,7 @@
 
 console.log('%c [SRK] Excel Manifest Injector Script LOADED', 'background: #FF9800; color: white; font-size: 14px; font-weight: bold; padding: 2px 4px;');
 
-// Loads manifest XML from the single source of truth: assets/Excel Add-In Manifest.xml
+// Loads manifest XML from the single source of truth: assets/excel-manifest/Excel Add-In Manifest.xml
 // Primary: read from chrome.storage.local (pre-cached by background on install/startup).
 // Fallback: ask the background script via messaging (for backward compatibility).
 // Content scripts in cross-origin iframes can't use chrome.runtime.getURL() (returns

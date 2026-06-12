@@ -358,7 +358,7 @@
         <h3>Connections</h3>
         <div class="setting-card" id="configureExcelBtn" style="cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
-                <img src="../../assets/excel-logo.png" style="width:28px; height:28px; border-radius:4px;" alt="Excel">
+                <img src="../../assets/logos/excel-logo.png" style="width:28px; height:28px; border-radius:4px;" alt="Excel">
                 <div style="flex-grow:1;">
                     <div style="font-weight:500;">Excel Add-in</div>
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -371,7 +371,7 @@
         </div>
         <div id="powerAutomateSettingCard" class="setting-card" style="display:none; cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
-                <img src="../../assets/power-automate-icon.png" style="width:28px; height:28px; border-radius:4px;" alt="Power Automate">
+                <img src="../../assets/logos/power-automate-icon.png" style="width:28px; height:28px; border-radius:4px;" alt="Power Automate">
                 <div style="flex-grow:1;">
                     <div style="font-weight:500;">Power Automate</div>
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -384,7 +384,7 @@
         </div>
         <div class="setting-card" id="configureCanvasBtn" style="cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
-                <img src="../../assets/canvas-logo.png" style="width:28px; height:28px; border-radius:4px;" alt="Canvas">
+                <img src="../../assets/logos/canvas-logo.png" style="width:28px; height:28px; border-radius:4px;" alt="Canvas">
                 <div style="flex-grow:1;">
                     <div style="font-weight:500;">Canvas</div>
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -397,7 +397,7 @@
         </div>
         <div class="setting-card" id="configureFive9Btn" style="cursor: pointer;">
             <div style="display:flex; align-items:center; gap:10px; flex-grow:1;">
-                <img src="../../assets/five9-logo.jpg" style="width:28px; height:28px; border-radius:4px;" alt="Five9">
+                <img src="../../assets/logos/five9-logo.jpg" style="width:28px; height:28px; border-radius:4px;" alt="Five9">
                 <div style="flex-grow:1;">
                     <div style="font-weight:500;">Five9</div>
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
@@ -476,6 +476,23 @@
 
             <div class="modal-body">
                 <div style="margin-bottom: 20px;">
+                    <div class="setting-card" style="margin-bottom:0;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <i class="fas fa-hand-paper" style="color:var(--primary-color); font-size:1.2em;"></i>
+                            <div>
+                                <div style="font-weight:500; color:var(--text-main);">Manual Adjustments</div>
+                                <div style="font-size:0.8em; color:var(--text-secondary);">Manage the filter yourself instead of syncing it from Excel</div>
+                            </div>
+                        </div>
+                        <i id="manualScanFilterToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor:pointer;"></i>
+                    </div>
+                    <div id="scanFilterAutoHint" style="font-size:0.8em; color:var(--text-secondary); margin-top:6px;">
+                        <i class="fas fa-sync-alt" style="margin-right:4px;"></i>Synced from today's LDA sheet in Excel each time you press Start. If there is no LDA sheet for today, the current settings are kept.
+                    </div>
+                </div>
+
+                <div id="scanFilterControls">
+                <div style="margin-bottom: 20px;">
                     <label style="font-size:0.95em; font-weight:500; color:var(--text-main); display:block; margin-bottom:8px;">
                         <i class="fas fa-calendar-day"></i> Days Out Threshold
                     </label>
@@ -506,6 +523,7 @@
                         <i id="failingToggle" class="fas fa-toggle-off" style="color:gray; font-size:2em; cursor:pointer;"></i>
                     </div>
                 </div>
+                </div>
 
                 <div id="scanFilterCount" style="background: rgba(0, 90, 156, 0.1); border-left: 4px solid var(--primary-color); padding: 12px; border-radius: 0.75rem; margin-bottom: 15px;">
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -535,10 +553,14 @@
             </div>
 
             <div style="padding: 0 16px 16px 16px;">
-                <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin-bottom:10px;">
-                    <i class="fas fa-file-excel" style="color:#217346; margin-right:6px;"></i>Export Colors
+                <div id="exportColorsHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="exportColorsCollapsible" style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin-bottom:10px;">
+                    <div style="font-size:0.95em; font-weight:600; color:var(--text-main);">
+                        <i class="fas fa-file-excel" style="color:#217346; margin-right:6px;"></i>Export Colors
+                    </div>
+                    <i id="exportColorsChevron" class="fas fa-chevron-down" style="color:var(--text-secondary); font-size:0.85em; transition: transform 0.2s;"></i>
                 </div>
 
+                <div id="exportColorsCollapsible" style="display:none;">
                 <!-- Tab Color -->
                 <div style="margin-bottom: 12px;">
                     <label style="font-size:0.85em; font-weight:500; color:var(--text-main); display:block; margin-bottom:6px;">
@@ -570,6 +592,7 @@
                         </div>
                     </div>
                     <div style="font-size:0.75em; color:var(--text-secondary); margin-top:4px;">Color scale applied to grade columns (0 &rarr; 65 &rarr; 100)</div>
+                </div>
                 </div>
 
                 <div style="font-size:0.95em; font-weight:600; color:var(--text-main); margin: 20px 0 10px 0; padding-top:16px; border-top: 1px solid rgba(0,0,0,0.08);">
@@ -1329,7 +1352,7 @@
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header" style="border-bottom: 1px solid rgba(59, 130, 246, 0.2);">
                 <h3 style="display: flex; align-items: center; gap: 8px;">
-                    <img src="../../assets/canvas-logo.png" style="width: 24px; height: 24px; border-radius: 4px;" alt="Canvas">
+                    <img src="../../assets/logos/canvas-logo.png" style="width: 24px; height: 24px; border-radius: 4px;" alt="Canvas">
                     Log into Canvas
                 </h3>
             </div>
