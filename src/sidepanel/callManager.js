@@ -1180,8 +1180,15 @@ export default class CallManager {
             }
 
             // Call next student immediately after dispose completes
-            // No need for delay since we already waited for dispose
+            // No need for delay since we already waited for dispose.
+            // Return here so the shared cleanup below doesn't null out
+            // _currentCallStudent — callNextStudentInQueue just set it to the
+            // next student, and the trailing reset would otherwise wipe it,
+            // causing that student's disposition to add `null` (a no-op) to
+            // Previous Calls. callNextStudentInQueue already refreshes the UI.
+            this._dispositionInProgress = false;
             this.callNextStudentInQueue();
+            return;
         } else {
             // Single call mode - update UI to end the call
             this.elements.dialBtn.style.background = `${CONFIG.COLORS.SUCCESS}`;
