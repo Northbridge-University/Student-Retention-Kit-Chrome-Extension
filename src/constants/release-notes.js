@@ -24,18 +24,14 @@ export const RELEASE_NOTES = {
     // The key should match the version in manifest.json
 	'16.0': {
         title: 'Latest Updates',
-        date: 'June 10, 2026',
+        date: 'June 13, 2026',
         updates: [
-			'Daily update reminder now greets you based on the time of day',
-			'"Maybe Later" now keeps the daily update reminder off for the rest of the day',
-			'New "Redact Data" option in More Settings blurs student names and phone numbers',
-			'Master List loads faster — shows 50 students at a time with a "Show More" button (search still covers everyone)',
-			'View previous release notes from this popup with the new "View Previous Updates" button',
-			'Student profile pictures now load behind the scenes so they no longer pop in',
-			'"Last Updated" on the Data tab now refreshes when the master list receives data from the Office add-in',
-			'Excel ribbon Call button now uses the side panel you already have open (e.g. on a second monitor) instead of opening a duplicate panel over Excel',
-			'Excel Add-in connection status no longer falls back to "Searching..." seconds after connecting — it now stays live via a background heartbeat',
-			'Pressing Start now syncs the scan filter from today\'s LDA sheet in Excel (minimum days out and failing list) so it always matches your workbook — enable "Manual Adjustments" in the scan filter to manage it yourself'
+			'Improved daily reminder greeting',
+			'New "Redact Data" option for privacy',
+			'Faster Master List loading',
+			'View previous update notes',
+			'Smoother profile pictures and data refresh',
+			'Excel improvements for calls, connection, and scan settings'
         ]
     },
 	'15.2': {
