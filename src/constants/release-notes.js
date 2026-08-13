@@ -22,6 +22,14 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'16.1': {
+        title: 'Latest Updates',
+        date: 'August 13, 2026',
+        updates: [
+			'Final Update',
+			'Transferred Student Retention Kit to an Official Northbridge University account'
+        ]
+    },
 	'16.0': {
         title: 'Latest Updates',
         date: 'June 13, 2026',
