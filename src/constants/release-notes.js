@@ -22,6 +22,13 @@
 export const RELEASE_NOTES = {
     // Add new version entries here (newest first)
     // The key should match the version in manifest.json
+	'16.2': {
+        title: 'Latest Updates',
+        date: 'August 14, 2026',
+        updates: [
+			'Fixed the connection between the extension and the Excel add-in'
+        ]
+    },
 	'16.1': {
         title: 'Latest Updates',
         date: 'August 13, 2026',

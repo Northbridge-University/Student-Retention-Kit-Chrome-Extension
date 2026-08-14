@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Student Retention Kit",
-  "version": "16.1",
+  "version": "16.2",
   "description": "Workflow Solution for Identifying At-Risk Students and Outreach.",
   "icons": {
     "16": "icon.png",
@@ -23,7 +23,7 @@
     "https://excel.office.com/*",
     "https://*.officeapps.live.com/*",
     "https://*.sharepoint.com/*",
-    "https://vsblanco.github.io/*",
+    "https://northbridge-university.github.io/*",
     "https://student-retention-kit.vercel.app/*",
     "https://*.five9.com/*",
     "https://*.five9.net/*",
@@ -58,8 +58,8 @@
       "matches": [
         "https://excel.office.com/*",
         "https://*.officeapps.live.com/*",
-        "https://vsblanco.github.io/Student-Retention-Add-in/*",
-        "https://vsblanco.github.io/Student-Retention-Kit-Add-in/*",
+        "https://northbridge-university.github.io/Student-Retention-Add-in/*",
+        "https://northbridge-university.github.io/Student-Retention-Kit-Add-in/*",
         "https://student-retention-kit.vercel.app/*"
       ],
       "js": ["src/content/excelConnector.js"],

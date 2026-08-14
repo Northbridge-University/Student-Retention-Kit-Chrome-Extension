@@ -1430,7 +1430,7 @@ const TARGET_URL_PATTERNS = [
   "https://excel.office.com/*",
   "https://*.officeapps.live.com/*",
   "https://*.sharepoint.com/*",
-  "https://vsblanco.github.io/*" 
+  "https://northbridge-university.github.io/*"
 ];
 
 async function injectScriptIntoTab(tabId, url) {
