@@ -23,7 +23,7 @@
     "https://excel.office.com/*",
     "https://*.officeapps.live.com/*",
     "https://*.sharepoint.com/*",
-    "https://vsblanco.github.io/*",
+    "https://northbridge-university.github.io/*",
     "https://student-retention-kit.vercel.app/*",
     "https://*.five9.com/*",
     "https://*.five9.net/*",
@@ -58,8 +58,8 @@
       "matches": [
         "https://excel.office.com/*",
         "https://*.officeapps.live.com/*",
-        "https://vsblanco.github.io/Student-Retention-Add-in/*",
-        "https://vsblanco.github.io/Student-Retention-Kit-Add-in/*",
+        "https://northbridge-university.github.io/Student-Retention-Add-in/*",
+        "https://northbridge-university.github.io/Student-Retention-Kit-Add-in/*",
         "https://student-retention-kit.vercel.app/*"
       ],
       "js": ["src/content/excelConnector.js"],
