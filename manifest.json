@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Student Retention Kit",
-  "version": "16.2",
+  "version": "16.3",
   "description": "Workflow Solution for Identifying At-Risk Students and Outreach.",
   "icons": {
     "16": "icon.png",
@@ -17,14 +17,13 @@
     "scripting",
     "cookies"
   ],
-"host_permissions": [
+  "host_permissions": [
     "https://northbridge.instructure.com/*",
     "https://nuc.instructure.com/*",
     "https://excel.office.com/*",
     "https://*.officeapps.live.com/*",
     "https://*.sharepoint.com/*",
     "https://northbridge-university.github.io/*",
-    "https://student-retention-kit.vercel.app/*",
     "https://*.five9.com/*",
     "https://*.five9.net/*",
     "https://m365.cloud.microsoft/*"
@@ -58,9 +57,7 @@
       "matches": [
         "https://excel.office.com/*",
         "https://*.officeapps.live.com/*",
-        "https://northbridge-university.github.io/Student-Retention-Add-in/*",
-        "https://northbridge-university.github.io/Student-Retention-Kit-Add-in/*",
-        "https://student-retention-kit.vercel.app/*"
+        "https://northbridge-university.github.io/Student-Retention-Add-in/*"
       ],
       "js": ["src/content/excelConnector.js"],
       "run_at": "document_start",
@@ -104,11 +101,3 @@
   },
   "minimum_chrome_version": "109"
 }
-
-
-
-
-
-
-
-
